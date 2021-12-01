@@ -1,0 +1,5 @@
+internal Token get_next_token(Lexer *lexer) 
+is a bad idea, for two reasons: 
+1. this does not give you any info about wehther the token was create or not 
+2. this does not allow you to just "eat" tokens with a more sane looking code. 
+
