@@ -14,9 +14,7 @@
 #define Assert(expression) if (!expression) { int expr = *(int *)0; }
 #else
 #define Assert(expression) 
-#endif 
-
-
+#endif
 
 typedef struct Location Location; 
 struct Location { 
@@ -28,6 +26,7 @@ struct Location {
 // 
 // Some language definitions: 
 // 
+
 #include <stdint.h>
 
 typedef int8_t s8;
@@ -43,9 +42,10 @@ typedef uint64_t u64;
 typedef float f32; 
 typedef double f64;
 
+typedef unsigned char bool;
+
 #define true 1 
 #define false 0.
-typedef char bool;  // should this be a char??? 
 
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
@@ -76,15 +76,26 @@ int main(int argc, char *argv[]) {
     // 
     // handle the compiler options
     // 
+    
 #if 0
     if (argc != 2) {
-        fprintf(stderr, "Usage: <source>.gz\n"); 
+        fprintf(stdout, "Usage: <source>.gz\n"); 
         return 0; 
     }
     char *filename = argv[1];
 #else 
     argc, argv;
-    char *filename = "../tests/add.gzr";
+    
+    // TODO(ziv): have something that will run all of 
+    // the test programs.
+    
+    char *filename = NULL;
+    filename = "../tests/add.gzr";
+    filename = "../tests/addRecursive.gzr";
+    filename = "../tests/minus.gzr";
+    filename = "../tests/minusRecursive.gzr";
+    filename = "../tests/addMinusRecursive.gzr";
+    
 #endif 
     
     
@@ -128,9 +139,16 @@ int main(int argc, char *argv[]) {
     // Compilation/Simulation phase
     // 
     
-    // parse_file(&parser);
-    sim_file(&parser);
-    
+    bool sim = true, comp = false; 
+    if (sim) {
+        sim_file(&parser);
+    }
+    else if (comp) {
+        // comp_file(&parser); 
+    }
+    else {
+        fprintf(stdout, "Must specify whether you want to simulate or compile the code\n");
+    }
     
     
     free(source_buff); // I don't need to use this but whatever...

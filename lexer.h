@@ -128,19 +128,19 @@ internal bool get_next_token(Lexer *lexer) {
             token.kind = TK_INTEGER;
             
             token.s = lexer->code + loc.index;
-            c = lexer->code[loc.index+1];
+            c = lexer->code[loc.index];
             while ('0' <= c && c <= '9') {
                 c = lexer->code[++loc.index];
                 loc.ch++;
             }
             
             if (c != ' ' && c != '\n' && c != '\t') { 
-                // 'token number' must end with a space 
-                fprintf(stderr, "Error: a number cannot end with a '%c'\n", c);
+                // 'token number' must end with a space or newline or tab 
+                fprintf(stderr, "Error: a number cannot end with '%c'\n", c);
                 return false;
             }
             
-            token.len = lexer->code + loc.index + 1 - token.s; 
+            token.len = lexer->code + loc.index - token.s; 
         } break; 
         
         case '\0': {
@@ -153,7 +153,7 @@ internal bool get_next_token(Lexer *lexer) {
     token.loc = loc;
     
 #if DEBUG
-    debug_print_token(token);
+    //debug_print_token(token);
 #endif 
     
     lexer->token = token;
