@@ -8,6 +8,83 @@
 #define is_kind_operand(kind) (TK_LITERAL_BEGIN < kind && kind < TK_LITERAL_END)
 #define is_kind_op_or_operand(kind) (is_kind_op(kind) || is_kind_operand(kind))
 
+#if 1
+
+/* 
+#define NULL_TOKEN (Token){ 0 }; 
+#define NULL_EXPR  (Ast_Expr){ 0 }; 
+ */
+
+// How this should look like: 
+// 
+// expression -> literal 
+//               | unary
+//               | binary 
+//               | grouping
+// 
+// literal -> NUMBER | STRING | "true" | "false" | "nil" 
+// grouping -> "(" expression ")"
+// unary -> ("-" | "!") expression
+// binary -> expression operator expression 
+// operator -> "==" | "!=" | ">=" | "<=" | "<" |
+//             ">" | "+" | "-" | "*" | "/"
+
+typedef struct Expr Expr; 
+typedef struct Grouping Grouping; 
+typedef struct Unary Unary; 
+typedef struct Literal Literal; 
+typedef enum Value_Kind Value_Kind; 
+typedef enum Expr_Kind Expr_Kind; 
+typedef Expr Binary; 
+
+enum Value_Kind {
+    VALUE_INTEGER, 
+    VALUE_STRING, 
+}; 
+
+enum Expr_Kind {
+    EXPR_GROUPING, 
+    EXPR_LITERAL, 
+    EXPR_UNARY, 
+    EXPR, 
+    
+}; 
+
+struct Expr {
+    Expr_Kind kind; 
+    
+    union {
+        struct Grouping {
+            Expr *expression; 
+        } grouping;
+        
+        struct Literal {
+            Value_Kind kind;
+            char *value; // probably should be more specific here 
+        } literal; 
+        
+        struct Unary {
+            Token operator; 
+            Expr *right; 
+        } unary;
+        
+        // This is what the actual expression should contain (as a regular expression)
+        struct {
+            Expr *left; 
+            Token *operation; 
+            Expr *right; 
+        }; 
+    }; 
+    
+}; 
+
+
+
+
+
+
+#else /* =============================================================== */
+
 typedef struct Parser Parser; 
 typedef struct Ast_Expr Ast_Expr; 
 typedef struct Ast_Value Ast_Value;
@@ -261,5 +338,6 @@ void sim_file(Parser *parser) {
     //int sim_result = sim_add(&parser->expr); 
     
 }
+#endif 
 
 #endif //PARSER_H

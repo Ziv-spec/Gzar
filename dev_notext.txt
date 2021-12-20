@@ -3,3 +3,10 @@ is a bad idea, for two reasons:
 1. this does not give you any info about wehther the token was create or not 
 2. this does not allow you to just "eat" tokens with a more sane looking code. 
 
+another thing: 
+I need to have a concreate idea of what are the fundemental units that I need 
+to use in my compiler. An expression, statement and so on... 
+What are the relationships between them (like how groups, unary, binary, and literal are all expressions). 
+All of this is needed to be able to create a good structure for the compiler.
+
+
