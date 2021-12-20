@@ -8,7 +8,7 @@
 #define is_kind_operand(kind) (TK_LITERAL_BEGIN < kind && kind < TK_LITERAL_END)
 #define is_kind_op_or_operand(kind) (is_kind_op(kind) || is_kind_operand(kind))
 
-#if 1
+#if 0
 
 /* 
 #define NULL_TOKEN (Token){ 0 }; 
