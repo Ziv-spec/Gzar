@@ -36,7 +36,6 @@ enum Expr_Kind {
     EXPR_LITERAL, 
     EXPR_UNARY, 
     EXPR_BINARY, 
-    
 }; 
 
 struct Expr {
@@ -47,8 +46,6 @@ struct Expr {
             Expr *expr; 
         } grouping;
         
-        // To be more vorbose, I use a union
-        // instead of a 'void *' type. 
         struct Literal {
             Value_Kind kind;
             void *data; 
@@ -71,7 +68,6 @@ struct Expr {
     }; 
     
 }; 
-
 
 static Token tokens[1024]; 
 static unsigned int tokens_index;
@@ -175,16 +171,16 @@ internal void error(Token token, char *msg) {
         report(token.loc.line, buff); 
     }
     else {
-        report(token.loc.line, strcat(" at ", msg));
+        report(token.loc.line, strcat(msg, " at "));
     }
 }
 
 internal void report(int line, char *msg) {
-    char err[255];  // holding the error message
-    char buff[255]; // holding the integer as a string
+    char err[100];  // holding the error message
+    char buff[100]; // holding the integer as a string
     
     strcat(err, msg); 
-    strcat(err, itoa(line, buff,10)); 
+    strcat(err, itoa(line, buff, 10)); 
     fprintf(stdout, err);
     fprintf(stdout, "\n");
     exit(-1); // NOTE(ziv): for the time being, when 
@@ -221,7 +217,7 @@ internal Expr *equality() {
     Expr *expr = comparison(); 
     
     Token_Kind ops[] = { TK_BANG_EQUAL, TK_EQUAL_EQUAL }; 
-    while (match(ops, 2)) {
+    while (match(ops, ArrayLength(ops))) {
         Token operator = previous(); 
         Expr *right = comparison(); 
         expr = init_binary(expr, operator, right);
@@ -233,8 +229,8 @@ internal Expr *equality() {
 internal Expr *comparison() {
     Expr *expr = term(); 
     
-    Token_Kind ops[] = { TK_GREATER, TK_LESS }; 
-    while (match(ops, 2)) {
+    Token_Kind ops[] = { TK_GREATER, TK_LESS, TK_GREATER_EQUAL, TK_LESS_EQUAL }; 
+    while (match(ops, ArrayLength(ops))) {
         Token operation = previous(); 
         Expr *right = term(); 
         expr = init_binary(expr, operation, right);
@@ -322,16 +318,16 @@ internal Expr *primary() {
 }
 
 //////////////////////////////////
-
+// Debug printing of expressions
 
 void print_literal(Expr *expr) {
     Assert(expr->kind == EXPR_LITERAL);
     
     switch (expr->literal.kind) {
         
-        case VALUE_TRUE: printf("true"); break;
         case VALUE_FALSE: printf("false"); break;
-        case VALUE_NIL: printf("nil"); break;
+        case VALUE_TRUE:  printf("true"); break;
+        case VALUE_NIL:   printf("nil"); break;
         
         case VALUE_INTEGER: {
             u64 num = (u64)expr->literal.data; 
@@ -339,7 +335,6 @@ void print_literal(Expr *expr) {
         } break;
         
         case VALUE_STRING: {
-            char buff[255]; 
             printf((char *)expr->literal.data);
         } break;
         
@@ -358,10 +353,10 @@ void print_operation(Token operation) {
         case TK_GREATER: printf(">");break;
         case TK_LESS:    printf("<");break;
         case TK_ASSIGN:  printf("="); break;
-        case TK_GREATER_EQUAL: printf(">");break;
-        case TK_LESS_EQUAL:    printf("<");break;
-        case TK_BANG_EQUAL:    printf("!");break;
-        case TK_EQUAL_EQUAL:   printf("=");break;
+        case TK_GREATER_EQUAL: printf(">=");break;
+        case TK_LESS_EQUAL:    printf("<=");break;
+        case TK_BANG_EQUAL:    printf("!=");break;
+        case TK_EQUAL_EQUAL:   printf("==");break;
         
     }
     
@@ -394,10 +389,11 @@ void print(Expr *expr) {
             print_literal(expr);
         } break;
         
-        
     }
     
 }
+
+//////////////////////////////////
 
 internal int parse_file(Lexer *lexer) {
     

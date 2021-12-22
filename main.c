@@ -50,7 +50,7 @@ typedef unsigned char bool;
 
 #define is_digit(ch) ('0'<=(ch) && (ch)<='9')
 #define is_alpha(ch) (('A'<=(ch) && (ch)<='Z') || ('a'<=(ch) && (ch)<='z'))
-#define is_alphanumeric(ch) (is_digit(ch) || is_alpha(ch))
+#define is_alphanumeric(ch) (is_digit(ch) || is_alpha(ch) || ch == '_')
 
 #define ArrayLength(arr) (sizeof(arr)/sizeof(arr[0]))
 
@@ -71,6 +71,13 @@ char *slicecpy(char *dest, size_t dest_size, char *src, size_t src_size) {
     }
     *tdest = '\0';
     return dest;
+}
+
+int my_strcmp(char *str1, char *str2) {
+    char *temp1 = str1, *temp2 = str2; 
+    while (*temp1 && *temp2 && *temp1++ == *temp2++); 
+    return !(*temp1 && *temp2);
+    
 }
 
 #include "lexer.h"
@@ -132,6 +139,7 @@ int main(int argc, char *argv[]) {
     //
     
     init_tk_names();
+    init_keywords();
     
     Lexer lexer = {0};
     lexer.code = source_buff;; 
