@@ -1,17 +1,18 @@
 //
 // Language spec: 
 // 
-// a bit like a calc that is less fancy :)
-
-//
-// Right now I will be working on a prefix implementation of a simple adder
+// In need of work... 
+// When I learn more of parsing principles 
+// I will begin writing a langauge spec
+// and then have a final implementation of 
+// this spec.
 //
 
 #define DEBUG 1
 #define internal static 
 
 #if DEBUG
-#define Assert(expression) if (!expression) { int expr = *(int *)0; }
+#define Assert(expression) do if (!expression) { int expr = *(volatile int *)0; } while(0)
 #else
 #define Assert(expression) 
 #endif
@@ -45,7 +46,13 @@ typedef double f64;
 typedef unsigned char bool;
 
 #define true 1 
-#define false 0.
+#define false 0
+
+#define is_digit(ch) ('0'<=(ch) && (ch)<='9')
+#define is_alpha(ch) (('A'<=(ch) && (ch)<='Z') || ('a'<=(ch) && (ch)<='z'))
+#define is_alphanumeric(ch) (is_digit(ch) || is_alpha(ch))
+
+#define ArrayLength(arr) (sizeof(arr)/sizeof(arr[0]))
 
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
@@ -95,6 +102,7 @@ int main(int argc, char *argv[]) {
     filename = "../tests/minus.gzr";
     filename = "../tests/minusRecursive.gzr";
     filename = "../tests/addMinusRecursive.gzr";
+    filename = "../tests/expressions.gzr";
     
 #endif 
     
@@ -131,25 +139,7 @@ int main(int argc, char *argv[]) {
     lexer.loc.ch   = 1; 
     lexer.loc.line = 1; 
     
-    Parser parser = {0};
-    parser.lexer = &lexer; 
-    
-    
-    // 
-    // Compilation/Simulation phase
-    // 
-    
-    bool sim = true, comp = false; 
-    if (sim) {
-        sim_file(&parser);
-    }
-    else if (comp) {
-        // comp_file(&parser); 
-    }
-    else {
-        fprintf(stdout, "Must specify whether you want to simulate or compile the code\n");
-    }
-    
+    parse_file(&lexer);
     
     free(source_buff); // I don't need to use this but whatever...
     return 0;

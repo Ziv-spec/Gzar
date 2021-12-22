@@ -9,4 +9,7 @@ to use in my compiler. An expression, statement and so on...
 What are the relationships between them (like how groups, unary, binary, and literal are all expressions). 
 All of this is needed to be able to create a good structure for the compiler.
 
+When defining a langauge you need to make the specify the grammer of that language
+quite clearly. Doing this well will really help you when programming the compiler for 
+said language
 

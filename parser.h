@@ -1,20 +1,6 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-#define is_token_op(tk) (TK_OP_BEGIN < tk.kind && tk.kind < TK_OP_END)
-#define is_token_operand(tk) (TK_LITERAL_BEGIN < tk.kind && tk.kind < TK_LITERAL_END)
-
-#define is_kind_op(kind) (TK_OP_BEGIN < kind && kind < TK_OP_END)
-#define is_kind_operand(kind) (TK_LITERAL_BEGIN < kind && kind < TK_LITERAL_END)
-#define is_kind_op_or_operand(kind) (is_kind_op(kind) || is_kind_operand(kind))
-
-#if 0
-
-/* 
-#define NULL_TOKEN (Token){ 0 }; 
-#define NULL_EXPR  (Ast_Expr){ 0 }; 
- */
-
 // How this should look like: 
 // 
 // expression -> literal 
@@ -40,13 +26,16 @@ typedef Expr Binary;
 enum Value_Kind {
     VALUE_INTEGER, 
     VALUE_STRING, 
+    VALUE_FALSE, 
+    VALUE_TRUE, 
+    VALUE_NIL, 
 }; 
 
 enum Expr_Kind {
     EXPR_GROUPING, 
     EXPR_LITERAL, 
     EXPR_UNARY, 
-    EXPR, 
+    EXPR_BINARY, 
     
 }; 
 
@@ -55,23 +44,28 @@ struct Expr {
     
     union {
         struct Grouping {
-            Expr *expression; 
+            Expr *expr; 
         } grouping;
         
+        // To be more vorbose, I use a union
+        // instead of a 'void *' type. 
         struct Literal {
             Value_Kind kind;
-            char *value; // probably should be more specific here 
+            void *data; 
         } literal; 
         
         struct Unary {
-            Token operator; 
+            Token operation; 
             Expr *right; 
         } unary;
         
-        // This is what the actual expression should contain (as a regular expression)
+        // binary expression which the most commonly used
+        // out of all of the types of expressions, so I 
+        // left out the name to indicate this is what I 
+        // assume it to be most of the time. 
         struct {
             Expr *left; 
-            Token *operation; 
+            Token operation; 
             Expr *right; 
         }; 
     }; 
@@ -79,265 +73,355 @@ struct Expr {
 }; 
 
 
+static Token tokens[1024]; 
+static unsigned int tokens_index;
+static unsigned int tokens_len;
 
+/* initializers for the different types of expressions */ 
+internal Expr *init_binary(Expr *left, Token operation, Expr *right); 
+internal Expr *init_unary(Token operation, Expr *right); 
+internal Expr *init_literal(void *data, Value_Kind kind); 
+internal Expr *init_grouping(Expr *expr); 
 
+/* helper functions */
+internal int   is_at_end(); 
+internal Token peek(); 
+internal Token advance(); 
+internal Token previous(); 
+internal bool  check(Token_Kind kind); 
+internal bool  match(Token_Kind *kinds, int n); 
+internal void  report(int line, char *msg); 
+internal void  error(Token token, char *msg); 
+internal Token consume(Token_Kind kind, char *msg);
 
+/* resolving expressions */
+internal Expr *primary(); 
+internal Expr *unary();
+internal Expr *factor(); 
+internal Expr *term();
+internal Expr *comparison(); 
+internal Expr *equality(); 
+internal Expr *expression();
 
-#else /* =============================================================== */
+internal int   parse_file(Lexer *lexer);
 
-typedef struct Parser Parser; 
-typedef struct Ast_Expr Ast_Expr; 
-typedef struct Ast_Value Ast_Value;
-typedef enum Ast_Kind Ast_Kind;
-typedef struct Ast_Dump Ast_Dump; 
+//////////////////////////////////
+// Implementation
 
-enum Ast_Kind {
-    AST_EXPR, 
-    AST_INTEGER, 
-};
-
-struct Ast_Value { 
-    Ast_Kind kind; 
-    union {
-        Ast_Expr *expr;
-        char *integer; 
-    };
-}; 
-
-struct Ast_Expr {
-    Token_Kind op; // the operation that is needed to be executed on the right and left operands
-    Ast_Value right; 
-    Ast_Value left; 
-}; 
-
-// TODO(ziv): think about this some more 
-struct Ast_Dump {
-    Ast_Kind kind; 
-    union {
-        char *integer;
-        Ast_Expr *expr; // the expression we want to dump
-    }; 
-}; 
-
-
-struct Parser {
-    Lexer *lexer; 
-    Ast_Expr *expr; // for the time being it is going to be a add
-}; 
-
-
-char *to_literal(Token token) {
-    Assert(is_kind_operand(token.kind));
-    
-    // TODO(ziv): extend this to something that handles more 
-    // than just a integer
-    Assert(token.kind == TK_INTEGER);
-    
-    char *result = (char *)malloc((token.len+1) * sizeof(char));
-    strncpy(result, token.s, token.len); 
-    result[token.len] = '\0';
-    
-    return result;
+internal Expr *init_binary(Expr *left, Token operation, Expr *right) {
+    Expr *binary = (Expr *)malloc(sizeof(Expr));
+    binary->kind = EXPR_BINARY; 
+    binary->left = left; 
+    binary->operation = operation; 
+    binary->right = right;
+    return binary;
 }
 
-Ast_Expr *parse_expr(Parser *parser) {
-    Lexer *lexer = parser->lexer; 
+internal Expr *init_unary(Token operation, Expr *right) {
+    Expr *unar = (Expr *)malloc(sizeof(Expr));
+    unar->kind = EXPR_UNARY; 
+    unar->unary.operation = operation; 
+    unar->unary.right = right; 
+    return unar;
+}
+
+internal Expr *init_literal(void *data, Value_Kind kind) {
+    Expr *literal = (Expr *)malloc(sizeof(Expr));
+    literal->kind = EXPR_LITERAL; 
+    literal->literal.kind = kind; 
+    literal->literal.data = data; 
+    return literal;
+}
+
+internal Expr *init_grouping(Expr *expr){
+    Expr *grouping = (Expr *)malloc(sizeof(Expr));
+    grouping->kind = EXPR_GROUPING;  
+    grouping->grouping.expr = expr; 
+    return grouping;
+}
+
+//////////////////////////////////
+
+internal int is_at_end() {
+    Assert(tokens_index > tokens_len); // TODO(ziv): check whether I need this
+    return tokens[tokens_index].kind == TK_EOF;
+}
+
+internal Token peek() {
+    return tokens[tokens_index];
+}
+
+internal Token advance() {
+    if (!is_at_end()) tokens_index++; 
+    return tokens[tokens_index];
+}
+
+internal Token previous() {
+    return tokens[tokens_index-1];
+}
+
+internal Token consume(Token_Kind kind, char *msg) {
+    if (check(kind)) return advance(); 
+    error(peek(), msg); 
+    return (Token){ 0 };
+}
+
+internal void error(Token token, char *msg) {
+    char buff[255];
     
-    Ast_Expr *expr = (Ast_Expr *)malloc(sizeof(Ast_Expr)); 
-    if (!expr) {
-        fprintf(stderr, "Error: out of memory\n");
-        return NULL;
+    if (token.kind == TK_EOF) {
+        strcat(buff, " at end");
+        strcat(buff, msg);
+        report(token.loc.line, buff); 
     }
+    else {
+        report(token.loc.line, strcat(" at ", msg));
+    }
+}
+
+internal void report(int line, char *msg) {
+    char err[255];  // holding the error message
+    char buff[255]; // holding the integer as a string
     
-    if (get_next_token(lexer)) {
-        
-        switch (lexer->token.kind) {
-            
-            default: {
-                if (is_kind_operand(lexer->token.kind)) {
-                    fprintf(stderr, "Error: syntax error, expected to begin with a operation but got: '%s'\n", tk_names[lexer->token.kind]);
-                    return NULL;
-                }
-                else {
-                    Assert(!"Token not impelemented!!!"); 
-                }
-            } break; 
-            
-            case TK_EOF: {
-                return NULL;
-            }break; 
-            
-            
-            //
-            // handling ops
-            //
-            
-            case TK_PLUS: 
-            case TK_MINUS: 
-            {
-                expr->op = lexer->token.kind;
-                
-                if (top_next_token(lexer)) {
-                    if (is_kind_op(lexer->token.kind)) {
-                        expr->left.kind = AST_EXPR;
-                        expr->left.expr = parse_expr(parser); 
-                    }
-                    else if (is_kind_operand(lexer->token.kind)) {
-                        Assert(lexer->token.kind == TK_INTEGER); 
-                        get_next_token(lexer);
-                        
-                        expr->left.kind = AST_INTEGER;
-                        expr->left.integer = to_literal(lexer->token); 
-                        
-                    }
-                    else {
-                        fprintf(stderr, "Error: expected operation or literal got '%s'\n", tk_names[lexer->token.kind]); 
-                    }
-                }
-                
-                
-                if (top_next_token(lexer)) {
-                    if (is_kind_op(lexer->token.kind)) {
-                        expr->right.kind = AST_EXPR;
-                        expr->right.expr = parse_expr(parser); 
-                    }
-                    else if (is_kind_operand(lexer->token.kind)) {
-                        Assert(lexer->token.kind == TK_INTEGER); 
-                        get_next_token(lexer);
-                        
-                        expr->right.kind = AST_INTEGER;
-                        expr->right.integer = to_literal(lexer->token); 
-                        
-                    }
-                    else {
-                        fprintf(stderr, "Error: expected operation or literal got '%s'\n", tk_names[lexer->token.kind]); 
-                    }
-                }
-                
-            } break;
-            
+    strcat(err, msg); 
+    strcat(err, itoa(line, buff,10)); 
+    fprintf(stdout, err);
+    fprintf(stdout, "\n");
+    exit(-1); // NOTE(ziv): for the time being, when 
+    // the parser is reporting a error for the use 
+    // it is not going to continue finding more erorrs. 
+    // This is done to simplify the amounts of things 
+    // that I need to think about. That will change in 
+    // the future as adding this feature will be easier 
+    // when I have statements.
+}
+
+internal bool check(Token_Kind kind) { 
+    if (is_at_end()) return false; 
+    return peek().kind == kind; 
+}
+
+internal bool match(Token_Kind *kinds, int n) {
+    for (int i = 0; i < n; i++) {
+        if (check(kinds[i])) {
+            advance(); 
+            return true;
         }
+    }
+    return false; 
+}
+
+//////////////////////////////////
+
+internal Expr *expression() {
+    return equality(); 
+}
+
+internal Expr *equality() {
+    Expr *expr = comparison(); 
+    
+    Token_Kind ops[] = { TK_BANG_EQUAL, TK_EQUAL_EQUAL }; 
+    while (match(ops, 2)) {
+        Token operator = previous(); 
+        Expr *right = comparison(); 
+        expr = init_binary(expr, operator, right);
     }
     
     return expr;
 }
 
-
-bool parse_file(Parser *parser) {
-    Lexer *lexer = parser->lexer; 
+internal Expr *comparison() {
+    Expr *expr = term(); 
     
-    Ast_Expr add_node = {0};
-    
-    // 
-    // Create the ast parse tree
-    // 
-    Ast_Expr *expr; 
-    while (top_next_token(lexer)) {
+    Token_Kind ops[] = { TK_GREATER, TK_LESS }; 
+    while (match(ops, 2)) {
+        Token operation = previous(); 
+        Expr *right = term(); 
+        expr = init_binary(expr, operation, right);
         
-        switch (lexer->token.kind) {
-            
-            default: {
-                if (is_kind_operand(lexer->token.kind)) {
-                    fprintf(stderr, "Error: syntax error, must begin with a operation\n");
-                    return false;
-                }
-                else {
-                    Assert(!"Token impel needs to be done"); 
-                }
+    }
+    return expr;
+}
+
+internal Expr *term() {
+    Expr *expr = factor(); 
+    
+    Token_Kind ops[] = { TK_MINUS, TK_PLUS }; 
+    while (match(ops, 2)) {
+        Token operation = previous(); 
+        Expr *right = factor(); 
+        expr = init_binary(expr, operation, right);
+    }
+    
+    return expr;
+}
+
+internal Expr *factor() {
+    Expr *expr = unary(); 
+    
+    Token_Kind ops[] = { TK_SLASH, TK_STAR }; 
+    while (match(ops, 2)) {
+        Token operation = previous(); 
+        Expr *right = factor(); 
+        expr = init_binary(expr, operation, right);
+    }
+    
+    return expr;
+}
+
+internal Expr *unary() {
+    
+    Token_Kind ops[] = { TK_BANG, TK_MINUS }; 
+    while (match(ops, 2)) {
+        Token operation = previous(); 
+        Expr *right = unary(); 
+        return init_unary(operation, right);
+    }
+    
+    return primary();
+}
+
+internal Expr *primary() {
+    Token_Kind literal_types[] = { TK_FALSE, TK_TRUE, TK_NIL, TK_NUMBER, TK_STRING }; 
+    if (match(literal_types+0, 1)) return init_literal(NULL, VALUE_FALSE);
+    if (match(literal_types+1, 1)) return init_literal(NULL, VALUE_TRUE);
+    if (match(literal_types+2, 1)) return init_literal(NULL, VALUE_NIL);
+    
+    // number & string
+    if (match(literal_types+3, 2)) { 
+        Token token = previous();
+        Expr *result = NULL; 
+        
+        switch (token.kind) {
+            case TK_NUMBER: {
+                u64 value = atoi(token.str); 
+                result = init_literal((void *)value, VALUE_INTEGER); 
             } break; 
             
-            case TK_MINUS:
-            case TK_PLUS: {
-                expr = parse_expr(parser);
-                
-                parser->expr = expr; 
-                
+            case TK_STRING: {
+                char *buff = (char *)malloc(token.len+1); 
+                strncpy(buff, token.str, token.len);
+                buff[token.len] = '\0';
+                result = init_literal((void *)buff, VALUE_STRING); 
             } break; 
-            
-            
-            case TK_DUMP: {
-                //parse_dump(parser);
-            } break;
-            
-            case TK_EOF: {
-                // do nothing
-                goto end;
-            }break; 
             
         }
-    }
-    
-    end: 
-    return true; 
-}
-
-
-int value_to_int(Ast_Value *value) {
-    return atoi(value->integer); 
-}
-
-int sim_add(int right, int left) {
-    return left+right; 
-}
-
-int sim_minus(int right, int left) {
-    return left-right; 
-}
-
-
-
-int sim_expr(Ast_Expr *expr) {
-    Assert(expr); // i'm expecting a expression
-    
-    int right, left, result = 0;
-    
-    if (expr->right.kind == AST_EXPR) {
-        right = sim_expr(expr->right.expr);
-    }
-    else if (expr->right.kind == AST_INTEGER) {
-        right = atoi(expr->right.integer);
-    }
-    
-    
-    if (expr->left.kind == AST_EXPR) {
-        left = sim_expr(expr->left.expr);
-    }
-    else if (expr->left.kind == AST_INTEGER) {
-        left = atoi(expr->left.integer);
-    }
-    
-    
-    switch (expr->op) {
         
-        case TK_PLUS: {
-            result = sim_add(right, left);
+        return result;
+    }
+    
+    Token_Kind parans[] = { TK_LPARAN, TK_RPARAN }; 
+    if (match(parans, 2)) {
+        Expr *expr = expression(); 
+        consume(TK_RPARAN, "Expected ')' after expression"); 
+        return init_grouping(expr); 
+    }
+    
+    Assert(false); // we should never be getting here
+    return NULL; 
+}
+
+//////////////////////////////////
+
+
+void print_literal(Expr *expr) {
+    Assert(expr->kind == EXPR_LITERAL);
+    
+    switch (expr->literal.kind) {
+        
+        case VALUE_TRUE: printf("true"); break;
+        case VALUE_FALSE: printf("false"); break;
+        case VALUE_NIL: printf("nil"); break;
+        
+        case VALUE_INTEGER: {
+            u64 num = (u64)expr->literal.data; 
+            printf("%I64d", num);
         } break;
         
-        case TK_MINUS: {
-            result = sim_minus(right, left);
+        case VALUE_STRING: {
+            char buff[255]; 
+            printf((char *)expr->literal.data);
         } break;
         
     }
     
-    return result; 
 }
 
-void sim_file(Parser *parser) {
-    
-    if (!parse_file(parser)) {
-        // parsing the file has gone wrong 
-        return; 
+void print_operation(Token operation) {
+    switch (operation.kind) {
+        
+        case TK_PLUS:  printf("+"); break;
+        case TK_MINUS: printf("-"); break;
+        case TK_BANG:  printf("!");break;
+        case TK_SLASH: printf("/"); break;
+        case TK_STAR:  printf("*");break;
+        case TK_GREATER: printf(">");break;
+        case TK_LESS:    printf("<");break;
+        case TK_ASSIGN:  printf("="); break;
+        case TK_GREATER_EQUAL: printf(">");break;
+        case TK_LESS_EQUAL:    printf("<");break;
+        case TK_BANG_EQUAL:    printf("!");break;
+        case TK_EQUAL_EQUAL:   printf("=");break;
+        
     }
     
-    // 
-    // Go over the parse tree and execute the commands 
-    // 
+}
+
+void print(Expr *expr) {
+    Assert(expr->kind == EXPR_BINARY);
     
-    int sim_result = sim_expr(parser->expr); 
-    printf("result = %d\n", sim_result);
-    //int sim_result = sim_add(&parser->expr); 
+    switch(expr->kind) {
+        case EXPR_BINARY: {
+            printf("(");
+            print_operation(expr->operation); printf(" ");
+            print(expr->left); printf(" ");
+            print(expr->right); 
+            printf(")");
+        } break;
+        
+        case EXPR_UNARY: {
+            printf("(");
+            print_operation(expr->unary.operation); printf(" ");
+            print(expr->unary.right);
+            printf(")");
+        } break;
+        
+        case EXPR_GROUPING: {
+            print(expr->grouping.expr);
+        } break;
+        
+        case EXPR_LITERAL: {
+            print_literal(expr);
+        } break;
+        
+        
+    }
     
 }
-#endif 
+
+internal int parse_file(Lexer *lexer) {
+    
+    //
+    // get a token list for the whole program
+    //
+    int i = 0;
+    for (;  lexer->token.kind != TK_EOF; i++) {
+        if (get_next_token(lexer)) {
+            tokens[i] = lexer->token;
+        }
+        else {
+            return -1; 
+        }
+    }
+    tokens_len = i;
+    
+    // actually parse a expression using the 
+    // token list that I have created before
+    Expr *result = expression(); // this will parse a single expression
+    
+    print(result); // pretty pring for debugging purposes
+    
+    return 1;
+}
 
 #endif //PARSER_H
