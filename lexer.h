@@ -20,6 +20,8 @@ enum Token_Kind {
     TK_TRUE,    // true
     TK_NIL,     // nil
     TK_RETURN,  // return
+    TK_VAR,     // var 
+    TK_PRINT,   // print
     // TODO(ziv): add types maybe??
     TK_KEYWORD_END,
     
@@ -65,6 +67,8 @@ internal void init_keywords() {
     keywords[TK_TRUE]   = "true";
     keywords[TK_NIL]    = "nil";
     keywords[TK_RETURN] = "return";
+    keywords[TK_VAR]    = "var";
+    keywords[TK_PRINT]  = "print";
 }
 
 static char *tk_names[TK_COUNT];
@@ -76,7 +80,8 @@ internal void init_tk_names() {
     tk_names[TK_ELSE]   = "else";
     tk_names[TK_WHILE]  = "while";
     tk_names[TK_RETURN] = "return";
-    
+    tk_names[TK_VAR]    = "var";
+    tk_names[TK_PRINT]  = "print";
     // ops
     tk_names[TK_PLUS]    = "+";
     tk_names[TK_MINUS]   = "-";

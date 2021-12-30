@@ -12,7 +12,7 @@
 #define internal static 
 
 #if DEBUG
-#define Assert(expression) do if (!expression) { int expr = *(volatile int *)0; } while(0)
+#define Assert(cond) do { if (!(cond)) { __debugbreak(); } } while(0)
 #else
 #define Assert(expression) 
 #endif
@@ -60,7 +60,7 @@ typedef unsigned char bool;
 #include <string.h>
 
 // TODO(ziv): implement a real mini string minipulation lib for this compiler
-char *slicecpy(char *dest, size_t dest_size, char *src, size_t src_size) {
+internal char *slicecpy(char *dest, size_t dest_size, char *src, size_t src_size) {
     Assert(src && dest);
     char *tdest = dest; 
     if (src_size > dest_size) return NULL;
@@ -73,7 +73,7 @@ char *slicecpy(char *dest, size_t dest_size, char *src, size_t src_size) {
     return dest;
 }
 
-int my_strcmp(char *str1, char *str2) {
+internal int my_strcmp(char *str1, char *str2) {
     char *temp1 = str1, *temp2 = str2; 
     while (*temp1 && *temp2 && *temp1++ == *temp2++); 
     return !(*temp1 && *temp2);
@@ -82,7 +82,6 @@ int my_strcmp(char *str1, char *str2) {
 
 #include "lexer.h"
 #include "parser.h"
-
 
 
 int main(int argc, char *argv[]) {

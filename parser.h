@@ -32,7 +32,7 @@ enum Value_Kind {
 }; 
 
 enum Expr_Kind {
-    EXPR_GROUPING, 
+    EXPR_GROUPING = 1, 
     EXPR_LITERAL, 
     EXPR_UNARY, 
     EXPR_BINARY, 
@@ -67,7 +67,41 @@ struct Expr {
         }; 
     }; 
     
+};
+
+typedef enum Statement_Kind Statement_Kind; 
+typedef struct Statement Statement; 
+
+enum Statement_Kind {
+    STMT_EXPR, 
+    STMT_PRINT_EXPR, 
+    STMT_VAR_DECL,
 }; 
+
+struct Statement {
+    Statement_Kind kind; 
+    
+    union {
+        // for the time being I will allow the print
+        // function to a stand alone expression
+        Expr *print_expr;
+        
+        Expr *expr; 
+        
+        struct {
+            Token name; 
+            Expr *initializer;
+        } var_decl; 
+        
+    };
+};
+
+// NOTE(ziv): I will not bother with dynamic
+// arrays this will be left for the final 
+// design to implement.
+
+static Statement statements[10]; 
+static unsigned int statements_index = 0;
 
 static Token tokens[1024]; 
 static unsigned int tokens_index;
@@ -139,7 +173,7 @@ internal Expr *init_grouping(Expr *expr){
 //////////////////////////////////
 
 internal int is_at_end() {
-    Assert(tokens_index > tokens_len); // TODO(ziv): check whether I need this
+    Assert(tokens_index < tokens_len); // TODO(ziv): check whether I need this
     return tokens[tokens_index].kind == TK_EOF;
 }
 
@@ -359,11 +393,10 @@ void print_operation(Token operation) {
         case TK_EQUAL_EQUAL:   printf("==");break;
         
     }
-    
 }
 
 void print(Expr *expr) {
-    Assert(expr->kind == EXPR_BINARY);
+    Assert(expr->kind & (EXPR_GROUPING | EXPR_LITERAL | EXPR_UNARY | EXPR_BINARY));
     
     switch(expr->kind) {
         case EXPR_BINARY: {
@@ -395,6 +428,63 @@ void print(Expr *expr) {
 
 //////////////////////////////////
 
+internal Statement *init_expr_stmt(Expr *expr) {
+    Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
+    stmt->kind = STMT_EXPR; 
+    stmt->print_expr = expr; 
+    return stmt;
+}
+
+internal Statement *init_print_stmt(Expr *expr) {
+    Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
+    stmt->kind = STMT_PRINT_EXPR; 
+    stmt->print_expr = expr; 
+    return stmt;
+}
+
+internal Statement *print_stmt() {
+    Expr *expr = expression(); 
+    consume(TK_SEMI_COLON, "Expected ';' after a print statement");
+    return init_print_stmt(expr);
+}
+
+internal Statement *expr_stmt() {
+    Expr *expr = expression(); 
+    consume(TK_SEMI_COLON, "Expected ';' after a statement");
+    return init_expr_stmt(expr);
+}
+
+internal Statement *init_decl_stmt(Token name, Expr *expr) {
+    Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
+    stmt->kind = STMT_VAR_DECL; 
+    stmt->var_decl.name = name; 
+    stmt->var_decl.initializer = expr; 
+    return stmt;
+}
+
+internal Statement *decloration() {
+    Token name = consume(TK_IDENTIFIER, "Expedted variable name"); 
+    
+    Expr *expr = NULL; 
+    Token_Kind temp[] = { TK_ASSIGN }; 
+    if (match(temp, 1)) { 
+        expr = expression(); 
+        return init_decl_stmt(name, expr); 
+    }
+    consume(TK_SEMI_COLON, "Expected ';' after a variable decloration");
+}
+
+internal Statement *statement() {
+    Token_Kind matching[] = { TK_PRINT, TK_VAR }; 
+    if (match(matching+0, 1)) return print_stmt(); 
+    if (match(matching+1, 1)) return decloration(); 
+    
+    
+    return expr_stmt();
+}
+
+//////////////////////////////////
+
 internal int parse_file(Lexer *lexer) {
     
     //
@@ -411,11 +501,13 @@ internal int parse_file(Lexer *lexer) {
     }
     tokens_len = i;
     
+    // test to see whether parsing a expression works
+    
     // actually parse a expression using the 
     // token list that I have created before
     Expr *result = expression(); // this will parse a single expression
-    
     print(result); // pretty pring for debugging purposes
+    
     
     return 1;
 }
