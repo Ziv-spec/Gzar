@@ -1,3 +1,5 @@
 .vs
 build/
 *.exe
+*.o
+*.asm
