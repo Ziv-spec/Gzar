@@ -147,7 +147,10 @@ struct Lexer {
 
 ////////////////////////////////
 
-int __token_index = 0;
+
+static Token tokens[1024]; 
+static unsigned int tokens_index;
+static unsigned int tokens_len;
 //internal void debug_print_token(Token token); // prints a token in a index, value, type format.
 
 ////////////////////////////////
@@ -292,6 +295,19 @@ internal bool top_next_token(Lexer *lexer) {
     }
     lexer->loc = loc; // move lexer to old location
     return true; 
+}
+
+internal void lex_file(Lexer *lexer) {
+    //
+    // get a token list for the whole program
+    //
+    int i = 0;
+    for (;  lexer->token.kind != TK_EOF; i++) {
+        if (get_next_token(lexer)) {
+            tokens[i] = lexer->token;
+        }
+    }
+    tokens_len = i;
 }
 
 /* 

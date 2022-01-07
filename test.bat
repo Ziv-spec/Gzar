@@ -2,34 +2,57 @@
 
 REM This is where I am going to run most of my tests, and assemble generated assembly code 
 REM Note: to run this script you need to run it from the nasm command prompt. 
-
-pushd build
-
-REM for the time being it is going to be a 32bit application 
+REM For the time being it is going to be a 32bit application 
 REM if i find a way to make 64 bit not complain, I will do so
 
-call:assert ../tests/test1.gzr 52
-call:assert ../tests/test1.gzr 56
-call:assert ../tests/test1.gzr 51
+set testDirectory=%cd%\tests\
+pushd build
+
+
+
+
+REM ================= BEGIN TESTING ======================
+
+call:assert test1.gzr 46
+call:assert test2.gzr 1
+
+REM ======================================================
+
+
+
+
 
 popd
 goto:eof
 
 :assert
-gzar.exe %~1 > test.asm
-if not exist test.asm (
-	EXIT /B 0
-) else (
-	echo | set /p=successfuly build %~1 
-)
+set testPath=%testDirectory%%~1
+
+gzar.exe %testPath% > test.asm
+if not exist test.asm  EXIT /B 0 
 
 nasm -felf test.asm -o test.o
+if %errorlevel% == 1 (
+	type test.asm
+	EXIT /B 0
+)
+echo | set /p=successfuly build %~1
+
 ld test.o -o test.exe
+if %errorlevel% == 1  EXIT /B 0
+
 test.exe
 if %errorlevel% == %~2 (
 	echo ....OK
 ) else (
 	echo ....FAIL    Expected %~2 but got, %errorlevel%
+)
+
+if 1 == 1 (
+	type test.asm
+	echo | set /p='
+	type %testPath%
+	echo '
 )
 
 EXIT /B 0

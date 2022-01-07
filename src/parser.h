@@ -1,6 +1,8 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+
+
 // How this should look like: 
 // 
 // expression -> literal 
@@ -22,6 +24,8 @@ typedef struct Literal Literal;
 typedef enum Value_Kind Value_Kind; 
 typedef enum Expr_Kind Expr_Kind; 
 typedef Expr Binary; 
+
+void gen(Expr *expr);
 
 enum Value_Kind {
     VALUE_INTEGER, 
@@ -104,9 +108,6 @@ struct Statement {
 static Statement *statements[10]; 
 static unsigned int statements_index = 0;
 
-static Token tokens[1024]; 
-static unsigned int tokens_index;
-static unsigned int tokens_len;
 
 /* initializers for the different types of expressions */ 
 internal Expr *init_binary(Expr *left, Token operation, Expr *right); 
@@ -134,7 +135,7 @@ internal Expr *comparison();
 internal Expr *equality(); 
 internal Expr *expression();
 
-internal int   parse_file(Lexer *lexer);
+internal Expr *parse_file();
 
 //////////////////////////////////
 // Implementation
@@ -487,37 +488,27 @@ internal Statement *statement() {
 
 //////////////////////////////////
 
-internal int parse_file(Lexer *lexer) {
+internal Expr *parse_file() {
     
+    // 
+    // Parse expression
     //
-    // get a token list for the whole program
-    //
-    int i = 0;
-    for (;  lexer->token.kind != TK_EOF; i++) {
-        if (get_next_token(lexer)) {
-            tokens[i] = lexer->token;
-        }
-        else {
-            return -1; 
-        }
-    }
-    tokens_len = i;
     
+    // NOTE(ziv): Currently I only support expressions
+    Expr *result = expression(); 
+    return result;
     
-    /*     
-        Expr *result = expression(); 
-        print(result); 
-         */
     
     //
     // go over the token list and parse statements
     //
     
-    while (tokens[i++].kind != TK_EOF) {
-        statements[statements_index++] = statement(); 
-    }
+    /*     
+        while (tokens[i++].kind != TK_EOF) {
+            statements[statements_index++] = statement(); 
+        }
+         */
     
-    return 1;
 }
 
 #endif //PARSER_H

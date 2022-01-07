@@ -14,7 +14,7 @@
 #if DEBUG
 #define Assert(cond) do { if (!(cond)) { __debugbreak(); } } while(0)
 #else
-#define Assert(expression) 
+#define Assert(cond) 
 #endif
 
 typedef struct Location Location; 
@@ -60,6 +60,8 @@ typedef unsigned char bool;
 #include <string.h>
 
 // TODO(ziv): implement a real mini string minipulation lib for this compiler
+
+// NOTE(ziv): Deprecated
 internal char *slicecpy(char *dest, size_t dest_size, char *src, size_t src_size) {
     Assert(src && dest);
     char *tdest = dest; 
@@ -79,6 +81,7 @@ internal int my_strcmp(char *str1, char *str2) {
     return !(*temp1 && *temp2);
     
 }
+
 
 #include "lexer.h"
 #include "parser.h"
@@ -140,16 +143,13 @@ int main(int argc, char *argv[]) {
     lexer.loc.ch   = 1; 
     lexer.loc.line = 1; 
     
-    //parse_file(&lexer);
+    //printf("has %d args:\n", COUNT_ARGS(10,1,1));
+    
+    
+    lex_file(&lexer); 
+    Expr *expr = parse_file();
+    gen(expr);
     
     free(source_buff); // I don't need to use this but whatever...
-    
-    
-    printf("segment .text\n");
-    printf("global _start\n");
-    printf("_start:\n");
-    printf("    mov eax, 56\n");
-    printf("    ret\n");
-    
     return 0;
 }
