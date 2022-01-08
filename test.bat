@@ -43,6 +43,8 @@ if %errorlevel% == 1 (
 ld test.o -o test.exe
 if %errorlevel% == 1  EXIT /B 0
 
+type test.asm
+
 test.exe
 echo resulting value from computation is: %errorlevel%
 
