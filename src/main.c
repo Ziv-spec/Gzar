@@ -143,9 +143,6 @@ int main(int argc, char *argv[]) {
     lexer.loc.ch   = 1; 
     lexer.loc.line = 1; 
     
-    //printf("has %d args:\n", COUNT_ARGS(10,1,1));
-    
-    
     lex_file(&lexer); 
     Expr *expr = parse_file();
     gen(expr);

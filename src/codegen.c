@@ -30,48 +30,78 @@ internal void internal_output(int num, ...) {
     va_end(oplist);
 }
 
+
+internal void gen_op(Token operation); 
+internal void gen(Expr *expr);
+internal void gen_literal(Expr *expr);
+internal void gen_body(Expr *expr);
+
+//////////////////////////////////
+
 internal void gen_op(Token operation) {
     switch (operation.kind) {
         
         case TK_PLUS:  output("; PLUS",   "add eax, edi");  break;
         case TK_MINUS: output("; MINUS",  "sub eax, edi");  break;
         case TK_STAR:  output("; MUL",    "imul eax, edi"); break;
-        case TK_SLASH: output("; DIVIDE", 
+        case TK_SLASH: output(
+                              "; DIVIDE", 
                               "xor edx, edx", 
-                              "idiv edi"); break;
-        
-        case TK_BANG:  output("; NOT", 
+                              "idiv edi"
+                              ); break;
+        case TK_BANG:  output(
+                              "; NOT", 
                               "test eax, eax",
                               "sete al", 
-                              "movzx eax, al"); break;
+                              "movzx eax, al"
+                              ); break;
+        case TK_GREATER:       output(
+                                      "; GREATER", 
+                                      "cmp eax, edi", 
+                                      "setg al",
+                                      "movzx eax, al"
+                                      ); break;
+        case TK_LESS:          output(
+                                      "; LESS", 
+                                      "cmp eax, edi", 
+                                      "setl al", 
+                                      "movzx eax, al"
+                                      ); break;
+        case TK_GREATER_EQUAL: output(
+                                      "; GREATER EQUAL",
+                                      "cmp eax, edi", 
+                                      "setge al",
+                                      "movzx eax, al"
+                                      ); break;
+        case TK_LESS_EQUAL:    output(
+                                      "; LESS EQUAL",
+                                      "cmp eax, edi", 
+                                      "setle al", 
+                                      "movzx eax, al"
+                                      ); break;
+        case TK_BANG_EQUAL:    output(
+                                      "; NOT EQUAL",
+                                      "cmp eax, edi", 
+                                      "setne al", 
+                                      "movzx eax, al"
+                                      ); break;
+        case TK_EQUAL_EQUAL:   output(
+                                      "; EQUAL",
+                                      "cmp eax, edi", 
+                                      "sete al",
+                                      "movzx eax, al"
+                                      ); break;
+        
+        default: {
+            fprintf(stderr, "Error: unsupported operation\n");
+            Assert( "Error: unsupported operation");
+            
+        }
+        
         /*
         case TK_ASSIGN:  printf("="); break;
         */
         
-        case TK_GREATER:       output("; GREATER", 
-                                      "cmp eax, edi", 
-                                      "setg al",
-                                      "movzx eax, al"); break;
-        case TK_LESS:          output("; LESS", 
-                                      "cmp eax, edi", 
-                                      "setl al", 
-                                      "movzx eax, al");break;
-        case TK_GREATER_EQUAL: output("; GREATER EQUAL",
-                                      "cmp eax, edi", 
-                                      "setge al",
-                                      "movzx eax, al"); break;
-        case TK_LESS_EQUAL:    output("; LESS EQUAL",
-                                      "cmp eax, edi", 
-                                      "setle al", 
-                                      "movzx eax, al"); break;
-        case TK_BANG_EQUAL:    output("; NOT EQUAL",
-                                      "cmp eax, edi", 
-                                      "setne al", 
-                                      "movzx eax, al"); break;
-        case TK_EQUAL_EQUAL:   output("; EQUAL",
-                                      "cmp eax, edi", 
-                                      "sete al",
-                                      "movzx eax, al"); break;
     }
 }
 
@@ -95,6 +125,7 @@ internal void gen_literal(Expr *expr) {
         
         default: {
             fprintf(stderr, "unsupported literal given\n");
+            Assert( "Error: unsupported operation");
             exit(1); 
         }
     }
@@ -135,11 +166,17 @@ internal void gen_body(Expr *expr) {
 
 internal void gen(Expr *expr) {
     
+    // 
+    // Generating the program
+    //
+    
     printf("segment .text\n");
     printf("global _start\n");
     printf("_start:\n");
     gen_body(expr);
-    printf("\tpop eax\n");
-    printf("\tret\n");
+    output(
+           "pop eax", 
+           "ret"
+           );
     
 }

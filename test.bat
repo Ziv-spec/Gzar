@@ -13,8 +13,11 @@ pushd build
 
 REM ================= BEGIN TESTING ======================
 
-call:assert test1.gzr 46
-call:assert test2.gzr 1
+
+REM call:assert test1.gzr 46
+REM call:assert test2.gzr 5
+
+call:run test2.gzr
 
 REM ======================================================
 
@@ -24,6 +27,28 @@ REM ======================================================
 
 popd
 goto:eof
+
+:run
+set testPath=%testDirectory%%~1
+
+gzar.exe %testPath% > test.asm
+if not exist test.asm  EXIT /B 0
+
+nasm -felf test.asm -o test.o
+if %errorlevel% == 1 (
+	type test.asm
+	EXIT /B 0
+)
+
+ld test.o -o test.exe
+if %errorlevel% == 1  EXIT /B 0
+
+test.exe
+echo resulting value from computation is: %errorlevel%
+
+EXIT /B 0
+
+
 
 :assert
 set testPath=%testDirectory%%~1
@@ -36,6 +61,8 @@ if %errorlevel% == 1 (
 	type test.asm
 	EXIT /B 0
 )
+
+
 echo | set /p=successfuly build %~1
 
 ld test.o -o test.exe
@@ -48,7 +75,7 @@ if %errorlevel% == %~2 (
 	echo ....FAIL    Expected %~2 but got, %errorlevel%
 )
 
-if 1 == 1 (
+if 0 == 1 (
 	type test.asm
 	echo | set /p='
 	type %testPath%

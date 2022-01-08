@@ -1,9 +1,6 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-
-
-// How this should look like: 
 // 
 // expression -> literal 
 //               | unary
@@ -175,7 +172,7 @@ internal Expr *init_grouping(Expr *expr){
 //////////////////////////////////
 
 internal int is_at_end() {
-    Assert(tokens_index < tokens_len); // TODO(ziv): check whether I need this
+    Assert(tokens_index < tokens_len); 
     return tokens[tokens_index].kind == TK_EOF;
 }
 
@@ -217,8 +214,8 @@ internal void report(int line, char *msg) {
     
     strcat(err, msg); 
     strcat(err, itoa(line, buff, 10)); 
-    fprintf(stdout, err);
-    fprintf(stdout, "\n");
+    fprintf(stderr, err);
+    fprintf(stderr, "\n");
     exit(-1); // NOTE(ziv): for the time being, when 
     // the parser is reporting a error for the use 
     // it is not going to continue finding more erorrs. 
@@ -355,7 +352,7 @@ internal Expr *primary() {
 
 //////////////////////////////////
 // Debug printing of expressions
-
+// NOTE(ziv): this is deprecated
 void print_literal(Expr *expr) {
     Assert(expr->kind == EXPR_LITERAL);
     
