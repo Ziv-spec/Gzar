@@ -58,6 +58,7 @@ typedef unsigned char bool;
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h> 
 
 // TODO(ziv): implement a real mini string minipulation lib for this compiler
 
@@ -85,6 +86,10 @@ internal int my_strcmp(char *str1, char *str2) {
 
 #include "lexer.h"
 #include "parser.h"
+#include "codegen.h"
+
+#include "lexer.c"
+#include "parser.c"
 #include "codegen.c"
 
 int main(int argc, char *argv[]) {
