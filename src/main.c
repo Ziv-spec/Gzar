@@ -8,10 +8,6 @@
 // this spec.
 //
 
-// program -> stmt*
-// stmt    -> expr ";" | identifier ";" | "=" | ... 
-// And I need to think about rvalues and lvalues. 
-
 #define DEBUG 1
 #define internal static 
 
@@ -34,17 +30,17 @@ struct Location {
 
 #include <stdint.h>
 
-typedef int8_t  s8;
+typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t s32;
 typedef int64_t s64;
 
-typedef uint8_t  u8;
+typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
-typedef float  f32; 
+typedef float f32; 
 typedef double f64;
 
 typedef unsigned char bool;
@@ -62,7 +58,6 @@ typedef unsigned char bool;
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdarg.h> 
 
 // TODO(ziv): implement a real mini string minipulation lib for this compiler
 
@@ -88,14 +83,6 @@ internal int my_strcmp(char *str1, char *str2) {
 }
 
 
-#define COUNT_ARGS(...) INTERNAL_EXPAND_ARGS_PRIVATE(INTERNAL_ARGS_AUGMENTER(__VA_ARGS__))
-#define INTERNAL_ARGS_AUGMENTER(...) unused, __VA_ARGS__
-#define INTERNAL_EXPAND(a) a
-#define INTERNAL_EXPAND_ARGS_PRIVATE(...) INTERNAL_EXPAND(INTERNAL_GET_ARG_COUNT_PRIVATE(__VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0))
-#define INTERNAL_GET_ARG_COUNT_PRIVATE(_1_, _2_, _3_, _4_, _5_, _6_, _7_, _8_, _9_, _10_, _11_, count, ...) count
-
-
-
 #include "lexer.h"
 #include "parser.h"
 #include "codegen.c"
@@ -106,7 +93,7 @@ int main(int argc, char *argv[]) {
     // handle the compiler options
     // 
     
-#if 0
+#if 1
     if (argc != 2) {
         fprintf(stdout, "Usage: <source>.gz\n"); 
         return 0; 
@@ -118,7 +105,7 @@ int main(int argc, char *argv[]) {
     // TODO(ziv): have something that will run all of 
     // the test programs.
     
-    char *filename = "../tests/test2.gzr";
+    filename = "../tests/test1.gzr";
     
 #endif 
     
