@@ -5,6 +5,119 @@ using a "Stack Machine". This will produce horrable code but it is
  extremely simple to program and make sure works correctly. 
 */
 
+
+
+internal void gen() {
+    
+    // 
+    // Generating the program
+    //
+    
+    printf("segment .text\n");
+    printf("global _start\n");
+    printf("_start:\n");
+    output("push ebp");
+    output("mov ebp, esp");
+    output("sub esp, 200");
+    
+    Statement *stmt = NULL;
+    for (int i = 0; i < statements_index; i++) {
+        stmt = statements[i];
+        if (stmt->kind == STMT_EXPR) {
+            gen_body(stmt->expr);
+            output("pop eax ; discart result\n");
+        }
+        else if (stmt->kind == STMT_RETURN) {
+            gen_body(stmt->expr); 
+            output(
+                   "pop eax",
+                   "mov esp, ebp",
+                   "pop ebp",
+                   "ret"
+                   ); 
+        }
+    }
+    
+    // this is reduendent
+    output("", "; THIS IS NOT NEEDED IF YOU HAVE A RETURN STATEMENT");
+    output(
+           "mov esp, ebp",
+           "pop ebp",
+           "ret"
+           );
+    
+}
+
+internal void gen_lval(Expr *expr) {
+    if (expr->kind != EXPR_LVAR) Assert(!"inccorect expression given to `gen_lval` function");
+    
+    char buff[15];
+    sprintf(buff, "sub eax, %d", expr->left_variable.offset);
+    
+    output(
+           "mov eax, ebp",
+           buff, 
+           "push eax"
+           ); 
+}
+
+internal void gen_body(Expr *expr) {
+    
+    switch(expr->kind) {
+        case EXPR_BINARY: {
+            gen_body(expr->left); 
+            gen_body(expr->right);
+            printf("\n");
+            output("pop edi");
+            output("pop eax");
+            gen_op(expr->operation);
+            
+        } break;
+        
+        case EXPR_UNARY: {
+            gen_body(expr->unary.right);
+            output("pop eax");
+            gen_op(expr->unary.operation);
+            output("push eax");
+        } break;
+        
+        case EXPR_GROUPING: {
+            gen_body(expr->grouping.expr);
+        } break;
+        
+        case EXPR_LITERAL: {
+            gen_literal(expr);
+        } break;
+        
+        case EXPR_LVAR: {
+            gen_lval(expr);
+            output(
+                   "pop eax", 
+                   "mov eax, [eax]", 
+                   "push eax"
+                   );
+        } break;
+        
+        case EXPR_ASSIGN: {
+            gen_lval(expr->assign.left_variable);
+            gen_body(expr->assign.rvalue);
+            
+            output(
+                   "pop edi",
+                   "pop eax",
+                   "mov [eax], edi",
+                   "push edi"
+                   );
+        } break; 
+        
+        default: {
+            Assert(!"Error: Not implemented");
+        } break;
+    }
+    
+    
+}
+
 internal void gen_op(Token operation) {
     switch (operation.kind) {
         
@@ -13,7 +126,7 @@ internal void gen_op(Token operation) {
         case TK_STAR:  output("; MUL",    "imul eax, edi"); break;
         case TK_SLASH: output(
                               "; DIVIDE", 
-                              "xor edx, edx", 
+                              "xor edx, edx", // TODO(ziv): maybe different instruction? 
                               "idiv edi"
                               ); break;
         case TK_BANG:  output(
@@ -65,11 +178,10 @@ internal void gen_op(Token operation) {
             
         }
         
-        /*
-        case TK_ASSIGN:  printf("="); break;
-        */
-        
     }
+    
+    output("push eax");
+    printf("\n");
 }
 
 internal void gen_literal(Expr *expr) {
@@ -98,52 +210,16 @@ internal void gen_literal(Expr *expr) {
     }
 }
 
-
-internal void gen_body(Expr *expr) {
+internal void internal_output(int num, ...) {
+    va_list oplist; 
     
-    switch(expr->kind) {
-        case EXPR_BINARY: {
-            gen_body(expr->left); 
-            gen_body(expr->right);
-            printf("\n");
-            output("pop edi");
-            output("pop eax");
-            gen_op(expr->operation);
-            output("push eax");
-            printf("\n");
-        } break;
-        
-        case EXPR_UNARY: {
-            gen_body(expr->unary.right);
-            output("pop eax");
-            gen_op(expr->unary.operation);
-            output("push eax");
-        } break;
-        
-        case EXPR_GROUPING: {
-            gen_body(expr->grouping.expr);
-        } break;
-        
-        case EXPR_LITERAL: {
-            gen_literal(expr);
-        } break;
-        
+    va_start(oplist, num);
+    
+    char *asmline = NULL;
+    for (int i = 0; i < num; i++) {
+        asmline = va_arg(oplist, char*); 
+        printf("\t"); printf(asmline); printf("\n");
     }
-}
-
-internal void gen(Expr *expr) {
     
-    // 
-    // Generating the program
-    //
-    
-    printf("segment .text\n");
-    printf("global _start\n");
-    printf("_start:\n");
-    gen_body(expr);
-    output(
-           "pop eax", 
-           "ret"
-           );
-    
+    va_end(oplist);
 }

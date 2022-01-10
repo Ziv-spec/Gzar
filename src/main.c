@@ -98,7 +98,7 @@ int main(int argc, char *argv[]) {
     // handle the compiler options
     // 
     
-#if 1
+#if 0
     if (argc != 2) {
         fprintf(stdout, "Usage: <source>.gz\n"); 
         return 0; 
@@ -110,7 +110,7 @@ int main(int argc, char *argv[]) {
     // TODO(ziv): have something that will run all of 
     // the test programs.
     
-    filename = "../tests/test1.gzr";
+    char *filename = "../tests/test2.gzr";
     
 #endif 
     
@@ -143,14 +143,22 @@ int main(int argc, char *argv[]) {
     init_keywords();
     
     Lexer lexer = {0};
-    lexer.code = source_buff;; 
+    lexer.code = source_buff;
     // most code editors begin from one and not zero e.g. row = 1, col = 1
     lexer.loc.ch   = 1; 
     lexer.loc.line = 1; 
     
-    lex_file(&lexer); 
-    Expr *expr = parse_file();
-    gen(expr);
+    bool success = lex_file(&lexer);
+    if (success == false) return 0;
+    
+    /*     
+        Expr *expr = parse_file();
+        if (expr == NULL) return 0;
+         */
+    
+    parse_file(); 
+    
+    gen();
     
     free(source_buff); // I don't need to use this but whatever...
     return 0;

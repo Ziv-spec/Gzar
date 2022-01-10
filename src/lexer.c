@@ -68,13 +68,13 @@ internal bool get_next_token(Lexer *lexer) {
         case '"': {
             token.kind = TK_STRING; 
             token.str = lexer->code + loc.index;
-            c = lexer->code[loc.index];
+            c = lexer->code[++loc.index];
             while (c != '"') {
                 c = lexer->code[++loc.index];
                 loc.ch++;
             }
-            token.len = lexer->code + loc.index - token.str; 
-        }
+            token.len = lexer->code + loc.index - token.str;
+        } break;
         
         default: { 
             // TODO(ziv): make sure that this is actually is working
@@ -88,6 +88,11 @@ internal bool get_next_token(Lexer *lexer) {
                 token.len = lexer->code + loc.index - token.str; 
             }
             else if (is_alpha(c)) {
+                
+                //
+                // Search if token is keyword
+                //
+                
                 bool found_keyword = false; 
                 for (int i = 1; i < ArrayLength(keywords); i++) {
                     if (my_strcmp(lexer->code + loc.index, keywords[i])) {
@@ -102,6 +107,8 @@ internal bool get_next_token(Lexer *lexer) {
                     
                 } 
                 else {
+                    
+                    // token is a identifier
                     token.kind = TK_IDENTIFIER;
                     token.str = lexer->code + loc.index;
                     while (is_alphanumeric(lexer->code[loc.index])) {
@@ -113,6 +120,7 @@ internal bool get_next_token(Lexer *lexer) {
             else {
                 // I don't know what is this token. 
                 fprintf(stderr, "Error: Unknown character at %d\n", loc.line);
+                return false;
             }
             
         } break;
@@ -137,7 +145,7 @@ internal bool top_next_token(Lexer *lexer) {
     return true; 
 }
 
-internal void lex_file(Lexer *lexer) {
+internal bool lex_file(Lexer *lexer) {
     //
     // get a token list for the whole program
     //
@@ -146,14 +154,18 @@ internal void lex_file(Lexer *lexer) {
         if (get_next_token(lexer)) {
             tokens[i] = lexer->token;
         }
+        else {
+            return false;
+        }
     }
     tokens_len = i;
+    return true;
 }
 
 
 
 /* NOTE(ziv): DEPRECATED
-internal void debug_print_token(Token token) {
+internal void debug_print_token(Token token) { 
     
     char buff[255] = {0}; // temp buffer for string minipulation
     

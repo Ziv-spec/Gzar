@@ -13,7 +13,6 @@ pushd build
 
 REM ================= BEGIN TESTING ======================
 
-
 REM call:assert test1.gzr 46
 REM call:assert test2.gzr 1
 
@@ -33,6 +32,8 @@ set testPath=%testDirectory%%~1
 
 gzar.exe %testPath% > test.asm
 if not exist test.asm  EXIT /B 0
+
+type test.asm
 
 nasm -felf test.asm -o test.o
 if %errorlevel% == 1 (

@@ -4,6 +4,7 @@
 //               | unary
 //               | binary 
 //               | grouping
+//               | assignment
 // 
 // literal -> NUMBER | STRING | "true" | "false" | "nil" 
 // grouping -> "(" expression ")"
@@ -12,15 +13,18 @@
 // operator -> "==" | "!=" | ">=" | "<=" | "<" |
 //             ">" | "+" | "-" | "*" | "/"
 
-internal Expr *parse_file() {
+
+internal void parse_file() {
     
     // 
     // Parse expression
     //
     
     // NOTE(ziv): Currently I only support expressions
+    /*     
     Expr *result = expression(); 
     return result;
+         */
     
     
     //
@@ -28,23 +32,32 @@ internal Expr *parse_file() {
     //
     
     /*     
-        while (tokens[i++].kind != TK_EOF) {
-            statements[statements_index++] = statement(); 
-        }
          */
+    while (!is_at_end()) {
+        statements[statements_index++] = statement(); 
+    }
+    statements[statements_index] = NULL;
+    
 }
 
 //////////////////////////////////
 
+
 internal Expr *expression() {
-    return equality(); 
+    return assignement(); 
+}
+internal Expr *assignement() {
+    Expr *expr = equality(); 
+    if (match(TK_ASSIGN)) {
+        return init_assignement(expr, equality());
+    }
+    return expr;
 }
 
 internal Expr *equality() {
     Expr *expr = comparison(); 
     
-    Token_Kind ops[] = { TK_BANG_EQUAL, TK_EQUAL_EQUAL }; 
-    while (match(ops, ArrayLength(ops))) {
+    while (match(TK_BANG_EQUAL, TK_EQUAL_EQUAL)) {
         Token operator = previous(); 
         Expr *right = comparison(); 
         expr = init_binary(expr, operator, right);
@@ -56,8 +69,7 @@ internal Expr *equality() {
 internal Expr *comparison() {
     Expr *expr = term(); 
     
-    Token_Kind ops[] = { TK_GREATER, TK_LESS, TK_GREATER_EQUAL, TK_LESS_EQUAL }; 
-    while (match(ops, ArrayLength(ops))) {
+    while (match(TK_GREATER, TK_LESS, TK_GREATER_EQUAL, TK_LESS_EQUAL)) {
         Token operation = previous(); 
         Expr *right = term(); 
         expr = init_binary(expr, operation, right);
@@ -69,8 +81,7 @@ internal Expr *comparison() {
 internal Expr *term() {
     Expr *expr = factor(); 
     
-    Token_Kind ops[] = { TK_MINUS, TK_PLUS }; 
-    while (match(ops, 2)) {
+    while (match(TK_MINUS, TK_PLUS)) {
         Token operation = previous(); 
         Expr *right = factor(); 
         expr = init_binary(expr, operation, right);
@@ -82,8 +93,7 @@ internal Expr *term() {
 internal Expr *factor() {
     Expr *expr = unary(); 
     
-    Token_Kind ops[] = { TK_SLASH, TK_STAR }; 
-    while (match(ops, 2)) {
+    while (match(TK_SLASH, TK_STAR )) {
         Token operation = previous(); 
         Expr *right = factor(); 
         expr = init_binary(expr, operation, right);
@@ -94,8 +104,7 @@ internal Expr *factor() {
 
 internal Expr *unary() {
     
-    Token_Kind ops[] = { TK_BANG, TK_MINUS }; 
-    while (match(ops, 2)) {
+    while (match(TK_BANG, TK_MINUS)) {
         Token operation = previous(); 
         Expr *right = unary(); 
         return init_unary(operation, right);
@@ -105,13 +114,12 @@ internal Expr *unary() {
 }
 
 internal Expr *primary() {
-    Token_Kind literal_types[] = { TK_FALSE, TK_TRUE, TK_NIL, TK_NUMBER, TK_STRING }; 
-    if (match(literal_types+0, 1)) return init_literal(NULL, VALUE_FALSE);
-    if (match(literal_types+1, 1)) return init_literal(NULL, VALUE_TRUE);
-    if (match(literal_types+2, 1)) return init_literal(NULL, VALUE_NIL);
+    if (match(TK_FALSE)) return init_literal(NULL, VALUE_FALSE);
+    if (match(TK_TRUE)) return init_literal(NULL, VALUE_TRUE);
+    if (match(TK_NIL)) return init_literal(NULL, VALUE_NIL);
     
     // number & string
-    if (match(literal_types+3, 2)) { 
+    if (match(TK_NUMBER, TK_STRING)) { 
         Token token = previous();
         Expr *result = NULL; 
         
@@ -133,8 +141,17 @@ internal Expr *primary() {
         return result;
     }
     
-    Token_Kind parans[] = { TK_LPARAN, TK_RPARAN }; 
-    if (match(parans, 2)) {
+    if (match(TK_IDENTIFIER)) {
+        Expr *node = local_exist(previous()); 
+        if (node) {
+            return init_lvar(previous(), node->left_variable.offset); 
+        }
+        node = init_lvar(previous(), next_offset());
+        add_locals(node);
+        return node; 
+    }
+    
+    if (match(TK_LPARAN, TK_RPARAN)) {
         Expr *expr = expression(); 
         consume(TK_RPARAN, "Expected ')' after expression"); 
         return init_grouping(expr); 
@@ -145,8 +162,238 @@ internal Expr *primary() {
 }
 
 //////////////////////////////////
+
+internal Statement *return_stmt() {
+    Expr *expr = expression(); 
+    consume(TK_SEMI_COLON, "Expected ';' after expression");
+    return init_return_stmt(expr);
+}
+
+internal Statement *statement() {
+    if (match(TK_PRINT)) return print_stmt(); 
+    if (match(TK_VAR)) return decloration(); 
+    if (match(TK_RETURN)) return return_stmt();
+    
+    return expr_stmt();
+}
+
+internal Statement *decloration() {
+    Token name = consume(TK_IDENTIFIER, "Expected variable name"); 
+    Statement *stmt = NULL; 
+    
+    Expr *expr = NULL; 
+    if (match(TK_ASSIGN)) { 
+        expr = expression(); 
+        stmt = init_decl_stmt(name, expr);
+    }
+    consume(TK_SEMI_COLON, "Expected ';' after a variable decloration");
+    return stmt;
+}
+
+internal Statement *print_stmt() {
+    Expr *expr = expression(); 
+    consume(TK_SEMI_COLON, "Expected ';' after a print statement");
+    return init_print_stmt(expr);
+}
+
+internal Statement *expr_stmt() {
+    Expr *expr = expression(); 
+    consume(TK_SEMI_COLON, "Expected ';' after a statement");
+    return init_expr_stmt(expr);
+}
+
+internal Statement *init_expr_stmt(Expr *expr) {
+    Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
+    stmt->kind = STMT_EXPR; 
+    stmt->print_expr = expr; 
+    return stmt;
+}
+
+internal Statement *init_print_stmt(Expr *expr) {
+    Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
+    stmt->kind = STMT_PRINT_EXPR; 
+    stmt->print_expr = expr; 
+    return stmt;
+}
+
+internal Statement *init_decl_stmt(Token name, Expr *expr) {
+    Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
+    stmt->kind = STMT_VAR_DECL; 
+    stmt->var_decl.name = name; 
+    stmt->var_decl.initializer = expr; 
+    return stmt;
+}
+
+internal Statement *init_return_stmt(Expr *expr) {
+    Statement *stmt = (Statement *)malloc(sizeof(Statement));
+    stmt->kind = STMT_RETURN; 
+    stmt->ret = expr; 
+    return stmt;
+}
+
+//////////////////////////////////
+
+internal int is_at_end() {
+    Assert(tokens_index < tokens_len); 
+    return tokens[tokens_index].kind == TK_EOF;
+}
+
+internal Token peek() {
+    return tokens[tokens_index];
+}
+
+internal Token advance() {
+    if (!is_at_end()) tokens_index++; 
+    return tokens[tokens_index-1];
+}
+
+internal Token previous() {
+    return tokens[tokens_index-1];
+}
+
+internal Token consume(Token_Kind kind, char *msg) {
+    if (check(kind)) return advance(); 
+    error(peek(), msg); 
+    return (Token){ 0 };
+}
+
+internal void error(Token token, char *msg) {
+    char buff[255];
+    
+    if (token.kind == TK_EOF) {
+        strcat(buff, " at end");
+        strcat(buff, msg);
+        report(token.loc.line, buff); 
+    }
+    else {
+        report(token.loc.line, strcat(msg, " at "));
+    }
+}
+
+internal void report(int line, char *msg) {
+    char err[100];  // holding the error message
+    char buff[100]; // holding the integer as a string
+    
+    strcat(err, msg); 
+    strcat(err, itoa(line, buff, 10)); 
+    fprintf(stderr, err);
+    fprintf(stderr, "\n");
+    exit(-1); // NOTE(ziv): for the time being, when 
+    // the parser is reporting a error for the use 
+    // it is not going to continue finding more erorrs. 
+    // This is done to simplify the amounts of things 
+    // that I need to think about. That will change in 
+    // the future as adding this feature will be easier 
+    // when I have statements.
+}
+
+internal bool check(Token_Kind kind) { 
+    if (is_at_end()) return false; 
+    return peek().kind == kind; 
+}
+
+
+internal bool internal_match(int n, ...) {
+    va_list kinds; 
+    va_start(kinds, n);
+    
+    Token_Kind kind; 
+    for (int i = 0; i < n; i++) {
+        kind = va_arg(kinds, Token_Kind); 
+        if (check(kind)) {
+            advance(); 
+            va_end(kinds);
+            return true;
+        }
+    }
+    va_end(kinds);
+    return false; 
+}
+
+internal Expr *local_exist(Token token) {
+    Assert(token.kind == TK_IDENTIFIER);
+    
+    for (int i = 0; i < locals_index; i++) {
+        Expr *lvar = locals[i]; 
+        Token name = lvar->left_variable.name;
+        if (name.len == token.len && strncmp(token.str, name.str, name.len) == 0) {
+            return lvar;
+        }
+    }
+    return NULL;
+}
+
+internal void add_locals(Expr *lvar) {
+    locals[locals_index++] = lvar;
+}
+
+//////////////////////////////////
+
+internal Expr *init_binary(Expr *left, Token operation, Expr *right) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
+    result_expr->kind = EXPR_BINARY; 
+    result_expr->left = left; 
+    result_expr->operation = operation; 
+    result_expr->right = right;
+    return result_expr;
+}
+
+internal Expr *init_unary(Token operation, Expr *right) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
+    result_expr->kind = EXPR_UNARY; 
+    result_expr->unary.operation = operation; 
+    result_expr->unary.right = right; 
+    return result_expr;
+}
+
+internal Expr *init_literal(void *data, Value_Kind kind) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
+    result_expr->kind = EXPR_LITERAL; 
+    result_expr->literal.kind = kind; 
+    result_expr->literal.data = data; 
+    return result_expr;
+}
+
+internal Expr *init_grouping(Expr *expr) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
+    result_expr->kind = EXPR_GROUPING;  
+    result_expr->grouping.expr = expr; 
+    return result_expr;
+}
+
+internal Expr *init_assignement(Expr *left_var, Expr *rvalue) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
+    result_expr->kind = EXPR_ASSIGN;  
+    result_expr->assign.left_variable = left_var;  
+    result_expr->assign.rvalue = rvalue; 
+    return result_expr;
+}
+
+//////////////////////////////////
+
+// TODO(ziv): @nocheckin
+
+internal int next_offset() {
+    global_next_offset += 4;
+    return global_next_offset; 
+}
+
+internal Expr *init_lvar(Token name, int offset) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr)); 
+    result_expr->kind = EXPR_LVAR;
+    result_expr->left_variable.name = name;
+    result_expr->left_variable.offset = offset; 
+    return result_expr;
+}
+
+
+
+
+
+//////////////////////////////////
 // Debug printing of expressions
 // NOTE(ziv): this is deprecated
+
 void print_literal(Expr *expr) {
     Assert(expr->kind == EXPR_LITERAL);
     
@@ -217,167 +464,4 @@ void print(Expr *expr) {
         
     }
     
-}
-
-//////////////////////////////////
-
-internal Statement *init_expr_stmt(Expr *expr) {
-    Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
-    stmt->kind = STMT_EXPR; 
-    stmt->print_expr = expr; 
-    return stmt;
-}
-
-internal Statement *init_print_stmt(Expr *expr) {
-    Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
-    stmt->kind = STMT_PRINT_EXPR; 
-    stmt->print_expr = expr; 
-    return stmt;
-}
-
-internal Statement *print_stmt() {
-    Expr *expr = expression(); 
-    consume(TK_SEMI_COLON, "Expected ';' after a print statement");
-    return init_print_stmt(expr);
-}
-
-internal Statement *expr_stmt() {
-    Expr *expr = expression(); 
-    consume(TK_SEMI_COLON, "Expected ';' after a statement");
-    return init_expr_stmt(expr);
-}
-
-internal Statement *init_decl_stmt(Token name, Expr *expr) {
-    Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
-    stmt->kind = STMT_VAR_DECL; 
-    stmt->var_decl.name = name; 
-    stmt->var_decl.initializer = expr; 
-    return stmt;
-}
-
-internal Statement *decloration() {
-    Token name = consume(TK_IDENTIFIER, "Expedted variable name"); 
-    
-    Expr *expr = NULL; 
-    Token_Kind temp[] = { TK_ASSIGN }; 
-    if (match(temp, 1)) { 
-        expr = expression(); 
-        return init_decl_stmt(name, expr); 
-    }
-    consume(TK_SEMI_COLON, "Expected ';' after a variable decloration");
-    return NULL;
-}
-
-internal Statement *statement() {
-    Token_Kind matching[] = { TK_PRINT, TK_VAR }; 
-    if (match(matching+0, 1)) return print_stmt(); 
-    if (match(matching+1, 1)) return decloration(); 
-    
-    
-    return expr_stmt();
-}
-
-//////////////////////////////////
-
-internal int is_at_end() {
-    Assert(tokens_index < tokens_len); 
-    return tokens[tokens_index].kind == TK_EOF;
-}
-
-internal Token peek() {
-    return tokens[tokens_index];
-}
-
-internal Token advance() {
-    if (!is_at_end()) tokens_index++; 
-    return tokens[tokens_index];
-}
-
-internal Token previous() {
-    return tokens[tokens_index-1];
-}
-
-internal Token consume(Token_Kind kind, char *msg) {
-    if (check(kind)) return advance(); 
-    error(peek(), msg); 
-    return (Token){ 0 };
-}
-
-internal void error(Token token, char *msg) {
-    char buff[255];
-    
-    if (token.kind == TK_EOF) {
-        strcat(buff, " at end");
-        strcat(buff, msg);
-        report(token.loc.line, buff); 
-    }
-    else {
-        report(token.loc.line, strcat(msg, " at "));
-    }
-}
-
-internal void report(int line, char *msg) {
-    char err[100];  // holding the error message
-    char buff[100]; // holding the integer as a string
-    
-    strcat(err, msg); 
-    strcat(err, itoa(line, buff, 10)); 
-    fprintf(stderr, err);
-    fprintf(stderr, "\n");
-    exit(-1); // NOTE(ziv): for the time being, when 
-    // the parser is reporting a error for the use 
-    // it is not going to continue finding more erorrs. 
-    // This is done to simplify the amounts of things 
-    // that I need to think about. That will change in 
-    // the future as adding this feature will be easier 
-    // when I have statements.
-}
-
-internal bool check(Token_Kind kind) { 
-    if (is_at_end()) return false; 
-    return peek().kind == kind; 
-}
-
-internal bool match(Token_Kind *kinds, int n) {
-    for (int i = 0; i < n; i++) {
-        if (check(kinds[i])) {
-            advance(); 
-            return true;
-        }
-    }
-    return false; 
-}
-
-//////////////////////////////////
-
-internal Expr *init_binary(Expr *left, Token operation, Expr *right) {
-    Expr *binary = (Expr *)malloc(sizeof(Expr));
-    binary->kind = EXPR_BINARY; 
-    binary->left = left; 
-    binary->operation = operation; 
-    binary->right = right;
-    return binary;
-}
-
-internal Expr *init_unary(Token operation, Expr *right) {
-    Expr *unar = (Expr *)malloc(sizeof(Expr));
-    unar->kind = EXPR_UNARY; 
-    unar->unary.operation = operation; 
-    unar->unary.right = right; 
-    return unar;
-}
-
-internal Expr *init_literal(void *data, Value_Kind kind) {
-    Expr *literal = (Expr *)malloc(sizeof(Expr));
-    literal->kind = EXPR_LITERAL; 
-    literal->literal.kind = kind; 
-    literal->literal.data = data; 
-    return literal;
-}
-
-internal Expr *init_grouping(Expr *expr){
-    Expr *grouping = (Expr *)malloc(sizeof(Expr));
-    grouping->kind = EXPR_GROUPING;  
-    grouping->grouping.expr = expr; 
-    return grouping;
 }
