@@ -3,9 +3,13 @@
 //
 // program -> stmt*
 // 
-// stmt -> expression
-//     | decloration
-//     | function
+// scope -> "{" decloration* "}"
+//
+// decloration -> variable_decl
+//     | function decl
+//     | statement
+// 
+// statement-> expression
 //     | while 
 //     | if
 //     | for 
@@ -23,18 +27,18 @@
 // operator -> "==" | "!=" | ">=" | "<=" | "<" |
 //            ">" | "+" | "-" | "*" | "/"
 // 
-// decloration -> identifier ":" type  ":" statement ";"  
-// function -> identifier "::" grouping "->" type block
+// variable_decl -> identifier ":" type  ("=" expression)? ";"  
+// function -> identifier "::" grouping "->" type scope
 // 
 // identifier -> "A-Z" | "a-z" | "_"
 // 
 // NOTE(ziv): For the time being I will now support 16 bit integers in any way
 // type -> "int" | "u32" | "u8" |
 //                 "s32" | "s8"
-// block -> stmt
 //
-// if -> "if" "(" expression ")" block
-// while -> "while" "(" expression ")" block
+// if -> "if" "(" expression ")" scope
+// while -> "while" "(" expression ")" scope
+
 
 #define DEBUG 1
 #define internal static 
@@ -57,6 +61,7 @@ struct Location {
 // Some language definitions: 
 // 
 
+#define _CRT_SECURE_NO_WARNINGS 1
 #include <stdint.h>
 
 typedef int8_t  s8;
@@ -83,7 +88,6 @@ typedef unsigned char bool;
 
 #define ArrayLength(arr) (sizeof(arr)/sizeof(arr[0]))
 
-#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -111,6 +115,42 @@ internal int my_strcmp(char *str1, char *str2) {
     return *temp1 && *temp2;
     
 }
+
+// this is going to be somewhat of a generic way of doing dynamic arrays in C 
+// NOTE(ziv): This is by no means a good way of doing this but it will work :)
+
+typedef struct Vecotr Vector; 
+struct Vecotr {
+    void **data;
+    int capacity; 
+    int index; 
+}; 
+
+#define DEFAULT_VEC_SIZE 16
+
+internal Vector *init_vec() { 
+    Vector *vec = (Vector *)malloc(sizeof(Vector)); 
+    vec->capacity = DEFAULT_VEC_SIZE; vec->index = 0; 
+    vec->data = malloc(sizeof(void *) * DEFAULT_VEC_SIZE);
+    return vec;
+}
+
+internal Vector *vec_push(Vector *vec, void *elem) {
+    Assert(vec); 
+    
+    if (vec->capacity <= vec->index) {
+        vec->capacity = vec->capacity*2;
+        vec->data = realloc(vec->data, sizeof(void *) * vec->capacity); 
+    }
+    vec->data[vec->index++] = elem;
+    return vec;
+}
+
+internal void *vec_pop(Vector *vec) {
+    Assert(vec && vec->index > 0); 
+    return vec->data[vec->index--];
+}
+
 
 #include "lexer.h"
 #include "parser.h"

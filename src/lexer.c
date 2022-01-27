@@ -1,7 +1,7 @@
 
-internal bool match_character(Lexer *lexer, Location *loc, char c) {
-    if (lexer->code[loc->index+1] == '=') {
-        loc->index++; 
+internal bool match_character(char **txt, char c) {
+    if ((*txt)[0] == c) {
+        (*txt)++;
         return true;
     }
     return false;
@@ -11,40 +11,38 @@ internal bool match_character(Lexer *lexer, Location *loc, char c) {
 internal bool get_next_token(Lexer *lexer) { 
     Location loc = lexer->loc;
     Token token = {0}; 
-    char c;
+    
+    char *txt = lexer->code + lexer->loc.index; // current character
     
     // 
     // skip whitespace and comments 
     // 
     
-    while (1) {
-        c = lexer->code[loc.index++];
-        loc.ch++;
+    for (; txt; txt++, loc.ch++) {
         
-        if (c == '/') {
-            if (lexer->code[loc.index] == '/') { // skip comment
-                while (c != '\n' || c != '\r')
-                    c = lexer->code[loc.index++];
+        if (*txt == '/') {
+            if (*++txt == '/') { // skip comment
+                while (*txt != '\n' && *txt != '\r' && *txt != '\0') { 
+                    txt++; loc.ch++; 
+                }
             }
         }
-        if (c == '\n') {
+        if (*txt == '\n') {
             loc.line++;
         }
         
-        if (c != '\n' && c != ' ' && c != '\t') {
+        if (*txt != '\n' && *txt != ' ' && *txt != '\t') {
             break; 
         }
+        
+        
     }
     
-    loc.index--; // needed because we exit the loop on 'c' but the index has moved passt 'c'
-    
-    
     // 
-    // lex everything else 
+    // lex a token 
     // 
     
-    // TODO(ziv): Handle errors incoming from lexing errors
-    switch (c) {
+    switch (*txt++) {
         
         case '{': { token.kind = TK_RBRACE; } break; 
         case '}': { token.kind = TK_LBRACE; } break; 
@@ -57,38 +55,35 @@ internal bool get_next_token(Lexer *lexer) {
         case '*': { token.kind = TK_STAR;  }  break; 
         case '/': { token.kind = TK_SLASH; } break; 
         
-        case '=': { token.kind = match_character(lexer, &loc, '=') ? TK_EQUAL_EQUAL : TK_ASSIGN; } break;
-        case '>': { token.kind = match_character(lexer, &loc, '=') ? TK_GREATER_EQUAL : TK_GREATER; } break; 
-        case '<': { token.kind = match_character(lexer, &loc, '=') ? TK_LESS_EQUAL : TK_LESS; } break; 
-        case '!': { token.kind = match_character(lexer, &loc, '=') ? TK_BANG_EQUAL : TK_BANG; } break; 
+        case '=': { token.kind = match_character(&txt, '=') ? TK_EQUAL_EQUAL : TK_ASSIGN; } break;
+        case '>': { token.kind = match_character(&txt, '=') ? TK_GREATER_EQUAL : TK_GREATER; } break; 
+        case '<': { token.kind = match_character(&txt, '=') ? TK_LESS_EQUAL : TK_LESS; } break; 
+        case '!': { token.kind = match_character(&txt, '=') ? TK_BANG_EQUAL : TK_BANG; } break; 
         
         case '\0': {
             token.kind = TK_EOF;
         } break;
         
         case '"': {
+            
             token.kind = TK_STRING; 
-            token.str = lexer->code + loc.index;
-            c = lexer->code[++loc.index];
-            while (c != '"') {
-                c = lexer->code[++loc.index];
-                loc.ch++;
-            }
-            token.len = lexer->code + loc.index - token.str;
+            token.str  = txt;
+            
+            for (; *txt != '"' && *txt != '\n'; txt++, loc.ch++); 
+            token.len = (int)(txt-token.str);
+            
         } break;
         
         default: { 
-            // TODO(ziv): make sure that this is actually is working
-            if (is_digit(c)) {
+            
+            txt--;
+            if (is_digit(*txt)) {
                 token.kind = TK_NUMBER;
-                token.str = lexer->code + loc.index;
-                while (is_digit(lexer->code[loc.index])) {
-                    loc.ch++; loc.index++;
-                }
-                loc.index--;
-                token.len = lexer->code + loc.index - token.str; 
+                token.str = txt;
+                for (; is_digit(*txt); txt++, loc.ch++);
+                token.len = (int)(txt-token.str); 
             }
-            else if (is_alpha(c)) {
+            else if (is_alpha(*txt)) {
                 
                 //
                 // Search if token is keyword
@@ -99,7 +94,7 @@ internal bool get_next_token(Lexer *lexer) {
                     // if i don't put the result of the comparison into 'r' then 
                     // for some reason msvc bugs out and does not produce correct code here
                     // so I just do this
-                    int r = my_strcmp(lexer->code + loc.index, keywords[i]) == 0;
+                    int r = my_strcmp(txt, keywords[i]) == 0;
                     if (r) {
                         token.kind = i;
                         found_keyword = true;
@@ -107,19 +102,19 @@ internal bool get_next_token(Lexer *lexer) {
                     }
                 }
                 if (found_keyword) {
+                    // because I do not effect txt in my_strcmp
+                    // here I 'eat' that token
                     char *keyword = keywords[token.kind];
-                    while (*keyword++) loc.index++; 
+                    while (*keyword++) txt++; 
                     
                 } 
                 else {
                     
                     // token is a identifier
                     token.kind = TK_IDENTIFIER;
-                    token.str = lexer->code + loc.index;
-                    while (is_alphanumeric(lexer->code[loc.index])) {
-                        loc.ch++; loc.index++;
-                    }
-                    token.len = lexer->code + loc.index - token.str; 
+                    token.str = txt;  
+                    for (; is_alphanumeric(*txt); txt++, loc.ch++); 
+                    token.len = (int)(txt-token.str); 
                 }
             }
             else {
@@ -133,7 +128,7 @@ internal bool get_next_token(Lexer *lexer) {
         
     }
     
-    loc.index++;
+    loc.index = (int)(txt - lexer->code);  
     lexer->loc = loc; 
     token.loc = loc;
     

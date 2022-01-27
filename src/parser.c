@@ -2,35 +2,39 @@
 internal void parse_file() {
     
     // 
-    // Parse expression
-    //
+    // A program is a scope :)
+    // 
     
-    // NOTE(ziv): Currently I only support expressions
-    /*     
-    Expr *result = expression(); 
-    return result;
-         */
-    
-    
-    //
-    // go over the token list and parse statements
-    //
-    
-    /*     
-         */
-    while (!is_at_end()) {
-        statements[statements_index++] = statement(); 
-    }
-    statements[statements_index] = NULL;
-    
+    Scope *block = scope(); 
+    block;
 }
 
 //////////////////////////////////
 
+internal Scope *scope() {
+    consume(TK_RBRACE, "Expected beginning of scope '{' ");
+    
+    Scope *block = (Scope *)malloc(sizeof(Scope)); 
+    block->statements = init_vec(); 
+    
+    while (!is_at_end()) {
+        if (match(TK_LBRACE)) {
+            return block;
+        }
+        
+        Statement *stmt = decloration();
+        vec_push(block->statements, stmt); 
+    }
+    
+    
+    consume(TK_LBRACE, "Expected ending of scope '}' ");
+    return block;
+}
 
 internal Expr *expression() {
     return assignement(); 
 }
+
 internal Expr *assignement() {
     Expr *expr = equality(); 
     if (match(TK_ASSIGN)) {
@@ -136,7 +140,6 @@ internal Expr *primary() {
         }
         
         // decloration of a variable
-        
         node = init_lvar(previous(), next_offset());
         
         add_locals(node);
@@ -155,18 +158,34 @@ internal Expr *primary() {
 
 //////////////////////////////////
 
-internal Statement *return_stmt() {
-    Expr *expr = expression();
-    consume(TK_SEMI_COLON, "Expected ';' after expression");
-    return init_return_stmt(expr);
+
+
+internal Statement *decloration() {
+    
+    if (match(TK_IDENTIFIER)) 
+    {
+        // variable decloration / expression / function decloration 
+        Token variable_name = previous(); 
+        if (match(TK_COLON))  return variable_decloration(variable_name); 
+        // I can parse funcion here and so on...
+        back_one();
+    }
+    
+    return statement();
 }
 
-internal Statement *statement() {
-    if (match(TK_PRINT)) return print_stmt();  // this needs more consideration
-    if (match(TK_IDENTIFIER)) return decloration(); 
-    if (match(TK_RETURN)) return return_stmt();
+internal Statement *variable_decloration(Token name) {
+    Type *var_type = vtype(); 
     
-    return expr_stmt();
+    Expr *expr = NULL;
+    if (match(TK_ASSIGN)) {
+        expr = expression(); 
+    }
+    
+    consume(TK_SEMI_COLON, "Expected ';' after a variable decloration");
+    add_locals(init_lvar(name, next_offset())); // add token name to locals 
+    
+    return init_decl_stmt(name, var_type, expr);
 }
 
 internal Type *vtype() {
@@ -180,37 +199,17 @@ internal Type *vtype() {
     return NULL;
 }
 
-internal Statement *decloration() {
-    // declorations syntax
-    // 
-    // identifier : type = initializer_expression; 
-    //      or 
-    // identifier : type; 
-    //
+internal Statement *statement() {
+    if (match(TK_PRINT)) return print_stmt();  // this needs more consideration
+    if (match(TK_RETURN)) return return_stmt();
     
-    Token name = previous(); 
-    
-    Statement *stmt = NULL; 
-    
-    if (match(TK_COLON)) {
-        // variable decloration 
-        Type *type = vtype(); 
-        
-        Expr *expr = NULL;
-        if (match(TK_ASSIGN)) {
-            expr = expression(); 
-        }
-        consume(TK_SEMI_COLON, "Expected ';' after a variable decloration");
-        stmt = init_decl_stmt(name, type, expr);
-        add_locals(init_lvar(name, next_offset())); // add token name to locals 
-    }
-    else { 
-        // assignment to a variable
-        back_one();
-        stmt = expr_stmt();
-    }
-    
-    return stmt;
+    return expr_stmt();
+}
+
+internal Statement *return_stmt() {
+    Expr *expr = expression();
+    consume(TK_SEMI_COLON, "Expected ';' after expression");
+    return init_return_stmt(expr);
 }
 
 internal Statement *print_stmt() {
@@ -310,7 +309,7 @@ internal void report(int line, char *msg) {
     char buff[100] = {0}; // holding the integer as a string
     
     strcat(err, msg); 
-    strcat(err, itoa(line, buff, 10)); 
+    strcat(err, _itoa(line, buff, 10)); 
     fprintf(stderr, err);
     fprintf(stderr, "\n");
     

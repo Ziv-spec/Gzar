@@ -51,10 +51,6 @@ struct Expr {
             int offset; // offset in the stack
         } left_variable; 
         
-        struct Var_Dec {
-            int something;
-        } decl; 
-        
         // binary expression which the most commonly used
         // out of all of the types of expressions, so I 
         // left out the name to indicate this is what I 
@@ -95,9 +91,7 @@ struct Statement {
             Expr *initializer;
         } var_decl; 
         
-        struct { 
-            Token name;
-        } var; 
+        Expr *var; // lvar
         
     };
 };
@@ -107,6 +101,15 @@ struct Type {
     // if the api design is good, which I hope to achive
     Token_Kind kind; 
 }; 
+
+typedef struct Scope Scope; 
+
+struct Scope {
+    
+    // dynamic array  
+    Vector *statements; 
+}; 
+
 
 // NOTE(ziv): I will not bother with dynamic
 // arrays this will be left for the final 
@@ -122,7 +125,6 @@ internal Expr *init_unary(Token operation, Expr *right);
 internal Expr *init_literal(void *data, Value_Kind kind); 
 internal Expr *init_grouping(Expr *expr); 
 internal Expr *init_assignement(Expr *lvalue, Expr *rvalue);
-internal Type *init_type(Token type_token); 
 
 //////////////////////////////// =============================
 // TODO(ziv): change this awful design. this logic should probably live in the code generation stuff. and have the locals be bound to a block.
@@ -131,7 +133,7 @@ internal int next_offset();
 static int global_next_offset = 0; 
 
 // this is for lvars
-static Expr *locals[20]; 
+static Expr *locals[1024]; 
 static int locals_index; 
 
 internal Expr *local_exist(Token token);
@@ -145,6 +147,7 @@ internal Statement *init_expr_stmt(Expr *expr);
 internal Statement *init_print_stmt(Expr *expr);
 internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer);
 internal Statement *init_return_stmt(Expr *expr);
+internal Type      *init_type(Token type_token); 
 
 /* helper functions */
 internal void  back_one();
@@ -171,11 +174,14 @@ internal Expr *unary();
 internal Expr *primary(); 
 
 /* resolving statements */
-internal Statement *statement();
+internal Scope     *scope();
 internal Statement *decloration();
+internal Statement *variable_decloration(Token name);
+internal Statement *statement();
 internal Statement *print_stmt();
 internal Statement *expr_stmt();
-
+internal Statement *return_stmt();
+internal Type      *vtype();
 
 internal void parse_file();
 

@@ -26,7 +26,7 @@ internal void gen() {
     output(buff);
     
     Statement *stmt = NULL;
-    for (int i = 0; i < statements_index; i++) {
+    for (unsigned int i = 0; i < statements_index; i++) {
         stmt = statements[i];
         
         switch (stmt->kind) {
