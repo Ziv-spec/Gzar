@@ -51,6 +51,7 @@ internal bool get_next_token(Lexer *lexer) {
         case ')': { token.kind = TK_RPARAN; } break; 
         case '(': { token.kind = TK_LPARAN; } break; 
         case ';': { token.kind = TK_SEMI_COLON; } break; 
+        case ':': { token.kind = TK_COLON; } break; 
         case '+': { token.kind = TK_PLUS;  }  break; 
         case '-': { token.kind = TK_MINUS; }  break;  
         case '*': { token.kind = TK_STAR;  }  break; 
@@ -95,7 +96,11 @@ internal bool get_next_token(Lexer *lexer) {
                 
                 bool found_keyword = false; 
                 for (int i = 1; i < ArrayLength(keywords); i++) {
-                    if (my_strcmp(lexer->code + loc.index, keywords[i])) {
+                    // if i don't put the result of the comparison into 'r' then 
+                    // for some reason msvc bugs out and does not produce correct code here
+                    // so I just do this
+                    int r = my_strcmp(lexer->code + loc.index, keywords[i]) == 0;
+                    if (r) {
                         token.kind = i;
                         found_keyword = true;
                         break;

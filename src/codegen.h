@@ -17,7 +17,7 @@ internal void internal_output(int num, ...);
 
 /* functions for generating nasm assembly from AST */
 internal void gen();
-internal void gen_body(Expr *expr);
+internal void gen_expr(Expr *expr);
 internal void gen_op(Token operation); 
 internal void gen_literal(Expr *expr);
 

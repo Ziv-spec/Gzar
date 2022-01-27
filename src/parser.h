@@ -51,6 +51,10 @@ struct Expr {
             int offset; // offset in the stack
         } left_variable; 
         
+        struct Var_Dec {
+            int something;
+        } decl; 
+        
         // binary expression which the most commonly used
         // out of all of the types of expressions, so I 
         // left out the name to indicate this is what I 
@@ -61,11 +65,11 @@ struct Expr {
             Expr *right; 
         }; 
     }; 
-    
 };
 
 typedef enum Statement_Kind Statement_Kind; 
 typedef struct Statement Statement; 
+typedef struct Type Type; 
 
 enum Statement_Kind {
     STMT_EXPR, 
@@ -82,20 +86,31 @@ struct Statement {
         // for the time being I will allow the print
         // function to be a stand alone expression
         Expr *print_expr; // TODO(ziv): rethink the name
-        Expr *ret;
         Expr *expr;
+        Expr *ret;
         
         struct {
             Token name; 
+            Type *type;
             Expr *initializer;
         } var_decl; 
+        
+        struct { 
+            Token name;
+        } var; 
         
     };
 };
 
+struct Type {
+    // TODO(ziv): currently types are very simple, this should easily get extended 
+    // if the api design is good, which I hope to achive
+    Token_Kind kind; 
+}; 
+
 // NOTE(ziv): I will not bother with dynamic
 // arrays this will be left for the final 
-// design to implement.
+// design to implement :)
 
 static Statement *statements[10]; 
 static unsigned int statements_index = 0;
@@ -107,10 +122,10 @@ internal Expr *init_unary(Token operation, Expr *right);
 internal Expr *init_literal(void *data, Value_Kind kind); 
 internal Expr *init_grouping(Expr *expr); 
 internal Expr *init_assignement(Expr *lvalue, Expr *rvalue);
-
+internal Type *init_type(Token type_token); 
 
 //////////////////////////////// =============================
-// TODO(ziv): @nochecking this is bound to change in design. for the time being I will use this.
+// TODO(ziv): change this awful design. this logic should probably live in the code generation stuff. and have the locals be bound to a block.
 internal Expr *init_lvar(Token name, int offset);
 internal int next_offset();
 static int global_next_offset = 0; 
@@ -128,10 +143,11 @@ internal void add_locals(Expr *lvar);
 /* initializers for the different statements */ 
 internal Statement *init_expr_stmt(Expr *expr); 
 internal Statement *init_print_stmt(Expr *expr);
-internal Statement *init_decl_stmt(Token name, Expr *expr);
+internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer);
 internal Statement *init_return_stmt(Expr *expr);
 
 /* helper functions */
+internal void  back_one();
 internal int   is_at_end(); 
 internal Token peek(); 
 internal Token advance(); 

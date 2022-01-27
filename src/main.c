@@ -1,12 +1,40 @@
 //
-// Language spec: 
-// 
-// In need of work... 
-// When I learn more of parsing principles 
-// I will begin writing a langauge spec
-// and then have a final implementation of 
-// this spec.
+// Language spec (BNF - I need to do this): 
 //
+// program -> stmt*
+// 
+// stmt -> expression
+//     | decloration
+//     | function
+//     | while 
+//     | if
+//     | for 
+// 
+// expression -> literal 
+//     | unary
+//     | binary 
+//     | grouping
+//     | assignment
+// 
+// literal -> NUMBER | STRING | "true" | "false" | "nil" 
+// grouping -> "(" expression ")"
+// unary -> ("-" | "!") expression
+// binary -> expression operator expression 
+// operator -> "==" | "!=" | ">=" | "<=" | "<" |
+//            ">" | "+" | "-" | "*" | "/"
+// 
+// decloration -> identifier ":" type  ":" statement ";"  
+// function -> identifier "::" grouping "->" type block
+// 
+// identifier -> "A-Z" | "a-z" | "_"
+// 
+// NOTE(ziv): For the time being I will now support 16 bit integers in any way
+// type -> "int" | "u32" | "u8" |
+//                 "s32" | "s8"
+// block -> stmt
+//
+// if -> "if" "(" expression ")" block
+// while -> "while" "(" expression ")" block
 
 #define DEBUG 1
 #define internal static 
@@ -17,6 +45,7 @@
 #define Assert(cond) 
 #endif
 
+// TODO(ziv): restrucutre the lexer & parser such that I will not need this. 
 typedef struct Location Location; 
 struct Location { 
     int line; 
@@ -30,17 +59,17 @@ struct Location {
 
 #include <stdint.h>
 
-typedef int8_t s8;
+typedef int8_t  s8;
 typedef int16_t s16;
 typedef int32_t s32;
 typedef int64_t s64;
 
-typedef uint8_t u8;
+typedef uint8_t  u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
-typedef float f32; 
+typedef float  f32; 
 typedef double f64;
 
 typedef unsigned char bool;
@@ -78,11 +107,10 @@ internal char *slicecpy(char *dest, size_t dest_size, char *src, size_t src_size
 
 internal int my_strcmp(char *str1, char *str2) {
     char *temp1 = str1, *temp2 = str2; 
-    while (*temp1 && *temp2 && *temp1++ == *temp2++); 
-    return !(*temp1 && *temp2);
+    while (*temp1 && *temp2 && *temp1 == *temp2 && *temp1++ == *temp2++); 
+    return *temp1 && *temp2;
     
 }
-
 
 #include "lexer.h"
 #include "parser.h"
@@ -91,6 +119,7 @@ internal int my_strcmp(char *str1, char *str2) {
 #include "lexer.c"
 #include "parser.c"
 #include "codegen.c"
+
 
 int main(int argc, char *argv[]) {
     
@@ -107,10 +136,7 @@ int main(int argc, char *argv[]) {
 #else 
     argc, argv;
     
-    // TODO(ziv): have something that will run all of 
-    // the test programs.
-    
-    char *filename = "../tests/test2.gzr";
+    char *filename = "C:/dev/HW/toylang/tests/test2.gzr";
     
 #endif 
     
@@ -119,7 +145,7 @@ int main(int argc, char *argv[]) {
     // open the first file and read it's contents
     // 
     
-    FILE *file = fopen(filename, "r");
+    FILE *file = fopen(filename, "rt");
     if (!file) {
         fprintf(stderr, "Error: failed to open file '%s'\n", filename);
     }
@@ -128,12 +154,11 @@ int main(int argc, char *argv[]) {
     int file_size = ftell(file);
     fseek(file, 0, SEEK_SET); 
     
-    char *source_buff = (char*)malloc(file_size+1); 
+    char *source_buff = (char*)calloc(file_size+1, sizeof(char));
     fread(source_buff, 1, file_size, file);
     source_buff[file_size] = '\0';
     
     fclose(file);
-    
     
     //
     // Setup for compilation
@@ -151,14 +176,10 @@ int main(int argc, char *argv[]) {
     bool success = lex_file(&lexer);
     if (success == false) return 0;
     
-    /*     
-        Expr *expr = parse_file();
-        if (expr == NULL) return 0;
-         */
-    
     parse_file(); 
     
-    gen();
+    // gen();
+    
     
     free(source_buff); // I don't need to use this but whatever...
     return 0;

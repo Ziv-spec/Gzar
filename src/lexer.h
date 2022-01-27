@@ -21,8 +21,16 @@ enum Token_Kind {
     TK_NIL,     // nil
     TK_RETURN,  // return
     TK_VAR,     // var 
-    TK_PRINT,   // print
-    // TODO(ziv): add types maybe??
+    TK_PRINT,   // print <------------- probably should remove this in the future as i see fit
+    TK_RETURN_TYPE, // ->
+    TK_DOUBLE_COLON, // ::
+    
+    // TYPES
+    TK_S8,  // s8
+    TK_S32, // s32
+    TK_U8,  // u8
+    TK_U32, // u32
+    
     TK_KEYWORD_END,
     
     TK_OP_BEGIN,
@@ -46,6 +54,7 @@ enum Token_Kind {
     TK_LITERAL_END, 
     
     TK_SEMI_COLON, // ;
+    TK_COLON, // :
     TK_RPARAN,     // (
     TK_LPARAN,     // )
     TK_RBRACE,     // {
@@ -69,13 +78,22 @@ internal void init_keywords() {
     keywords[TK_RETURN] = "return";
     keywords[TK_VAR]    = "var";
     keywords[TK_PRINT]  = "print";
+    
+    keywords[TK_S8]     = "s8";
+    keywords[TK_S32]    = "s32";
+    keywords[TK_U8]     = "u8";
+    keywords[TK_U32]    = "u32";
+    
+    keywords[TK_RETURN_TYPE]  = "->";
+    keywords[TK_DOUBLE_COLON] = "::";
 }
 
 static char *tk_names[TK_COUNT];
 
+// this is kind of deprecated so idk about keeping it up-to date
 internal void init_tk_names() { 
     
-    // keywords 
+    // keywords  TODO(ziv): maybe keep this up date
     tk_names[TK_IF]     = "if";
     tk_names[TK_ELSE]   = "else";
     tk_names[TK_WHILE]  = "while";

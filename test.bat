@@ -13,10 +13,10 @@ pushd build
 
 REM ================= BEGIN TESTING ======================
 
-REM call:assert test1.gzr 46
-REM call:assert test2.gzr 1
+call:assert test1.gzr 46
+call:assert test2.gzr 1
 
-call:run test2.gzr
+rem call:run test2.gzr
 
 REM ======================================================
 

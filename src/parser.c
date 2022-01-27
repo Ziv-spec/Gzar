@@ -1,19 +1,4 @@
 
-// 
-// expression -> literal 
-//               | unary
-//               | binary 
-//               | grouping
-//               | assignment
-// 
-// literal -> NUMBER | STRING | "true" | "false" | "nil" 
-// grouping -> "(" expression ")"
-// unary -> ("-" | "!") expression
-// binary -> expression operator expression 
-// operator -> "==" | "!=" | ">=" | "<=" | "<" |
-//             ">" | "+" | "-" | "*" | "/"
-
-
 internal void parse_file() {
     
     // 
@@ -142,11 +127,18 @@ internal Expr *primary() {
     }
     
     if (match(TK_IDENTIFIER)) {
-        Expr *node = local_exist(previous()); 
+        
+        Assert(false); // I have not yet figured this out. After I do, I pormise to delete this. For real this time. @nocheckin
+        Expr *node = local_exist(previous());
         if (node) {
+            // This is a operation on a varaible name. Not decloration.
             return init_lvar(previous(), node->left_variable.offset); 
         }
+        
+        // decloration of a variable
+        
         node = init_lvar(previous(), next_offset());
+        
         add_locals(node);
         return node; 
     }
@@ -164,29 +156,60 @@ internal Expr *primary() {
 //////////////////////////////////
 
 internal Statement *return_stmt() {
-    Expr *expr = expression(); 
+    Expr *expr = expression();
     consume(TK_SEMI_COLON, "Expected ';' after expression");
     return init_return_stmt(expr);
 }
 
 internal Statement *statement() {
-    if (match(TK_PRINT)) return print_stmt(); 
-    if (match(TK_VAR)) return decloration(); 
+    if (match(TK_PRINT)) return print_stmt();  // this needs more consideration
+    if (match(TK_IDENTIFIER)) return decloration(); 
     if (match(TK_RETURN)) return return_stmt();
     
     return expr_stmt();
 }
 
+internal Type *vtype() {
+    // TODO(ziv): have some array for all known types (this is mainly for struct/enum support)
+    // and check inside that array if this type matches one of those types 
+    if (match(TK_S8, TK_U8, TK_S32, TK_U32)) {
+        return init_type(previous()); 
+    }
+    
+    error(peek(), "Expected type in a variable decloration");
+    return NULL;
+}
+
 internal Statement *decloration() {
-    Token name = consume(TK_IDENTIFIER, "Expected variable name"); 
+    // declorations syntax
+    // 
+    // identifier : type = initializer_expression; 
+    //      or 
+    // identifier : type; 
+    //
+    
+    Token name = previous(); 
+    
     Statement *stmt = NULL; 
     
-    Expr *expr = NULL; 
-    if (match(TK_ASSIGN)) { 
-        expr = expression(); 
-        stmt = init_decl_stmt(name, expr);
+    if (match(TK_COLON)) {
+        // variable decloration 
+        Type *type = vtype(); 
+        
+        Expr *expr = NULL;
+        if (match(TK_ASSIGN)) {
+            expr = expression(); 
+        }
+        consume(TK_SEMI_COLON, "Expected ';' after a variable decloration");
+        stmt = init_decl_stmt(name, type, expr);
+        add_locals(init_lvar(name, next_offset())); // add token name to locals 
     }
-    consume(TK_SEMI_COLON, "Expected ';' after a variable decloration");
+    else { 
+        // assignment to a variable
+        back_one();
+        stmt = expr_stmt();
+    }
+    
     return stmt;
 }
 
@@ -216,11 +239,13 @@ internal Statement *init_print_stmt(Expr *expr) {
     return stmt;
 }
 
-internal Statement *init_decl_stmt(Token name, Expr *expr) {
+
+internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_VAR_DECL; 
+    stmt->var_decl.type = type; 
     stmt->var_decl.name = name; 
-    stmt->var_decl.initializer = expr; 
+    stmt->var_decl.initializer = initializer; 
     return stmt;
 }
 
@@ -231,7 +256,17 @@ internal Statement *init_return_stmt(Expr *expr) {
     return stmt;
 }
 
+internal Type *init_type(Token type_token) {
+    Type *type = (Type *)malloc(sizeof(Type)); 
+    type->kind = type_token.kind; 
+    return type;
+}
+
 //////////////////////////////////
+
+internal void back_one() {
+    tokens_index--;
+}
 
 internal int is_at_end() {
     Assert(tokens_index < tokens_len); 
@@ -258,11 +293,11 @@ internal Token consume(Token_Kind kind, char *msg) {
 }
 
 internal void error(Token token, char *msg) {
-    char buff[255];
+    char buff[255] = {0};
     
     if (token.kind == TK_EOF) {
-        strcat(buff, " at end");
         strcat(buff, msg);
+        strcat(buff, " at end ");
         report(token.loc.line, buff); 
     }
     else {
@@ -271,13 +306,15 @@ internal void error(Token token, char *msg) {
 }
 
 internal void report(int line, char *msg) {
-    char err[100];  // holding the error message
-    char buff[100]; // holding the integer as a string
+    char err[100] = {0};  // holding the error message
+    char buff[100] = {0}; // holding the integer as a string
     
     strcat(err, msg); 
     strcat(err, itoa(line, buff, 10)); 
     fprintf(stderr, err);
     fprintf(stderr, "\n");
+    
+    Assert(false);
     exit(-1); // NOTE(ziv): for the time being, when 
     // the parser is reporting a error for the use 
     // it is not going to continue finding more erorrs. 
@@ -371,8 +408,6 @@ internal Expr *init_assignement(Expr *left_var, Expr *rvalue) {
 
 //////////////////////////////////
 
-// TODO(ziv): @nocheckin
-
 internal int next_offset() {
     global_next_offset += 4;
     return global_next_offset; 
@@ -385,8 +420,6 @@ internal Expr *init_lvar(Token name, int offset) {
     result_expr->left_variable.offset = offset; 
     return result_expr;
 }
-
-
 
 
 

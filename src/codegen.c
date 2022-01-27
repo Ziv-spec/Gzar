@@ -6,35 +6,48 @@ using a "Stack Machine". This will produce horrable code but it is
 */
 
 
-
 internal void gen() {
     
     // 
     // Generating the program
     //
     
+    
+    char buff[15];
+    sprintf(buff, "sub esp, %d", locals_index*4);
+    
+    
     printf("segment .text\n");
     printf("global _start\n");
     printf("_start:\n");
     output("push ebp");
     output("mov ebp, esp");
-    output("sub esp, 200");
+    
+    output(buff);
     
     Statement *stmt = NULL;
     for (int i = 0; i < statements_index; i++) {
         stmt = statements[i];
-        if (stmt->kind == STMT_EXPR) {
-            gen_body(stmt->expr);
-            output("pop eax ; discart result\n");
-        }
-        else if (stmt->kind == STMT_RETURN) {
-            gen_body(stmt->expr); 
-            output(
-                   "pop eax",
-                   "mov esp, ebp",
-                   "pop ebp",
-                   "ret"
-                   ); 
+        
+        switch (stmt->kind) {
+            case STMT_EXPR: {
+                gen_expr(stmt->expr);
+                output("pop eax ; discart result\n");
+            } break;
+            
+            case STMT_RETURN: {
+                gen_expr(stmt->expr); 
+                output(
+                       "pop eax",
+                       "mov esp, ebp",
+                       "pop ebp",
+                       "ret"
+                       ); 
+            } break;
+            
+            default: {
+                Assert(!"Statement not implemented");
+            } break;
         }
     }
     
@@ -45,7 +58,6 @@ internal void gen() {
            "pop ebp",
            "ret"
            );
-    
 }
 
 internal void gen_lval(Expr *expr) {
@@ -61,12 +73,12 @@ internal void gen_lval(Expr *expr) {
            ); 
 }
 
-internal void gen_body(Expr *expr) {
+internal void gen_expr(Expr *expr) {
     
     switch(expr->kind) {
         case EXPR_BINARY: {
-            gen_body(expr->left); 
-            gen_body(expr->right);
+            gen_expr(expr->left); 
+            gen_expr(expr->right);
             printf("\n");
             output("pop edi");
             output("pop eax");
@@ -75,14 +87,14 @@ internal void gen_body(Expr *expr) {
         } break;
         
         case EXPR_UNARY: {
-            gen_body(expr->unary.right);
+            gen_expr(expr->unary.right);
             output("pop eax");
             gen_op(expr->unary.operation);
             output("push eax");
         } break;
         
         case EXPR_GROUPING: {
-            gen_body(expr->grouping.expr);
+            gen_expr(expr->grouping.expr);
         } break;
         
         case EXPR_LITERAL: {
@@ -100,7 +112,7 @@ internal void gen_body(Expr *expr) {
         
         case EXPR_ASSIGN: {
             gen_lval(expr->assign.left_variable);
-            gen_body(expr->assign.rvalue);
+            gen_expr(expr->assign.rvalue);
             
             output(
                    "pop edi",
