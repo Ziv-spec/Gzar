@@ -1,12 +1,12 @@
 //
 // Language spec (BNF - I need to do this): 
 //
-// program -> stmt*
+// program -> scope*
 // 
-// scope -> "{" decloration* "}"
+// scope -> "{" statement* "}"
 //
 // decloration -> variable_decl
-//     | function decl
+//     | function_decl
 //     | statement
 // 
 // statement-> expression
@@ -27,8 +27,8 @@
 // operator -> "==" | "!=" | ">=" | "<=" | "<" |
 //            ">" | "+" | "-" | "*" | "/"
 // 
-// variable_decl -> identifier ":" type  ("=" expression)? ";"  
-// function -> identifier "::" grouping "->" type scope
+// variable_decl -> identifier ":" type ( ("=" expression) | ";" )
+// function_decl -> identifier "::" grouping "->" type scope
 // 
 // identifier -> "A-Z" | "a-z" | "_"
 // 
