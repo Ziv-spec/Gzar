@@ -5,30 +5,29 @@ internal void parse_file() {
     // A program is a scope :)
     // 
     
-    Scope *block = scope(); 
+    consume(TK_RBRACE, "Expected beginning of scope '{' ");
+    Statement *block = scope(); 
+    
     block;
 }
 
 //////////////////////////////////
 
-internal Scope *scope() {
-    consume(TK_RBRACE, "Expected beginning of scope '{' ");
-    
-    Scope *block = (Scope *)malloc(sizeof(Scope)); 
-    block->statements = init_vec(); 
+internal Statement *scope() {
+    Statement *stmt = init_scope();
+    push_scope(stmt);
     
     while (!is_at_end()) {
         if (match(TK_LBRACE)) {
-            return block;
+            return pop_scope();
         }
         
-        Statement *stmt = decloration();
-        vec_push(block->statements, stmt); 
+        Statement *decl_stmt = decloration();
+        vec_push(stmt->scope.statements, decl_stmt); 
     }
     
-    
     consume(TK_LBRACE, "Expected ending of scope '}' ");
-    return block;
+    return stmt;
 }
 
 internal Expr *expression() {
@@ -132,18 +131,16 @@ internal Expr *primary() {
     
     if (match(TK_IDENTIFIER)) {
         
-        Assert(false); // I have not yet figured this out. After I do, I pormise to delete this. For real this time. @nocheckin
-        Expr *node = local_exist(previous());
-        if (node) {
-            // This is a operation on a varaible name. Not decloration.
-            return init_lvar(previous(), node->left_variable.offset); 
+        Token var_name = previous();
+        if (!local_exist(var_name)) {
+            char buff[100]; 
+            char *name = slice_to_str(var_name.str, (unsigned int)var_name.len);
+            sprintf(buff, "Error: '%s' is used before but never declared", name);
+            
+            error(var_name, buff); 
         }
         
-        // decloration of a variable
-        node = init_lvar(previous(), next_offset());
-        
-        add_locals(node);
-        return node; 
+        return init_lvar(var_name);
     }
     
     if (match(TK_LPARAN, TK_RPARAN)) {
@@ -158,7 +155,41 @@ internal Expr *primary() {
 
 //////////////////////////////////
 
+internal Statement *get_curr_scope() {
+    return scopes[scope_index-1]; 
+}
 
+internal Statement *next_scop() {
+    return scopes[++scope_index];
+}
+
+internal void push_scope(Statement *block) {
+    scopes[scope_index++] = block;
+}
+
+internal Statement *pop_scope() {
+    if (scope_index <= 0) {
+        return scopes[scope_index];
+    }
+    return scopes[--scope_index];
+}
+
+internal void add_local(Statement *block, Local local) {
+    // TODO(ziv): give the locals some initial capacity? so that I could get rid of this branch
+    if (block->scope.capacity <= block->scope.local_index || block->scope.capacity == 0) {
+        block->scope.capacity = block->scope.capacity ? block->scope.capacity : 1;
+        block->scope.capacity *= 2;
+        block->scope.locals = (Local *)realloc(block->scope.locals, sizeof(Local)*block->scope.capacity);
+    }
+    
+    block->scope.locals[block->scope.local_index++] = local;
+    
+}
+
+internal void scope_add_variable(Statement *block, Token name, Type *type) {
+    Local local = (Local){ name, type }; 
+    add_local(block, local); 
+}
 
 internal Statement *decloration() {
     
@@ -175,7 +206,7 @@ internal Statement *decloration() {
 }
 
 internal Statement *variable_decloration(Token name) {
-    Type *var_type = vtype(); 
+    Type *type = vtype(); 
     
     Expr *expr = NULL;
     if (match(TK_ASSIGN)) {
@@ -183,9 +214,12 @@ internal Statement *variable_decloration(Token name) {
     }
     
     consume(TK_SEMI_COLON, "Expected ';' after a variable decloration");
-    add_locals(init_lvar(name, next_offset())); // add token name to locals 
     
-    return init_decl_stmt(name, var_type, expr);
+    // Add variable name to local scope
+    Statement *block = get_curr_scope();
+    scope_add_variable(block, name, type);
+    
+    return init_decl_stmt(name, type, expr);
 }
 
 internal Type *vtype() {
@@ -202,7 +236,7 @@ internal Type *vtype() {
 internal Statement *statement() {
     if (match(TK_PRINT)) return print_stmt();  // this needs more consideration
     if (match(TK_RETURN)) return return_stmt();
-    
+    if (match(TK_RBRACE)) return scope(); 
     return expr_stmt();
 }
 
@@ -245,6 +279,16 @@ internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer) {
     stmt->var_decl.type = type; 
     stmt->var_decl.name = name; 
     stmt->var_decl.initializer = initializer; 
+    return stmt;
+}
+
+internal Statement *init_scope() {
+    Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
+    stmt->kind = STMT_SCOPE;
+    stmt->scope.statements = init_vec(); 
+    stmt->scope.local_index = 0; 
+    stmt->scope.capacity = 0; 
+    stmt->scope.locals = NULL; 
     return stmt;
 }
 
@@ -346,21 +390,22 @@ internal bool internal_match(int n, ...) {
     return false; 
 }
 
-internal Expr *local_exist(Token token) {
-    Assert(token.kind == TK_IDENTIFIER);
+internal Type *local_exist(Token var_name) {
+    Assert(var_name.kind == TK_IDENTIFIER);
+    // TODO(ziv): Implement this using a hash map.
     
-    for (int i = 0; i < locals_index; i++) {
-        Expr *lvar = locals[i]; 
-        Token name = lvar->left_variable.name;
-        if (name.len == token.len && strncmp(token.str, name.str, name.len) == 0) {
-            return lvar;
+    Statement *block = get_curr_scope(); 
+    Scope s = block->scope; 
+    
+    for (unsigned int i = 0; i < s.local_index; i++) {
+        Local l = s.locals[i]; 
+        Token known_var_name = l.name; // all variable names which have been declared
+        if (known_var_name.len == var_name.len && 
+            strncmp(var_name.str, known_var_name.str, known_var_name.len) == 0) {
+            return l.type; 
         }
     }
     return NULL;
-}
-
-internal void add_locals(Expr *lvar) {
-    locals[locals_index++] = lvar;
 }
 
 //////////////////////////////////
@@ -400,25 +445,19 @@ internal Expr *init_grouping(Expr *expr) {
 internal Expr *init_assignement(Expr *left_var, Expr *rvalue) {
     Expr *result_expr = (Expr *)malloc(sizeof(Expr));
     result_expr->kind = EXPR_ASSIGN;  
-    result_expr->assign.left_variable = left_var;  
+    result_expr->assign.lvar = left_var;  
     result_expr->assign.rvalue = rvalue; 
     return result_expr;
 }
 
-//////////////////////////////////
-
-internal int next_offset() {
-    global_next_offset += 4;
-    return global_next_offset; 
-}
-
-internal Expr *init_lvar(Token name, int offset) {
+internal Expr *init_lvar(Token name) {
     Expr *result_expr = (Expr *)malloc(sizeof(Expr)); 
     result_expr->kind = EXPR_LVAR;
-    result_expr->left_variable.name = name;
-    result_expr->left_variable.offset = offset; 
+    result_expr->lvar.name = name;
     return result_expr;
 }
+
+//////////////////////////////////
 
 
 

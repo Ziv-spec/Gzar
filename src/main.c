@@ -109,6 +109,16 @@ internal char *slicecpy(char *dest, size_t dest_size, char *src, size_t src_size
     return dest;
 }
 
+internal char *slice_to_str(char *slice, unsigned int size) {
+    char *result = (char *)malloc(sizeof(char) * (size + 1));
+    unsigned int i;
+    for (i = 0; i < size; i++) {
+        result[i] = slice[i]; 
+    }
+    result[i] = '\0';
+    return result;
+}
+
 internal int my_strcmp(char *str1, char *str2) {
     char *temp1 = str1, *temp2 = str2; 
     while (*temp1 && *temp2 && *temp1 == *temp2 && *temp1++ == *temp2++); 

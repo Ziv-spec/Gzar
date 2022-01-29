@@ -14,7 +14,8 @@ internal void gen() {
     
     
     char buff[15];
-    sprintf(buff, "sub esp, %d", locals_index*4);
+    Assert(false); // THIS DOES NOT WORK FIX PLEASE
+    // sprintf(buff, "sub esp, %d", locals_index*4);
     
     
     printf("segment .text\n");
@@ -25,46 +26,52 @@ internal void gen() {
     
     output(buff);
     
-    Statement *stmt = NULL;
-    for (unsigned int i = 0; i < statements_index; i++) {
-        stmt = statements[i];
-        
-        switch (stmt->kind) {
-            case STMT_EXPR: {
-                gen_expr(stmt->expr);
-                output("pop eax ; discart result\n");
-            } break;
-            
-            case STMT_RETURN: {
-                gen_expr(stmt->expr); 
-                output(
-                       "pop eax",
-                       "mov esp, ebp",
-                       "pop ebp",
-                       "ret"
-                       ); 
-            } break;
-            
-            default: {
-                Assert(!"Statement not implemented");
-            } break;
-        }
-    }
+    //Statement *stmt = NULL;
     
-    // this is reduendent
-    output("", "; THIS IS NOT NEEDED IF YOU HAVE A RETURN STATEMENT");
-    output(
-           "mov esp, ebp",
-           "pop ebp",
-           "ret"
-           );
+    /*     
+        for (unsigned int i = 0; i < statements_index; i++) {
+            stmt = statements[i];
+            
+            switch (stmt->kind) {
+                case STMT_EXPR: {
+                    gen_expr(stmt->expr);
+                    output("pop eax ; discart result\n");
+                } break;
+                
+    
+                case STMT_RETURN: {
+                    gen_expr(stmt->expr); 
+                    output(
+                           "pop eax",
+                           "mov esp, ebp",
+                           "pop ebp",
+                           "ret"
+                           ); 
+                } break;
+                
+                default: {
+                    Assert(!"Statement not implemented");
+                } break;
+            }
+        }
+        
+        // this is reduendent
+        output("", "; THIS IS NOT NEEDED IF YOU HAVE A RETURN STATEMENT");
+        output(
+               "mov esp, ebp",
+               "pop ebp",
+               "ret"
+               );
+         */
+    
 }
 
 internal void gen_lval(Expr *expr) {
     if (expr->kind != EXPR_LVAR) Assert(!"inccorect expression given to `gen_lval` function");
     
     char buff[15];
-    sprintf(buff, "sub eax, %d", expr->left_variable.offset);
+    Assert(false); // THIS DOES NOT WORK !!!!!!!!!!!!!
+    //sprintf(buff, "sub eax, %d", expr->lvar.offset);
     
     output(
            "mov eax, ebp",
@@ -111,7 +118,7 @@ internal void gen_expr(Expr *expr) {
         } break;
         
         case EXPR_ASSIGN: {
-            gen_lval(expr->assign.left_variable);
+            gen_lval(expr->assign.lvar);
             gen_expr(expr->assign.rvalue);
             
             output(

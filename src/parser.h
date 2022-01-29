@@ -5,6 +5,7 @@ typedef struct Expr Expr;
 typedef enum Value_Kind Value_Kind; 
 typedef enum Expr_Kind Expr_Kind; 
 typedef Expr Binary; 
+typedef struct Type Type; 
 
 enum Value_Kind {
     VALUE_INTEGER, 
@@ -23,6 +24,15 @@ enum Expr_Kind {
     EXPR_LVAR, 
 }; 
 
+struct Type {
+    // TODO(ziv): currently types are very simple, this should easily get extended 
+    // if the api design is good, which I hope to achive
+    Token_Kind kind; 
+}; 
+
+// TODO(ziv): maybe simplify this model by not using named unions? 
+// for the time being I don't see this as a major thing that I need to do 
+// but I will have to see whether this adds clarity or not over time. 
 struct Expr {
     Expr_Kind kind; 
     
@@ -42,14 +52,13 @@ struct Expr {
         } unary;
         
         struct Assignement {
-            Expr *left_variable;
+            Expr *lvar;
             Expr *rvalue;
         } assign;
         
-        struct Left_Variable{
-            Token name; // name of the variable
-            int offset; // offset in the stack
-        } left_variable; 
+        struct Left_Variable {
+            Token name; 
+        } lvar; 
         
         // binary expression which the most commonly used
         // out of all of the types of expressions, so I 
@@ -65,13 +74,20 @@ struct Expr {
 
 typedef enum Statement_Kind Statement_Kind; 
 typedef struct Statement Statement; 
-typedef struct Type Type; 
+typedef struct Local Local; 
+typedef struct Scope Scope;
 
 enum Statement_Kind {
     STMT_EXPR, 
     STMT_PRINT_EXPR, 
     STMT_VAR_DECL,
     STMT_RETURN,
+    STMT_SCOPE,
+}; 
+
+struct Local {
+    Token name; 
+    Type *type; 
 }; 
 
 struct Statement {
@@ -93,30 +109,17 @@ struct Statement {
         
         Expr *var; // lvar
         
+        struct Scope {
+            unsigned int local_index;
+            unsigned int capacity;
+            Local *locals;
+            
+            // dynamic array  
+            Vector *statements;
+        } scope;
+        
     };
 };
-
-struct Type {
-    // TODO(ziv): currently types are very simple, this should easily get extended 
-    // if the api design is good, which I hope to achive
-    Token_Kind kind; 
-}; 
-
-typedef struct Scope Scope; 
-
-struct Scope {
-    
-    // dynamic array  
-    Vector *statements; 
-}; 
-
-
-// NOTE(ziv): I will not bother with dynamic
-// arrays this will be left for the final 
-// design to implement :)
-
-static Statement *statements[10]; 
-static unsigned int statements_index = 0;
 
 
 /* initializers for the different types of expressions */ 
@@ -126,20 +129,22 @@ internal Expr *init_literal(void *data, Value_Kind kind);
 internal Expr *init_grouping(Expr *expr); 
 internal Expr *init_assignement(Expr *lvalue, Expr *rvalue);
 
-//////////////////////////////// =============================
-// TODO(ziv): change this awful design. this logic should probably live in the code generation stuff. and have the locals be bound to a block.
-internal Expr *init_lvar(Token name, int offset);
-internal int next_offset();
-static int global_next_offset = 0; 
+////////////////////////////////
 
-// this is for lvars
-static Expr *locals[1024]; 
-static int locals_index; 
+internal Expr *init_lvar(Token name);
 
-internal Expr *local_exist(Token token);
-internal void add_locals(Expr *lvar);
+static Statement *scopes[100];
+static unsigned int scope_index; 
 
-//////////////////////////////// =============================
+internal Statement *get_curr_scope();
+internal Statement *next_scop();
+internal void push_scope(Statement *block);
+internal Statement *pop_scope();
+
+internal void add_local(Statement *block, Local local);
+internal void scope_add_variable(Statement *block, Token name, Type *type);
+
+////////////////////////////////
 
 
 /* initializers for the different statements */ 
@@ -147,6 +152,7 @@ internal Statement *init_expr_stmt(Expr *expr);
 internal Statement *init_print_stmt(Expr *expr);
 internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer);
 internal Statement *init_return_stmt(Expr *expr);
+internal Statement *init_scope(); 
 internal Type      *init_type(Token type_token); 
 
 /* helper functions */
@@ -161,6 +167,8 @@ internal void  report(int line, char *msg);
 internal void  error(Token token, char *msg); 
 internal Token consume(Token_Kind kind, char *msg);
 
+internal Type *local_exist(Token var_name);
+
 #define match(...) internal_match(COUNT_ARGS(__VA_ARGS__), ##__VA_ARGS__)
 
 /* resolving expressions */
@@ -174,13 +182,14 @@ internal Expr *unary();
 internal Expr *primary(); 
 
 /* resolving statements */
-internal Scope     *scope();
+internal Statement *scope();
 internal Statement *decloration();
 internal Statement *variable_decloration(Token name);
 internal Statement *statement();
 internal Statement *print_stmt();
 internal Statement *expr_stmt();
 internal Statement *return_stmt();
+
 internal Type      *vtype();
 
 internal void parse_file();
