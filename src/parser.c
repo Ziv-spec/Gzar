@@ -1,34 +1,17 @@
 
 internal void parse_file() {
     
-    // 
-    // A program is a scope :)
-    // 
+    Token tk = peek(); 
+    Statement *stmt = decloration();
     
-    consume(TK_RBRACE, "Expected beginning of scope '{' ");
-    Statement *block = scope(); 
+    if (stmt->kind != STMT_FUNCTION_DECL)
+    {
+        error(tk, "Expected a function definition");
+    }
     
-    block;
 }
 
 //////////////////////////////////
-
-internal Statement *scope() {
-    Statement *stmt = init_scope();
-    push_scope(stmt);
-    
-    while (!is_at_end()) {
-        if (match(TK_LBRACE)) {
-            return pop_scope();
-        }
-        
-        Statement *decl_stmt = decloration();
-        vec_push(stmt->scope.statements, decl_stmt); 
-    }
-    
-    consume(TK_LBRACE, "Expected ending of scope '}' ");
-    return stmt;
-}
 
 internal Expr *expression() {
     return assignement(); 
@@ -135,7 +118,7 @@ internal Expr *primary() {
         if (!local_exist(var_name)) {
             char buff[100]; 
             char *name = slice_to_str(var_name.str, (unsigned int)var_name.len);
-            sprintf(buff, "Error: '%s' is used before but never declared", name);
+            sprintf(buff, "Error: can not use '%s' it has never been declared", name);
             
             error(var_name, buff); 
         }
@@ -156,7 +139,10 @@ internal Expr *primary() {
 //////////////////////////////////
 
 internal Statement *get_curr_scope() {
-    return scopes[scope_index-1]; 
+    if (scope_index > 0) {
+        return scopes[scope_index-1]; 
+    }
+    return NULL;
 }
 
 internal Statement *next_scop() {
@@ -191,14 +177,74 @@ internal void scope_add_variable(Statement *block, Token name, Type *type) {
     add_local(block, local); 
 }
 
+internal Type *local_exist(Token var_name) {
+    Assert(var_name.kind == TK_IDENTIFIER);
+    // TODO(ziv): Implement this using a hash map.
+    
+    Statement *block = get_curr_scope();
+    if (!block) {
+        // TODO(ziv): NOTE IMPORTANT probably should return global scope here IKD I need to think about this more but (and implement a global scope but ikd which I guess would be in the program structure which I will have it be global such that changes to it will be easy to impelmenet
+        return NULL;
+    }
+    
+    Scope s = block->scope; 
+    
+    for (unsigned int i = 0; i < s.local_index; i++) {
+        Local l = s.locals[i]; 
+        Token known_var_name = l.name; // all variable names which have been declared
+        if (known_var_name.len == var_name.len && 
+            strncmp(var_name.str, known_var_name.str, known_var_name.len) == 0) {
+            return l.type; 
+        }
+    }
+    return NULL;
+}
+
+internal void add_arg(Args **args, Local local) {
+    Args *temp_args = *args; 
+    
+    if (temp_args == NULL) {
+        temp_args = (Args *)malloc(sizeof(Args));
+        temp_args->capacity =  2;
+        temp_args->local_index = 0;
+        temp_args->locals = (Local *)realloc(NULL, sizeof(Local)*temp_args->capacity);
+    }
+    else if (temp_args->capacity <= temp_args->local_index) {
+        temp_args->capacity = temp_args->capacity ? temp_args->capacity : 1;
+        temp_args->capacity *= 2;
+        temp_args->locals = (Local *)realloc(temp_args->locals, sizeof(Local)*temp_args->capacity);
+    }
+    
+    temp_args->locals[temp_args->local_index++] = local;
+    *args = temp_args;
+}
+
+internal Statement *scope() {
+    Statement *stmt = init_scope();
+    push_scope(stmt);
+    
+    while (!is_at_end()) {
+        if (match(TK_LBRACE)) {
+            return pop_scope();
+        }
+        
+        Statement *decl_stmt = decloration();
+        vec_push(stmt->scope.statements, decl_stmt); 
+    }
+    
+    consume(TK_LBRACE, "Expected ending of scope '}' ");
+    return stmt;
+}
+
 internal Statement *decloration() {
     
     if (match(TK_IDENTIFIER)) 
     {
         // variable decloration / expression / function decloration 
-        Token variable_name = previous(); 
-        if (match(TK_COLON))  return variable_decloration(variable_name); 
-        // I can parse funcion here and so on...
+        Token name = previous(); 
+        if (match(TK_COLON))        return variable_decloration(name); 
+        if (match(TK_DOUBLE_COLON)) return function_decloration(name); 
+        
         back_one();
     }
     
@@ -217,9 +263,61 @@ internal Statement *variable_decloration(Token name) {
     
     // Add variable name to local scope
     Statement *block = get_curr_scope();
+    if (!block) {
+        // TODO(ziv): change this such that you would be able to declare things 
+        // at a global scope and not only local. 
+        error(name, "Cannot declare variable at global scope");
+    }
     scope_add_variable(block, name, type);
     
     return init_decl_stmt(name, type, expr);
+}
+
+
+internal Statement *function_decloration(Token name) {
+    consume(TK_PROC, "Expected 'proc' keyword for function definition");
+    Args *in_args = arguments();
+    
+    consume(TK_RETURN_TYPE, "Expected '->' after arguments"); 
+    Type *return_type = vtype();
+    
+    consume(TK_RBRACE, "Expected beginning of block '{'");
+    Statement *sc = scope(); 
+    
+    return init_func_decl_stmt(name, in_args, return_type, sc);
+}
+
+internal Args *arguments() {
+    Local local = {0};
+    
+    Args *args = NULL;
+    
+    // @nocheckin
+    consume(TK_LPARAN, "Expected '(' for arguments");
+    
+    while (!check(TK_RPARAN)) {
+        
+        if (match(TK_IDENTIFIER)) {
+            Token name = previous();
+            consume(TK_COLON, "Expected ':' after argument name");
+            Type *type = vtype(); 
+            
+            local.name = name; 
+            local.type = type; 
+            add_arg(&args, local); 
+            
+            if (!match(TK_COMMA)) {
+                break;
+            }
+            
+        }
+        
+    } 
+    
+    consume(TK_RPARAN, "Expected ')' for end of arguments");
+    
+    
+    return args;
 }
 
 internal Type *vtype() {
@@ -272,6 +370,16 @@ internal Statement *init_print_stmt(Expr *expr) {
     return stmt;
 }
 
+
+internal Statement *init_func_decl_stmt(Token name, Args *args, Type *return_type, Statement *sc) {
+    Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
+    stmt->kind = STMT_FUNCTION_DECL; 
+    stmt->func.name = name;
+    stmt->func.args = args;
+    stmt->func.return_type = return_type;
+    stmt->func.sc = sc;
+    return stmt;
+}
 
 internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
@@ -341,21 +449,53 @@ internal void error(Token token, char *msg) {
     if (token.kind == TK_EOF) {
         strcat(buff, msg);
         strcat(buff, " at end ");
-        report(token.loc.line, buff); 
+        report(token.loc.line, token.loc.ch - token.len, buff); 
     }
     else {
-        report(token.loc.line, strcat(msg, " at "));
+        report(token.loc.line, token.loc.ch - token.len, strcat(msg, " at "));
     }
 }
 
-internal void report(int line, char *msg) {
+internal void report(int line, int ch, char *msg) {
     char err[100] = {0};  // holding the error message
     char buff[100] = {0}; // holding the integer as a string
     
+    fprintf(stderr, "\n");
     strcat(err, msg); 
     strcat(err, _itoa(line, buff, 10)); 
     fprintf(stderr, err);
     fprintf(stderr, "\n");
+    
+    // rewind 'code' to line 
+    for (int l = 0; *code && line-2 > l; code++) {
+        if (*code == '\n') {
+            l++;
+        }
+    }
+    
+    int count = 0; 
+    if (line > 1) {
+        char *temp = code; 
+        for (; *temp && *temp != '\n'; temp++, count++);
+        temp++;
+        for (; *temp && *temp != '\n'; temp++, count++);
+    }
+    else {
+        // special case for when the error is at line 1
+        // NOTE(ziv): @notchecked
+        char *temp = code; 
+        for (; *temp && *temp != '\n'; temp++, count++);
+    }
+    
+    strncpy(buff, code, count+1);
+    buff[count+1] = '\0';
+    fprintf(stderr, buff);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "%*c", ch,'^');
+    
+    fprintf(stderr, "\n");
+    
+    
     
     Assert(false);
     exit(-1); // NOTE(ziv): for the time being, when 
@@ -388,24 +528,6 @@ internal bool internal_match(int n, ...) {
     }
     va_end(kinds);
     return false; 
-}
-
-internal Type *local_exist(Token var_name) {
-    Assert(var_name.kind == TK_IDENTIFIER);
-    // TODO(ziv): Implement this using a hash map.
-    
-    Statement *block = get_curr_scope(); 
-    Scope s = block->scope; 
-    
-    for (unsigned int i = 0; i < s.local_index; i++) {
-        Local l = s.locals[i]; 
-        Token known_var_name = l.name; // all variable names which have been declared
-        if (known_var_name.len == var_name.len && 
-            strncmp(var_name.str, known_var_name.str, known_var_name.len) == 0) {
-            return l.type; 
-        }
-    }
-    return NULL;
 }
 
 //////////////////////////////////

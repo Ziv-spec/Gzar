@@ -119,11 +119,10 @@ internal char *slice_to_str(char *slice, unsigned int size) {
     return result;
 }
 
-internal int my_strcmp(char *str1, char *str2) {
+internal int keyword_cmp(char *str1, char *str2) {
     char *temp1 = str1, *temp2 = str2; 
-    while (*temp1 && *temp2 && *temp1 == *temp2 && *temp1++ == *temp2++); 
-    return *temp1 && *temp2;
-    
+    while (*temp1 && *temp2  && *temp1 == *temp2) { temp1++; temp2++; }
+    return is_alpha(*temp1) || *temp2 || *temp1 == *temp2;
 }
 
 // this is going to be somewhat of a generic way of doing dynamic arrays in C 
@@ -162,6 +161,8 @@ internal void *vec_pop(Vector *vec) {
 }
 
 
+static char *code; 
+
 #include "lexer.h"
 #include "parser.h"
 #include "codegen.h"
@@ -169,7 +170,6 @@ internal void *vec_pop(Vector *vec) {
 #include "lexer.c"
 #include "parser.c"
 #include "codegen.c"
-
 
 int main(int argc, char *argv[]) {
     
@@ -214,6 +214,8 @@ int main(int argc, char *argv[]) {
     // Setup for compilation
     //
     
+    code = source_buff;
+    
     init_tk_names();
     init_keywords();
     
@@ -227,6 +229,8 @@ int main(int argc, char *argv[]) {
     if (success == false) return 0;
     
     parse_file(); 
+    
+    
     
     // gen();
     

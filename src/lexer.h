@@ -1,8 +1,6 @@
 #ifndef LEXER_H
 #define LEXER_H
 
-/* lexer function prototypes */
-
 #define MAX_LEN 255
 
 typedef enum Token_Kind Token_Kind; 
@@ -20,10 +18,8 @@ enum Token_Kind {
     TK_TRUE,    // true
     TK_NIL,     // nil
     TK_RETURN,  // return
-    TK_VAR,     // var 
+    TK_PROC,    // proc/*
     TK_PRINT,   // print <------------- probably should remove this in the future as i see fit
-    TK_RETURN_TYPE, // ->
-    TK_DOUBLE_COLON, // ::
     
     // TYPES
     TK_S8,  // s8
@@ -46,6 +42,7 @@ enum Token_Kind {
     TK_LESS_EQUAL,    // <=
     TK_BANG_EQUAL,    // != 
     TK_EQUAL_EQUAL,   // ==
+    TK_DOUBLE_COLON,  // ::
     TK_OP_END,
     
     TK_LITERAL_BEGIN, 
@@ -53,8 +50,10 @@ enum Token_Kind {
     TK_STRING,  // e.g. "abc"
     TK_LITERAL_END, 
     
+    TK_RETURN_TYPE, // ->
+    TK_COMMA,      // , 
     TK_SEMI_COLON, // ;
-    TK_COLON, // :
+    TK_COLON,      // :
     TK_RPARAN,     // (
     TK_LPARAN,     // )
     TK_RBRACE,     // {
@@ -76,16 +75,13 @@ internal void init_keywords() {
     keywords[TK_TRUE]   = "true";
     keywords[TK_NIL]    = "nil";
     keywords[TK_RETURN] = "return";
-    keywords[TK_VAR]    = "var";
     keywords[TK_PRINT]  = "print";
+    keywords[TK_PROC]   = "proc";
     
     keywords[TK_S8]     = "s8";
     keywords[TK_S32]    = "s32";
     keywords[TK_U8]     = "u8";
     keywords[TK_U32]    = "u32";
-    
-    keywords[TK_RETURN_TYPE]  = "->";
-    keywords[TK_DOUBLE_COLON] = "::";
 }
 
 static char *tk_names[TK_COUNT];
@@ -98,7 +94,6 @@ internal void init_tk_names() {
     tk_names[TK_ELSE]   = "else";
     tk_names[TK_WHILE]  = "while";
     tk_names[TK_RETURN] = "return";
-    tk_names[TK_VAR]    = "var";
     tk_names[TK_PRINT]  = "print";
     // ops
     tk_names[TK_PLUS]    = "+";
@@ -123,6 +118,7 @@ internal void init_tk_names() {
     
     // single character tokens that I don't know how to name
     tk_names[TK_SEMI_COLON] = ";";
+    tk_names[TK_COMMA]  = ",";
     tk_names[TK_RPARAN] = "(";
     tk_names[TK_LPARAN] = ")";
     tk_names[TK_RBRACE] = "{";
@@ -161,8 +157,6 @@ struct Lexer {
     Token token;  // the current token
 };
 
-
-
 ////////////////////////////////
 
 
@@ -174,6 +168,8 @@ static unsigned int tokens_len;
 //internal void debug_print_token(Token token); // prints a token in a index, value, type format.
 
 ////////////////////////////////
+
+/* lexer function prototypes */
 
 
 
