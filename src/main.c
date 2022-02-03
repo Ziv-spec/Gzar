@@ -1,5 +1,6 @@
 //
-// Language spec (BNF - I need to do this): 
+// TODO(ziv): Update this
+// Language spec (this is not using BNF but is kind of similar): 
 //
 // program -> scope*
 // 
@@ -101,7 +102,7 @@ internal char *slicecpy(char *dest, size_t dest_size, char *src, size_t src_size
     char *tdest = dest; 
     if (src_size > dest_size) return NULL;
     
-    while (src_size) {
+    while (src_size > 0) {
         *tdest++ = *src++; 
         src_size--;
     }
@@ -117,12 +118,6 @@ internal char *slice_to_str(char *slice, unsigned int size) {
     }
     result[i] = '\0';
     return result;
-}
-
-internal int keyword_cmp(char *str1, char *str2) {
-    char *temp1 = str1, *temp2 = str2; 
-    while (*temp1 && *temp2  && *temp1 == *temp2) { temp1++; temp2++; }
-    return is_alpha(*temp1) || *temp2 || *temp1 == *temp2;
 }
 
 // this is going to be somewhat of a generic way of doing dynamic arrays in C 
@@ -161,7 +156,8 @@ internal void *vec_pop(Vector *vec) {
 }
 
 
-static char *code; 
+static char *code; // currently I only use this for printing error messages inside the 'report' function. I might change the design for this in the future.
+
 
 #include "lexer.h"
 #include "parser.h"
@@ -179,7 +175,7 @@ int main(int argc, char *argv[]) {
     
 #if 0
     if (argc != 2) {
-        fprintf(stdout, "Usage: <source>.gz\n"); 
+        fprintf(stdout, "Usage: <source>.zr\n");
         return 0; 
     }
     char *filename = argv[1];

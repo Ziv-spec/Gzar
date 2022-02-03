@@ -169,6 +169,11 @@ internal bool lex_file(Lexer *lexer) {
     return true;
 }
 
+internal int keyword_cmp(char *str1, char *str2) {
+    char *temp1 = str1, *temp2 = str2; 
+    while (*temp1 && *temp2  && *temp1 == *temp2) { temp1++; temp2++; }
+    return is_alpha(*temp1) || *temp2 || *temp1 == *temp2;
+}
 
 
 /* NOTE(ziv): DEPRECATED

@@ -452,7 +452,8 @@ internal void error(Token token, char *msg) {
         report(token.loc.line, token.loc.ch - token.len, buff); 
     }
     else {
-        report(token.loc.line, token.loc.ch - token.len, strcat(msg, " at "));
+        strcat(buff, msg); 
+        report(token.loc.line, token.loc.ch - token.len, strcat(buff, " at "));
     }
 }
 
@@ -502,9 +503,8 @@ internal void report(int line, int ch, char *msg) {
     // the parser is reporting a error for the use 
     // it is not going to continue finding more erorrs. 
     // This is done to simplify the amounts of things 
-    // that I need to think about. That will change in 
-    // the future as adding this feature will be easier 
-    // when I have statements.
+    // that I need to think about. 
+    // I might change this when I have the will.. :)
 }
 
 internal bool check(Token_Kind kind) { 

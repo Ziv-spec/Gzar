@@ -164,6 +164,8 @@ static Token tokens[1024];
 static unsigned int tokens_index;
 static unsigned int tokens_len;
 
+internal int keyword_cmp(char *str1, char *str2);
+
 // NOTE(ziv): DEPRECATED
 //internal void debug_print_token(Token token); // prints a token in a index, value, type format.
 

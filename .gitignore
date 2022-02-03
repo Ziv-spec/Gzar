@@ -1,4 +1,4 @@
 .vs
 build/
-gzar.rdbg
 run.bat
+*.rdbg

@@ -4,5 +4,6 @@ IF NOT EXIST build mkdir build
 set LinkerOptions=/OUT:gzar.exe /incremental:no
 set WarningOptions= -wd4706 -wd4201 /W4
 pushd build 
-cl ../src/main.c -nologo /Z7 /FC %WarningOptions% /link %LinkerOptions%
+rem maybe I should create a release build when my language is mroe complete
+cl ../src/main.c -nologo /Zi /FC /fsanitize=address %WarningOptions% /link %LinkerOptions%
 popd
