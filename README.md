@@ -6,7 +6,7 @@ The language will support functions, variables, logical and mathematical operati
 The language might support pointers (we shall see) and if I will have the time, even strings. 
 
 ## How to compile the Gzar compiler 
-Make sure that you have visual studio 2019 C/C++ compiler installed and run the `build.bat` file from the `x64 Native tools Command Prompt`
+Make sure that you have visual studio 2019 C/C++ compiler installed and run the `build.bat debug` file from `cmd` or `x64 Native tools Command Prompt`
 
 ## Code generation
 The compiler will output unoptimized assembly(nasm) at first. Then at some point if I will feel like it, I will have a optimizer for the code generation. Also might transition to machine code directly. That is only if I have time. 

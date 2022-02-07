@@ -5,7 +5,7 @@ typedef struct Expr Expr;
 typedef enum Value_Kind Value_Kind; 
 typedef enum Expr_Kind Expr_Kind; 
 typedef Expr Binary; 
-typedef struct Type Type; 
+
 
 enum Value_Kind {
     VALUE_INTEGER, 
@@ -22,12 +22,6 @@ enum Expr_Kind {
     EXPR_BINARY, 
     EXPR_ASSIGN, 
     EXPR_LVAR, 
-}; 
-
-struct Type {
-    // TODO(ziv): currently types are very simple, this should easily get extended 
-    // if the api design is good, which I hope to achive
-    Token_Kind kind; 
 }; 
 
 // TODO(ziv): maybe simplify this model by not using named unions? 
@@ -59,6 +53,11 @@ struct Expr {
         struct Left_Variable {
             Token name; 
         } lvar; 
+        
+        // TODO(ziv): add args expression
+        // TODO(ziv): add a call expression 
+        // TODO(ziv): add subscrip expression 
+        
         
         // binary expression which the most commonly used
         // out of all of the types of expressions, so I 
@@ -117,6 +116,13 @@ struct Statement {
             Expr *initializer;
         } var_decl; 
         
+        struct Function {
+            Token name; 
+            Args *args; 
+            Type *return_type; 
+            Statement *sc; 
+        } func;
+        
         struct Scope {
             unsigned int local_index;
             unsigned int capacity;
@@ -125,13 +131,6 @@ struct Statement {
             // dynamic array  
             Vector *statements;
         } scope;
-        
-        struct Function {
-            Token name; 
-            Args *args; 
-            Type *return_type; 
-            Statement *sc; 
-        } func;
         
     };
 };
@@ -186,7 +185,7 @@ internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer);
 internal Statement *init_return_stmt(Expr *expr);
 internal Statement *init_scope(); 
 internal Statement *init_func_decl_stmt(Token name, Args *args, Type *type, Statement *sc);
-internal Type      *init_type(Token type_token); 
+
 
 /* helper functions */
 internal void  back_one();

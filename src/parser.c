@@ -12,13 +12,14 @@ internal void parse_file() {
 }
 
 //////////////////////////////////
+/// Parsing of expressions 
 
 internal Expr *expression() {
     return assignement(); 
 }
 
 internal Expr *assignement() {
-    Expr *expr = equality(); 
+    Expr *expr = equality();
     if (match(TK_ASSIGN)) {
         return init_assignement(expr, equality());
     }
@@ -76,9 +77,18 @@ internal Expr *factor() {
 internal Expr *unary() {
     
     while (match(TK_BANG, TK_MINUS)) {
-        Token operation = previous(); 
-        Expr *right = unary(); 
+        Token operation = previous();
+        Expr *right = unary();
+        
         return init_unary(operation, right);
+        /* 
+                if (type_op_check(right->type, operation)) {
+                }
+                else {
+                    error(operation, "Type missmatch, " ... );
+                }
+                 */
+        
     }
     
     return primary();
@@ -94,18 +104,15 @@ internal Expr *primary() {
         Token token = previous();
         Expr *result = NULL; 
         
-        switch (token.kind) {
-            case TK_NUMBER: {
-                u64 value = atoi(token.str); 
-                result = init_literal((void *)value, VALUE_INTEGER); 
-            } break; 
-            
-            case TK_STRING: {
-                char *buff = (char *)malloc(token.len+1); 
-                strncpy(buff, token.str, token.len);
-                buff[token.len] = '\0';
-                result = init_literal((void *)buff, VALUE_STRING); 
-            } break; 
+        if (token.kind == TK_NUMBER) {
+            u64 value = atoi(token.str); 
+            result = init_literal((void *)value, VALUE_INTEGER); 
+        }
+        else {
+            char *buff = (char *)malloc(token.len+1); 
+            strncpy(buff, token.str, token.len);
+            buff[token.len] = '\0';
+            result = init_literal((void *)buff, VALUE_STRING); 
             
         }
         
@@ -119,7 +126,6 @@ internal Expr *primary() {
             char buff[100]; 
             char *name = slice_to_str(var_name.str, (unsigned int)var_name.len);
             sprintf(buff, "Error: can not use '%s' it has never been declared", name);
-            
             error(var_name, buff); 
         }
         
@@ -137,6 +143,57 @@ internal Expr *primary() {
 }
 
 //////////////////////////////////
+/// Initializations for expressions 
+
+internal Expr *init_binary(Expr *left, Token operation, Expr *right) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
+    result_expr->kind = EXPR_BINARY; 
+    result_expr->left = left; 
+    result_expr->operation = operation; 
+    result_expr->right = right;
+    return result_expr;
+}
+
+internal Expr *init_unary(Token operation, Expr *right) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
+    result_expr->kind = EXPR_UNARY; 
+    result_expr->unary.operation = operation; 
+    result_expr->unary.right = right; 
+    return result_expr;
+}
+
+internal Expr *init_literal(void *data, Value_Kind kind) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
+    result_expr->kind = EXPR_LITERAL; 
+    result_expr->literal.kind = kind; 
+    result_expr->literal.data = data; 
+    return result_expr;
+}
+
+internal Expr *init_grouping(Expr *expr) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
+    result_expr->kind = EXPR_GROUPING;  
+    result_expr->grouping.expr = expr; 
+    return result_expr;
+}
+
+internal Expr *init_assignement(Expr *left_var, Expr *rvalue) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
+    result_expr->kind = EXPR_ASSIGN;  
+    result_expr->assign.lvar = left_var;  
+    result_expr->assign.rvalue = rvalue; 
+    return result_expr;
+}
+
+internal Expr *init_lvar(Token name) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr)); 
+    result_expr->kind = EXPR_LVAR;
+    result_expr->lvar.name = name;
+    return result_expr;
+}
+
+//////////// //////////////////////
+/// helper functions for parsing statements
 
 internal Statement *get_curr_scope() {
     if (scope_index > 0) {
@@ -161,7 +218,7 @@ internal Statement *pop_scope() {
 }
 
 internal void add_local(Statement *block, Local local) {
-    // TODO(ziv): give the locals some initial capacity? so that I could get rid of this branch
+    // TODO(ziv): give the locals some initial capacity? so that I could get rid of one branch...
     if (block->scope.capacity <= block->scope.local_index || block->scope.capacity == 0) {
         block->scope.capacity = block->scope.capacity ? block->scope.capacity : 1;
         block->scope.capacity *= 2;
@@ -169,7 +226,6 @@ internal void add_local(Statement *block, Local local) {
     }
     
     block->scope.locals[block->scope.local_index++] = local;
-    
 }
 
 internal void scope_add_variable(Statement *block, Token name, Type *type) {
@@ -218,6 +274,10 @@ internal void add_arg(Args **args, Local local) {
     temp_args->locals[temp_args->local_index++] = local;
     *args = temp_args;
 }
+
+
+//////////////////////////////////
+/// Parsing of statements
 
 internal Statement *scope() {
     Statement *stmt = init_scope();
@@ -292,6 +352,8 @@ internal Args *arguments() {
     
     Args *args = NULL;
     
+    // TODO(ziv): REDO THIS PLEASE!!!!!!!!!!!!!
+    
     // @nocheckin
     consume(TK_LPARAN, "Expected '(' for arguments");
     
@@ -316,19 +378,21 @@ internal Args *arguments() {
     
     consume(TK_RPARAN, "Expected ')' for end of arguments");
     
-    
     return args;
 }
 
 internal Type *vtype() {
-    // TODO(ziv): have some array for all known types (this is mainly for struct/enum support)
-    // and check inside that array if this type matches one of those types 
-    if (match(TK_S8, TK_U8, TK_S32, TK_U32)) {
+    
+    // TODO(ziv): support struct/enum types
+    Token_Kind ty = advance().kind;
+    if (TK_TYPE_BEGIN <= ty && ty <= TK_TYPE_END) { // this catches all basic types
         return init_type(previous()); 
     }
     
     error(peek(), "Expected type in a variable decloration");
+#ifdef DEBUG 
     return NULL;
+#endif 
 }
 
 internal Statement *statement() {
@@ -355,6 +419,10 @@ internal Statement *expr_stmt() {
     consume(TK_SEMI_COLON, "Expected ';' after a statement");
     return init_expr_stmt(expr);
 }
+
+
+//////////////////////////////////
+/// Initializations for statements
 
 internal Statement *init_expr_stmt(Expr *expr) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
@@ -407,13 +475,8 @@ internal Statement *init_return_stmt(Expr *expr) {
     return stmt;
 }
 
-internal Type *init_type(Token type_token) {
-    Type *type = (Type *)malloc(sizeof(Type)); 
-    type->kind = type_token.kind; 
-    return type;
-}
-
 //////////////////////////////////
+/// General helper functions 
 
 internal void back_one() {
     tokens_index--;
@@ -439,8 +502,11 @@ internal Token previous() {
 
 internal Token consume(Token_Kind kind, char *msg) {
     if (check(kind)) return advance(); 
-    error(peek(), msg); 
-    return (Token){ 0 };
+    error(peek(), msg);
+    
+#ifdef DEBUG
+    return (Token){0};
+#endif 
 }
 
 internal void error(Token token, char *msg) {
@@ -483,7 +549,7 @@ internal void report(int line, int ch, char *msg) {
     }
     else {
         // special case for when the error is at line 1
-        // NOTE(ziv): @notchecked
+        // TODO(ziv):  @notchecked check whether this actually works
         char *temp = code; 
         for (; *temp && *temp != '\n'; temp++, count++);
     }
@@ -496,15 +562,14 @@ internal void report(int line, int ch, char *msg) {
     
     fprintf(stderr, "\n");
     
-    
-    
-    Assert(false);
-    exit(-1); // NOTE(ziv): for the time being, when 
+    // NOTE(ziv): for the time being, when 
     // the parser is reporting a error for the use 
     // it is not going to continue finding more erorrs. 
     // This is done to simplify the amounts of things 
     // that I need to think about. 
     // I might change this when I have the will.. :)
+    Assert(false);
+    exit(-1); 
 }
 
 internal bool check(Token_Kind kind) { 
@@ -529,59 +594,6 @@ internal bool internal_match(int n, ...) {
     va_end(kinds);
     return false; 
 }
-
-//////////////////////////////////
-
-internal Expr *init_binary(Expr *left, Token operation, Expr *right) {
-    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
-    result_expr->kind = EXPR_BINARY; 
-    result_expr->left = left; 
-    result_expr->operation = operation; 
-    result_expr->right = right;
-    return result_expr;
-}
-
-internal Expr *init_unary(Token operation, Expr *right) {
-    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
-    result_expr->kind = EXPR_UNARY; 
-    result_expr->unary.operation = operation; 
-    result_expr->unary.right = right; 
-    return result_expr;
-}
-
-internal Expr *init_literal(void *data, Value_Kind kind) {
-    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
-    result_expr->kind = EXPR_LITERAL; 
-    result_expr->literal.kind = kind; 
-    result_expr->literal.data = data; 
-    return result_expr;
-}
-
-internal Expr *init_grouping(Expr *expr) {
-    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
-    result_expr->kind = EXPR_GROUPING;  
-    result_expr->grouping.expr = expr; 
-    return result_expr;
-}
-
-internal Expr *init_assignement(Expr *left_var, Expr *rvalue) {
-    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
-    result_expr->kind = EXPR_ASSIGN;  
-    result_expr->assign.lvar = left_var;  
-    result_expr->assign.rvalue = rvalue; 
-    return result_expr;
-}
-
-internal Expr *init_lvar(Token name) {
-    Expr *result_expr = (Expr *)malloc(sizeof(Expr)); 
-    result_expr->kind = EXPR_LVAR;
-    result_expr->lvar.name = name;
-    return result_expr;
-}
-
-//////////////////////////////////
-
-
 
 //////////////////////////////////
 // Debug printing of expressions

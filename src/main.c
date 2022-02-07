@@ -40,8 +40,6 @@
 // if -> "if" "(" expression ")" scope
 // while -> "while" "(" expression ")" scope
 
-
-#define DEBUG 1
 #define internal static 
 
 #if DEBUG
@@ -125,9 +123,9 @@ internal char *slice_to_str(char *slice, unsigned int size) {
 
 typedef struct Vecotr Vector; 
 struct Vecotr {
-    void **data;
-    int capacity; 
     int index; 
+    int capacity; 
+    void **data;
 }; 
 
 #define DEFAULT_VEC_SIZE 16
@@ -160,10 +158,12 @@ static char *code; // currently I only use this for printing error messages insi
 
 
 #include "lexer.h"
+#include "type.h"
 #include "parser.h"
 #include "codegen.h"
 
 #include "lexer.c"
+#include "type.c"
 #include "parser.c"
 #include "codegen.c"
 
@@ -211,9 +211,6 @@ int main(int argc, char *argv[]) {
     //
     
     code = source_buff;
-    
-    init_tk_names();
-    init_keywords();
     
     Lexer lexer = {0};
     lexer.code = source_buff;

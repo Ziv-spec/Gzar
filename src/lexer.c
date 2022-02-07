@@ -94,6 +94,37 @@ internal bool get_next_token(Lexer *lexer) {
                 // Search if token is keyword
                 //
                 
+                // This is map between the keywords and their string representation
+                // I might use a hash map for the mapping in the future but for the time 
+                // being it works so I will take it .
+                static char *keywords[]  = {
+                    [0]         = NULL,
+                    [TK_IF]     = "if",
+                    [TK_ELSE]   = "else",
+                    [TK_WHILE]  = "while",
+                    [TK_FALSE]  = "false",
+                    [TK_TRUE]   = "true",
+                    [TK_NIL]    = "nil",
+                    [TK_RETURN] = "return",
+                    [TK_PRINT]  = "print",
+                    [TK_PROC]   = "proc",
+                    
+                    [TK_S8_TYPE]  = "s8",
+                    [TK_S16_TYPE] = "s16",
+                    [TK_S32_TYPE] = "s32",
+                    [TK_U8_TYPE]  = "u8",
+                    [TK_U16_TYPE] = "u16",
+                    [TK_U32_TYPE] = "u32",
+                    [TK_INT_TYPE] = "int",
+                    [TK_STRING_TYPE] = "string",
+                    [TK_VOID_TYPE]   = "void",
+                    
+                    // this is a bit of a hack though, I am unsure what would be better rn.
+                    [TK_TYPE_BEGIN] = "\0", 
+                    [TK_TYPE_END]   = "\0",
+                    
+                };
+                
                 bool found_keyword = false; 
                 for (int i = 1; i < ArrayLength(keywords); i++) {
                     // if i don't put the result of the comparison into 'r' then 
@@ -171,27 +202,6 @@ internal bool lex_file(Lexer *lexer) {
 
 internal int keyword_cmp(char *str1, char *str2) {
     char *temp1 = str1, *temp2 = str2; 
-    while (*temp1 && *temp2  && *temp1 == *temp2) { temp1++; temp2++; }
+    while (*temp1 && *temp2 && *temp1 == *temp2) { temp1++; temp2++; }
     return is_alpha(*temp1) || *temp2 || *temp1 == *temp2;
 }
-
-
-/* NOTE(ziv): DEPRECATED
-internal void debug_print_token(Token token) { 
-    
-    char buff[255] = {0}; // temp buffer for string minipulation
-    
-    // NOTE(ziv): some hacky way of printing the values that I get from this :) 
-    if (token.str)  slicecpy(buff, 255, token.str, token.len);
-    
-    if (TK_OP_BEGIN <= token.kind && token.kind <= TK_OP_END) {
-        printf("%d\t%s\t%s\n", __token_index++, 
-               tk_names[token.kind], 
-               tk_names[token.kind]);
-    }
-    else if (TK_LITERAL_BEGIN <= token.kind && token.kind <= TK_LITERAL_END) {
-        if (token.str) printf("%d\t%s\t%s\n", __token_index++, buff, tk_names[token.kind]);
-    }
-}
- */
-
