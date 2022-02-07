@@ -173,7 +173,7 @@ int main(int argc, char *argv[]) {
     // handle the compiler options
     // 
     
-#if 0
+#ifndef DEBUG
     if (argc != 2) {
         fprintf(stdout, "Usage: <source>.zr\n");
         return 0; 
