@@ -81,13 +81,16 @@ internal Expr *unary() {
         Expr *right = unary();
         
         return init_unary(operation, right);
+        
+        // here I am trying to do the type stuff 
+        
         /* 
-                if (type_op_check(right->type, operation)) {
-                }
-                else {
-                    error(operation, "Type missmatch, " ... );
-                }
-                 */
+                        if (type_op_check(right->type, operation)) {
+                        }
+                        else {
+                            error(operation, "Type missmatch, " ... );
+                        }
+                         */
         
     }
     
@@ -96,8 +99,8 @@ internal Expr *unary() {
 
 internal Expr *primary() {
     if (match(TK_FALSE)) return init_literal(NULL, VALUE_FALSE);
-    if (match(TK_TRUE)) return init_literal(NULL, VALUE_TRUE);
-    if (match(TK_NIL)) return init_literal(NULL, VALUE_NIL);
+    if (match(TK_TRUE))  return init_literal(NULL, VALUE_TRUE);
+    if (match(TK_NIL))   return init_literal(NULL, VALUE_NIL);
     
     // number & string
     if (match(TK_NUMBER, TK_STRING)) { 
@@ -138,8 +141,20 @@ internal Expr *primary() {
         return init_grouping(expr); 
     }
     
-    Assert(false); // we should never be getting here
+    char buff[100]; 
+    Token not_literal = previous(); 
+    if (match(TK_SEMI_COLON)) {
+        sprintf(buff, "operation '%s' requires more than one operand", tk_names[not_literal.kind]);
+        syntax_error(not_literal, buff); 
+    }
+    
+    not_literal = peek(); 
+    sprintf(buff, "illigal use of '%s'", tk_names[not_literal.kind]);
+    syntax_error(not_literal, buff); 
+    
+#if DEBUG
     return NULL; 
+#endif 
 }
 
 //////////////////////////////////
@@ -502,7 +517,7 @@ internal Token previous() {
 
 internal Token consume(Token_Kind kind, char *msg) {
     if (check(kind)) return advance(); 
-    error(peek(), msg);
+    syntax_error(peek(), msg);
     
 #ifdef DEBUG
     return (Token){0};
@@ -521,6 +536,12 @@ internal void error(Token token, char *msg) {
         strcat(buff, msg); 
         report(token.loc.line, token.loc.ch - token.len, strcat(buff, " at "));
     }
+}
+
+internal void syntax_error(Token token, const char *err) {
+    char buff[100]; 
+    sprintf(buff, "\x1b[31mSyntax error:\x1b[0m %s", err); 
+    error(token, buff); 
 }
 
 internal void report(int line, int ch, char *msg) {
@@ -568,6 +589,9 @@ internal void report(int line, int ch, char *msg) {
     // This is done to simplify the amounts of things 
     // that I need to think about. 
     // I might change this when I have the will.. :)
+    
+    wprintf(L"\x1b[0m\r\n");
+    
     Assert(false);
     exit(-1); 
 }

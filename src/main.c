@@ -40,6 +40,27 @@
 // if -> "if" "(" expression ")" scope
 // while -> "while" "(" expression ")" scope
 
+// declorations are statements (correct) but some declorations should have a type I think. 
+// or you know what, a declorations should have a type. but a statment might not. 
+
+
+// if statement -> 
+//     condition
+//     block 
+//     else-block 
+
+// while statement -> 
+//     condition
+//     block
+
+// var decloration ->
+//     type
+//     name
+//     initializer
+
+// only the setup/cleanup for function arguments are what matters to a function otherwise the use of them inside the function is the same across the whole function so storing the type data inside the local/global map which I have is fine but I need to distinct them from this setup/cleanup which they must go through (aka setup for recieving the variables when getting called and cleanup from when they want to return soemthing). 
+
+
 #define internal static 
 
 #if DEBUG
@@ -157,6 +178,7 @@ internal void *vec_pop(Vector *vec) {
 static char *code; // currently I only use this for printing error messages inside the 'report' function. I might change the design for this in the future.
 
 
+
 #include "lexer.h"
 #include "type.h"
 #include "parser.h"
@@ -168,6 +190,7 @@ static char *code; // currently I only use this for printing error messages insi
 #include "codegen.c"
 
 int main(int argc, char *argv[]) {
+    
     
     // 
     // handle the compiler options
@@ -185,7 +208,6 @@ int main(int argc, char *argv[]) {
     char *filename = "C:/dev/HW/toylang/tests/test2.jai";
     
 #endif 
-    
     
     // 
     // open the first file and read it's contents
@@ -222,6 +244,8 @@ int main(int argc, char *argv[]) {
     if (success == false) return 0;
     
     parse_file(); 
+    
+    
     
     
     

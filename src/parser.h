@@ -6,7 +6,6 @@ typedef enum Value_Kind Value_Kind;
 typedef enum Expr_Kind Expr_Kind; 
 typedef Expr Binary; 
 
-
 enum Value_Kind {
     VALUE_INTEGER, 
     VALUE_STRING, 
@@ -91,48 +90,75 @@ struct Local {
     Type *type; 
 }; 
 
-// TODO(ziv): please restrucutre this idk this looks like a mess for me.
 struct Args {
     unsigned int local_index; 
     unsigned int capacity; 
     Local *locals; 
 };
 
+typedef struct Decl Decl; 
+struct Decl {
+    Token name; 
+    Type *type; 
+    
+    Expr *initializer;
+    Statement *block;
+}; 
 
 struct Statement {
     Statement_Kind kind; 
     
     union {
+        Decl decl; 
         
-        // for the time being I will allow the print
-        // function to be a stand alone expression
-        Expr *print_expr; 
-        Expr *expr;
-        Expr *ret;
+        /*         
+                struct {
+                    Expr *init_expr; 
+                    Expr *expr; 
+                    Expr *next_expr; 
+                    Statement *block;
+                    Statement *else_body; 
+                    Statement *next; 
+                };
+                 */
         
-        struct {
-            Token name; 
-            Type *type;
-            Expr *initializer;
-        } var_decl; 
-        
-        struct Function {
-            Token name; 
-            Args *args; 
-            Type *return_type; 
-            Statement *sc; 
-        } func;
-        
-        struct Scope {
-            unsigned int local_index;
-            unsigned int capacity;
-            Local *locals;
+        union {
             
-            // dynamic array  
-            Vector *statements;
-        } scope;
+            // for the time being I will allow the print
+            // function to be a stand alone expression
+            Expr *print_expr; 
+            Expr *expr;
+            Expr *ret;
+            
+            struct {
+                Token name; 
+                Type *type;
+                Expr *initializer;
+            } var_decl; 
+            
+            struct Function {
+                Token name; 
+                Args *args; 
+                Type *return_type; 
+                Statement *sc; 
+            } func;
+            
+            struct Scope {
+                unsigned int local_index;
+                unsigned int capacity;
+                Local *locals;
+                
+                // dynamic array  
+                Vector *statements;
+            } scope;
+            
+        };
         
     };
+    
+    
+    
+    
 };
 
 
@@ -197,6 +223,7 @@ internal bool  check(Token_Kind kind);
 internal bool  internal_match(int n, ...);
 internal void  report(int line, int ch, char *msg); 
 internal void  error(Token token, char *msg); 
+internal void  syntax_error(Token token, const char *err);
 internal Token consume(Token_Kind kind, char *msg);
 
 internal Type *local_exist(Token var_name);
