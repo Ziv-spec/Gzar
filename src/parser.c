@@ -1,12 +1,25 @@
 
 internal void parse_file() {
     
-    Token tk = peek(); 
-    Statement *stmt = decloration();
+    Program prog = {0}; 
+    prog.decls = init_vec();
+    prog.block.locals = init_vec(); 
+    prog.block.statements = init_vec(); 
+    global_block = prog.block;
     
-    if (stmt->kind != STMT_FUNCTION_DECL)
-    {
-        error(tk, "Expected a function definition");
+    Token tk = peek(); 
+    while (tk.kind != TK_EOF) {
+        Statement *stmt = decloration();
+        
+        if (STMT_DECL_BEGIN < stmt->kind && stmt->kind < STMT_DECL_END) {
+            vec_push(prog.decls, stmt);
+        }
+        else {
+            // TODO(ziv): maybe print different errors for different statement kinds
+            error(tk, "Expected a decloration in global scope");
+        }
+        
+        tk = peek();
     }
     
 }
@@ -68,6 +81,10 @@ internal Expr *factor() {
     while (match(TK_SLASH, TK_STAR )) {
         Token operation = previous(); 
         Expr *right = factor(); 
+        
+        // if (type_equal(expr, right))
+        
+        
         expr = init_binary(expr, operation, right);
     }
     
@@ -81,17 +98,6 @@ internal Expr *unary() {
         Expr *right = unary();
         
         return init_unary(operation, right);
-        
-        // here I am trying to do the type stuff 
-        
-        /* 
-                        if (type_op_check(right->type, operation)) {
-                        }
-                        else {
-                            error(operation, "Type missmatch, " ... );
-                        }
-                         */
-        
     }
     
     return primary();
@@ -149,6 +155,11 @@ internal Expr *primary() {
     }
     
     not_literal = peek(); 
+    if (not_literal.kind == TK_EOF) {
+        return NULL;
+        //error(not_literal, "Unexpected end of file");
+    }
+    
     sprintf(buff, "illigal use of '%s'", tk_names[not_literal.kind]);
     syntax_error(not_literal, buff); 
     
@@ -232,20 +243,39 @@ internal Statement *pop_scope() {
     return scopes[--scope_index];
 }
 
-internal void add_local(Statement *block, Local local) {
-    // TODO(ziv): give the locals some initial capacity? so that I could get rid of one branch...
-    if (block->scope.capacity <= block->scope.local_index || block->scope.capacity == 0) {
-        block->scope.capacity = block->scope.capacity ? block->scope.capacity : 1;
-        block->scope.capacity *= 2;
-        block->scope.locals = (Local *)realloc(block->scope.locals, sizeof(Local)*block->scope.capacity);
-    }
-    
-    block->scope.locals[block->scope.local_index++] = local;
+internal void add_decl(Scope block, Symbol *decl) {
+    Assert(decl); 
+    vec_push(block.locals, decl);
 }
 
-internal void scope_add_variable(Statement *block, Token name, Type *type) {
-    Local local = (Local){ name, type }; 
-    add_local(block, local); 
+internal Symbol *init_symbol(Token name, Type *type, Expr *initializer) {
+    Symbol *symbol = (Symbol *)malloc(sizeof(Symbol)); 
+    symbol->name = name; 
+    symbol->type = type; 
+    symbol->initializer = initializer; 
+    return symbol;
+}
+
+internal void scope_add_variable(Scope block, Token name, Type *type) {
+    // TODO(ziv): change this to a map`
+    Symbol *symbol = init_symbol(name, type, NULL); 
+    add_decl(block, symbol); 
+}
+
+internal Type *symbol_exist(Scope block, Token name) {
+    
+    Vector *symbols = block.locals;
+    for (int i = 0; i < symbols->index; i++) {
+        Symbol *s = (Symbol *)symbols->data[i]; 
+        
+        Token known_var_name = s->name; // all variable names which have been declared
+        if (known_var_name.len == name.len && 
+            strncmp(name.str, known_var_name.str, known_var_name.len) == 0) {
+            return s->type; 
+        }
+    }
+    
+    return NULL;
 }
 
 internal Type *local_exist(Token var_name) {
@@ -253,62 +283,41 @@ internal Type *local_exist(Token var_name) {
     // TODO(ziv): Implement this using a hash map.
     
     Statement *block = get_curr_scope();
-    if (!block) {
-        // TODO(ziv): NOTE IMPORTANT probably should return global scope here IKD I need to think about this more but (and implement a global scope but ikd which I guess would be in the program structure which I will have it be global such that changes to it will be easy to impelmenet
-        return NULL;
-    }
-    
-    Scope s = block->scope; 
-    
-    for (unsigned int i = 0; i < s.local_index; i++) {
-        Local l = s.locals[i]; 
-        Token known_var_name = l.name; // all variable names which have been declared
-        if (known_var_name.len == var_name.len && 
-            strncmp(var_name.str, known_var_name.str, known_var_name.len) == 0) {
-            return l.type; 
+    if (block) {
+        for (int scope_ind = scope_index-1; scope_ind >= 0; scope_ind--) {
+            block = scopes[scope_ind]; 
+            Assert(block->kind == STMT_SCOPE);
+            
+            Type *ty = symbol_exist(block->block, var_name); 
+            if (ty) return ty; 
         }
     }
-    return NULL;
-}
-
-internal void add_arg(Args **args, Local local) {
-    Args *temp_args = *args; 
     
-    if (temp_args == NULL) {
-        temp_args = (Args *)malloc(sizeof(Args));
-        temp_args->capacity =  2;
-        temp_args->local_index = 0;
-        temp_args->locals = (Local *)realloc(NULL, sizeof(Local)*temp_args->capacity);
-    }
-    else if (temp_args->capacity <= temp_args->local_index) {
-        temp_args->capacity = temp_args->capacity ? temp_args->capacity : 1;
-        temp_args->capacity *= 2;
-        temp_args->locals = (Local *)realloc(temp_args->locals, sizeof(Local)*temp_args->capacity);
-    }
-    
-    temp_args->locals[temp_args->local_index++] = local;
-    *args = temp_args;
+    return symbol_exist(global_block, var_name); 
 }
-
 
 //////////////////////////////////
 /// Parsing of statements
 
-internal Statement *scope() {
-    Statement *stmt = init_scope();
-    push_scope(stmt);
+internal Statement *scope(Statement *block) {
+    push_scope(block);
     
     while (!is_at_end()) {
         if (match(TK_LBRACE)) {
-            return pop_scope();
+            pop_scope(block);
+            return block; // end
         }
         
         Statement *decl_stmt = decloration();
-        vec_push(stmt->scope.statements, decl_stmt); 
+        vec_push(block->block.statements, decl_stmt); 
     }
     
-    consume(TK_LBRACE, "Expected ending of scope '}' ");
-    return stmt;
+    
+    // file has unexpectedly ended 
+    error(peek(), "Unexpected end of file");
+#if DEBUG
+    return NULL;
+#endif 
 }
 
 internal Statement *decloration() {
@@ -338,57 +347,69 @@ internal Statement *variable_decloration(Token name) {
     
     // Add variable name to local scope
     Statement *block = get_curr_scope();
-    if (!block) {
-        // TODO(ziv): change this such that you would be able to declare things 
-        // at a global scope and not only local. 
-        error(name, "Cannot declare variable at global scope");
+    if (block) {
+        scope_add_variable(block->block, name, type);
     }
-    scope_add_variable(block, name, type);
+    else {
+        scope_add_variable(global_block, name, type);
+    }
     
     return init_decl_stmt(name, type, expr);
 }
 
-
 internal Statement *function_decloration(Token name) {
     consume(TK_PROC, "Expected 'proc' keyword for function definition");
-    Args *in_args = arguments();
+    
+    Vector *args = arguments();
     
     consume(TK_RETURN_TYPE, "Expected '->' after arguments"); 
     Type *return_type = vtype();
     
+    // TODO(ziv): enable the option for function prototypes
     consume(TK_RBRACE, "Expected beginning of block '{'");
-    Statement *sc = scope(); 
     
-    return init_func_decl_stmt(name, in_args, return_type, sc);
+    Statement *block =  init_scope();
+    
+    // add to the scope the function arguments 
+    // so you would be able to use them inside 
+    // the scope 
+    for (int i = 0; i < args->index; i++) {
+        add_decl(block->block, (Symbol *)args->data[i]);
+    }
+    
+    // to allow the use of the function name inside the function I first create the function type and insert it into the global scope. Then I parse the block
+    Type *ty = init_type(TYPE_FUNCTION, NULL, args, return_type); 
+    add_decl(global_block, init_symbol(name, ty, NULL));  // add func decl to global scope
+    
+    block = scope(block);
+    
+    
+    return init_func_decl_stmt(name, args, return_type, block);
 }
 
-internal Args *arguments() {
-    Local local = {0};
+internal Vector *arguments() {
     
-    Args *args = NULL;
+    Vector *args = init_vec(); 
     
-    // TODO(ziv): REDO THIS PLEASE!!!!!!!!!!!!!
-    
-    // @nocheckin
     consume(TK_LPARAN, "Expected '(' for arguments");
     
-    while (!check(TK_RPARAN)) {
+    while (!check(TK_RPARAN) && match(TK_IDENTIFIER)) {
         
-        if (match(TK_IDENTIFIER)) {
-            Token name = previous();
-            consume(TK_COLON, "Expected ':' after argument name");
-            Type *type = vtype(); 
-            
-            local.name = name; 
-            local.type = type; 
-            add_arg(&args, local); 
-            
-            if (!match(TK_COMMA)) {
-                break;
-            }
-            
+        Token name = previous(); 
+        consume(TK_COLON, "Expected ':' after variable name");
+        Type *type = vtype(); 
+        
+        Expr *expr = NULL;
+        if (match(TK_ASSIGN)) {
+            expr = expression(); 
         }
         
+        Symbol *symb = init_symbol(name, type, expr);
+        vec_push(args, symb);
+        
+        if (!match(TK_COMMA)) {
+            break;
+        }
     } 
     
     consume(TK_RPARAN, "Expected ')' for end of arguments");
@@ -399,12 +420,39 @@ internal Args *arguments() {
 internal Type *vtype() {
     
     // TODO(ziv): support struct/enum types
-    Token_Kind ty = advance().kind;
-    if (TK_TYPE_BEGIN <= ty && ty <= TK_TYPE_END) { // this catches all basic types
-        return init_type(previous()); 
+    
+    static Atom_Kind tk_to_atom_type[] =  {
+        [TK_S8_TYPE]  = TYPE_S8,
+        [TK_S16_TYPE] = TYPE_S16,
+        [TK_S32_TYPE] = TYPE_S32,
+        
+        [TK_S8_TYPE]  = TYPE_U8,
+        [TK_U16_TYPE] = TYPE_U16,
+        [TK_U32_TYPE] = TYPE_U32,
+        
+        [TK_VOID_TYPE]   = TYPE_VOID, 
+        [TK_INT_TYPE]    = TYPE_INTEGER, 
+        [TK_STRING_TYPE] = TYPE_STRING, 
+        
+        // Should this be a "atomic type"? or should it just be a special add-on pointer something type?
+        [TK_STAR] = TYPE_POINTER, 
+    };
+    
+    Token_Kind tk_kind = advance().kind;
+    if (TK_TYPE_BEGIN <= tk_kind && tk_kind <= TK_TYPE_END) {
+        // handle atomic type 
+        Atom_Kind atom_kind = tk_to_atom_type[tk_kind];
+        return init_type(atom_kind, NULL, NULL, NULL); 
+    }
+    else if (tk_kind == TK_STAR) {
+        return init_type(TYPE_POINTER, vtype(), NULL, NULL);
     }
     
-    error(peek(), "Expected type in a variable decloration");
+    // how about functions? 
+    
+    // TODO(ziv): add support for arrays, not only pointers
+    
+    error(peek(), "Expected type after decloration"); // TODO(ziv): maybe this should be more clear.
 #ifdef DEBUG 
     return NULL;
 #endif 
@@ -413,7 +461,7 @@ internal Type *vtype() {
 internal Statement *statement() {
     if (match(TK_PRINT)) return print_stmt();  // this needs more consideration
     if (match(TK_RETURN)) return return_stmt();
-    if (match(TK_RBRACE)) return scope(); 
+    if (match(TK_RBRACE)) return scope(init_scope()); 
     return expr_stmt();
 }
 
@@ -454,7 +502,7 @@ internal Statement *init_print_stmt(Expr *expr) {
 }
 
 
-internal Statement *init_func_decl_stmt(Token name, Args *args, Type *return_type, Statement *sc) {
+internal Statement *init_func_decl_stmt(Token name, Vector *args, Type *return_type, Statement *sc) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_FUNCTION_DECL; 
     stmt->func.name = name;
@@ -476,10 +524,8 @@ internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer) {
 internal Statement *init_scope() {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_SCOPE;
-    stmt->scope.statements = init_vec(); 
-    stmt->scope.local_index = 0; 
-    stmt->scope.capacity = 0; 
-    stmt->scope.locals = NULL; 
+    stmt->block.statements = init_vec(); 
+    stmt->block.locals = init_vec(); 
     return stmt;
 }
 
@@ -540,7 +586,7 @@ internal void error(Token token, char *msg) {
 
 internal void syntax_error(Token token, const char *err) {
     char buff[100]; 
-    sprintf(buff, "\x1b[31mSyntax error:\x1b[0m %s", err); 
+    sprintf(buff, "Syntax error: %s", err); 
     error(token, buff); 
 }
 
@@ -551,36 +597,27 @@ internal void report(int line, int ch, char *msg) {
     fprintf(stderr, "\n");
     strcat(err, msg); 
     strcat(err, _itoa(line, buff, 10)); 
+    //strcat(err, ":");
+    //strcat(err, _itoa(ch, buff, 10)); 
     fprintf(stderr, err);
     fprintf(stderr, "\n");
     
     // rewind 'code' to line 
-    for (int l = 0; *code && line-2 > l; code++) {
+    for (int l = 0; *code && line-1 > l; code++) {
         if (*code == '\n') {
             l++;
         }
     }
     
     int count = 0; 
-    if (line > 1) {
-        char *temp = code; 
-        for (; *temp && *temp != '\n'; temp++, count++);
-        temp++;
-        for (; *temp && *temp != '\n'; temp++, count++);
-    }
-    else {
-        // special case for when the error is at line 1
-        // TODO(ziv):  @notchecked check whether this actually works
-        char *temp = code; 
-        for (; *temp && *temp != '\n'; temp++, count++);
-    }
+    
+    char *temp = code; 
+    for (; *temp && *temp != '\n'; temp++, count++);
     
     strncpy(buff, code, count+1);
     buff[count+1] = '\0';
     fprintf(stderr, buff);
-    fprintf(stderr, "\n");
     fprintf(stderr, "%*c", ch,'^');
-    
     fprintf(stderr, "\n");
     
     // NOTE(ziv): for the time being, when 
@@ -589,8 +626,6 @@ internal void report(int line, int ch, char *msg) {
     // This is done to simplify the amounts of things 
     // that I need to think about. 
     // I might change this when I have the will.. :)
-    
-    wprintf(L"\x1b[0m\r\n");
     
     Assert(false);
     exit(-1); 
@@ -617,80 +652,4 @@ internal bool internal_match(int n, ...) {
     }
     va_end(kinds);
     return false; 
-}
-
-//////////////////////////////////
-// Debug printing of expressions
-// NOTE(ziv): this is deprecated
-
-void print_literal(Expr *expr) {
-    Assert(expr->kind == EXPR_LITERAL);
-    
-    switch (expr->literal.kind) {
-        
-        case VALUE_FALSE: printf("false"); break;
-        case VALUE_TRUE:  printf("true"); break;
-        case VALUE_NIL:   printf("nil"); break;
-        
-        case VALUE_INTEGER: {
-            u64 num = (u64)expr->literal.data; 
-            printf("%I64d", num);
-        } break;
-        
-        case VALUE_STRING: {
-            printf((char *)expr->literal.data);
-        } break;
-        
-    }
-    
-}
-
-void print_operation(Token operation) {
-    switch (operation.kind) {
-        
-        case TK_PLUS:  printf("+"); break;
-        case TK_MINUS: printf("-"); break;
-        case TK_BANG:  printf("!");break;
-        case TK_SLASH: printf("/"); break;
-        case TK_STAR:  printf("*");break;
-        case TK_GREATER: printf(">");break;
-        case TK_LESS:    printf("<");break;
-        case TK_ASSIGN:  printf("="); break;
-        case TK_GREATER_EQUAL: printf(">=");break;
-        case TK_LESS_EQUAL:    printf("<=");break;
-        case TK_BANG_EQUAL:    printf("!=");break;
-        case TK_EQUAL_EQUAL:   printf("==");break;
-        
-    }
-}
-
-void print(Expr *expr) {
-    Assert(expr->kind & (EXPR_GROUPING | EXPR_LITERAL | EXPR_UNARY | EXPR_BINARY));
-    
-    switch(expr->kind) {
-        case EXPR_BINARY: {
-            printf("(");
-            print_operation(expr->operation); printf(" ");
-            print(expr->left); printf(" ");
-            print(expr->right); 
-            printf(")");
-        } break;
-        
-        case EXPR_UNARY: {
-            printf("(");
-            print_operation(expr->unary.operation); printf(" ");
-            print(expr->unary.right);
-            printf(")");
-        } break;
-        
-        case EXPR_GROUPING: {
-            print(expr->grouping.expr);
-        } break;
-        
-        case EXPR_LITERAL: {
-            print_literal(expr);
-        } break;
-        
-    }
-    
 }

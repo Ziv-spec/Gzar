@@ -1,10 +1,4 @@
 
-/* 
-Currently the way I will compile my code to machine code is going to be 
-using a "Stack Machine". This will produce horrable code but it is 
- extremely simple to program and make sure works correctly. 
-*/
-
 
 internal void gen() {
     

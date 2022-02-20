@@ -1,13 +1,33 @@
 
 
 
-
-
-/* 
-internal bool type_equal(Type *t1, Type t2) {
+internal bool type_equal(Type *t1, Type *t2) {
     
+    if (t1->kind != t2->kind) {
+        return false; 
+    }
+    
+    if (t1->subtype && t2->subtype) {
+        return type_equal(t1->subtype, t2->subtype); 
+    }
+    else if (t1->kind == TYPE_FUNCTION && t2->kind == TYPE_FUNCTION) {
+        if (t1->symbols->index == t1->symbols->index) {
+            for (int i = 0; i < t1->symbols->index; i++) {
+                
+                Symbol *s1 = (Symbol *)t1->symbols->data[i]; 
+                Symbol *s2 = (Symbol *)t2->symbols->data[i]; 
+                
+                if (!type_equal(s1->type, s2->type)) {
+                    return false; 
+                }
+            }
+        }
+    }
+    
+    return true;
 }
 
+/*
 internal bool type_op_check(Type *type, Token operation) {
     
     if (type->kind) {
@@ -18,26 +38,12 @@ internal bool type_op_check(Type *type, Token operation) {
 }
  */
 
-internal Type *init_type(Token type_token) {
-    
-    // just a fast map from the token type to the actual type (which I will of course will expand upon I think) because of future considerations which might turn out to be useless but this is a pretty fast conversion so I hope that it does not matter :).
-    
-    static Type_Kind map_token_to_type[] =  {
-        
-        [TK_S8_TYPE]  = TYPE_S8,
-        [TK_S16_TYPE] = TYPE_S16,
-        [TK_S32_TYPE] = TYPE_S32,
-        
-        [TK_S8_TYPE]  = TYPE_U8,
-        [TK_U16_TYPE] = TYPE_U16,
-        [TK_U32_TYPE] = TYPE_U32,
-        
-        [TYPE_VOID]      = TK_VOID_TYPE, 
-        [TK_INT_TYPE]    = TYPE_INTEGER, 
-        [TK_STRING_TYPE] = TYPE_STRING, 
-    };
-    
-    Type *type = (Type *)malloc(sizeof(Type)); 
-    type->kind = map_token_to_type[type_token.kind]; 
-    return type;
+internal Type *init_type(Atom_Kind kind, Type *subtype, Vector *symbols, Type *type) {
+    Type *ty = (Type *)malloc(sizeof(Type)); 
+    ty->kind = kind;
+    ty->subtype = subtype;
+    ty->symbols = symbols;
+    ty->type = type;
+    return ty;
 }
+

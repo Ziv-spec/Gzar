@@ -72,55 +72,36 @@ struct Expr {
 
 typedef enum Statement_Kind Statement_Kind; 
 typedef struct Statement Statement; 
-typedef struct Local Local; 
+typedef struct Symbol Symbol; 
 typedef struct Scope Scope;
-typedef struct Args Args; 
 
 enum Statement_Kind {
     STMT_EXPR, 
     STMT_PRINT_EXPR, 
-    STMT_VAR_DECL,
     STMT_RETURN,
     STMT_SCOPE,
-    STMT_FUNCTION_DECL,
-}; 
-
-struct Local {
-    Token name; 
-    Type *type; 
-}; 
-
-struct Args {
-    unsigned int local_index; 
-    unsigned int capacity; 
-    Local *locals; 
-};
-
-typedef struct Decl Decl; 
-struct Decl {
-    Token name; 
-    Type *type; 
     
-    Expr *initializer;
-    Statement *block;
+    STMT_DECL_BEGIN, 
+    STMT_VAR_DECL,
+    STMT_FUNCTION_DECL,
+    STMT_DECL_END, 
 }; 
+
+struct Symbol {
+    Token name; 
+    Type *type;
+    Expr *initializer;
+}; 
+
+struct Scope {
+    Vector *locals;
+    Vector *statements;
+};
 
 struct Statement {
     Statement_Kind kind; 
     
     union {
-        Decl decl; 
-        
-        /*         
-                struct {
-                    Expr *init_expr; 
-                    Expr *expr; 
-                    Expr *next_expr; 
-                    Statement *block;
-                    Statement *else_body; 
-                    Statement *next; 
-                };
-                 */
         
         union {
             
@@ -138,19 +119,12 @@ struct Statement {
             
             struct Function {
                 Token name; 
-                Args *args; 
+                Vector *args; 
                 Type *return_type; 
                 Statement *sc; 
             } func;
             
-            struct Scope {
-                unsigned int local_index;
-                unsigned int capacity;
-                Local *locals;
-                
-                // dynamic array  
-                Vector *statements;
-            } scope;
+            Scope block;
             
         };
         
@@ -164,19 +138,11 @@ struct Statement {
 
 typedef struct Program Program; 
 struct Program {
-    unsigned int index;
-    unsigned int capacity; 
-    Statement *statements; 
-    
-    // probably should also contain 
-    // a global map of declorations
-    // which will map a decl name -> pointer
-    // so I will be able to have a 
-    // function to check whether 
-    // something exists in the global
-    // scope.
-    
+    Vector *decls; 
+    Scope block;
 };
+
+static Scope global_block;
 
 
 /* initializers for the different types of expressions */ 
@@ -198,8 +164,8 @@ internal Statement *next_scop();
 internal void push_scope(Statement *block);
 internal Statement *pop_scope();
 
-internal void add_local(Statement *block, Local local);
-internal void scope_add_variable(Statement *block, Token name, Type *type);
+internal void add_decl(Scope block, Symbol *decl);
+internal void scope_add_variable(Scope block, Token name, Type *type);
 
 ////////////////////////////////
 
@@ -210,7 +176,7 @@ internal Statement *init_print_stmt(Expr *expr);
 internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer);
 internal Statement *init_return_stmt(Expr *expr);
 internal Statement *init_scope(); 
-internal Statement *init_func_decl_stmt(Token name, Args *args, Type *type, Statement *sc);
+internal Statement *init_func_decl_stmt(Token name, Vector *args, Type *type, Statement *sc);
 
 
 /* helper functions */
@@ -251,7 +217,7 @@ internal Statement *expr_stmt();
 internal Statement *return_stmt();
 
 /* other */
-internal Args      *arguments();
+internal Vector    *arguments();
 internal Type      *vtype();
 
 internal void parse_file();

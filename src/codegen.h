@@ -15,11 +15,37 @@
 internal void internal_output(int num, ...);
 #define output(...) internal_output(COUNT_ARGS(__VA_ARGS__), ##__VA_ARGS__)
 
-/* functions for generating nasm assembly from AST */
 internal void gen();
 internal void gen_expr(Expr *expr);
 internal void gen_op(Token operation); 
 internal void gen_literal(Expr *expr);
+
+
+static char *scratch_names[] = { 
+    "rbx", "r10", "r11", "r12", "r13", "r14", "r15" 
+}; 
+
+// for creating scratch registers (registers for general use like for a+b I wouldn't use registers that I would use for a function call when having a known calling convension). 
+internal int scratch_alloc(); 
+internal void scratch_free(int r);
+internal const char *scratch_name(int r); 
+
+// for creating labels
+internal int labal_create(); 
+internal const char *labal_name(int l); 
+
+
+
+/* 
+const char *gen_literal() {
+#define SIZE 20
+    static char *str[SIZE]; 
+    snprintf(str, SIZE, ); 
+#undef SIZE
+    return str; 
+}
+ */
+
 
 //////////////////////////////////
 

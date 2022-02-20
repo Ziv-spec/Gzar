@@ -2,7 +2,7 @@
 // TODO(ziv): Update this
 // Language spec (this is not using BNF but is kind of similar): 
 //
-// program -> scope*
+// program -> decloration*
 // 
 // scope -> "{" statement* "}"
 //
@@ -54,12 +54,25 @@
 //     block
 
 // var decloration ->
-//     type
 //     name
 //     initializer
+//     type
+
+// func decloration -> 
+//     name 
+//     input args
+//     block
+//     type 
+
+// so a decloration could be: 
+// decl 
+//     name
+//     expr 
+//     type 
+//     block
+
 
 // only the setup/cleanup for function arguments are what matters to a function otherwise the use of them inside the function is the same across the whole function so storing the type data inside the local/global map which I have is fine but I need to distinct them from this setup/cleanup which they must go through (aka setup for recieving the variables when getting called and cleanup from when they want to return soemthing). 
-
 
 #define internal static 
 
@@ -142,9 +155,9 @@ internal char *slice_to_str(char *slice, unsigned int size) {
 // this is going to be somewhat of a generic way of doing dynamic arrays in C 
 // NOTE(ziv): This is by no means a good way of doing this but it will work :)
 
-typedef struct Vecotr Vector; 
-struct Vecotr {
-    int index; 
+typedef struct Vector Vector; 
+struct Vector {
+    int index;
     int capacity; 
     void **data;
 }; 
@@ -172,6 +185,22 @@ internal Vector *vec_push(Vector *vec, void *elem) {
 internal void *vec_pop(Vector *vec) {
     Assert(vec && vec->index > 0); 
     return vec->data[vec->index--];
+}
+
+internal bool vec_equal(Vector *src1, Vector *src2) {
+    
+    if (src1->index != src2->index) 
+        return false; 
+    
+    // NOTE(ziv): maybe I should think of using memcpy 
+    int len = src1->index; 
+    for (int i = 0; i < len; i++) {
+        if (src1->data[i] != src2->data[i]) {
+            return false; 
+        }
+    }
+    
+    return true;
 }
 
 
@@ -213,7 +242,7 @@ int main(int argc, char *argv[]) {
     // open the first file and read it's contents
     // 
     
-    FILE *file = fopen(filename, "rt");
+    FILE *file = fopen(filename, "rb"); // I wnat to read text but if I do then the fread would not read the correct amount of bytes as it should. To fix this I am using "rb" instead of "rt" 
     if (!file) {
         fprintf(stderr, "Error: failed to open file '%s'\n", filename);
     }
@@ -243,11 +272,7 @@ int main(int argc, char *argv[]) {
     bool success = lex_file(&lexer);
     if (success == false) return 0;
     
-    parse_file(); 
-    
-    
-    
-    
+    parse_file();
     
     // gen();
     
