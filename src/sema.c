@@ -1,5 +1,4 @@
 
-
 // quick way of checking whether the type is atomic
 // like interger | string | void | ... 
 #define is_atomic(t) ((t->kind) < TYPE_ATOMIC_STUB)
@@ -131,7 +130,7 @@ internal Type *init_type(Type_Kind kind, Type *subtype, Vector *symbols) {
 }
 
 internal Type *sema_expr(Expr *expr) {
-    
+    if (!expr) return NULL;
     // recursively go and typecheck the expression 
     // and then return the type of the resulting expression
     // do note that in this phase if it failes it just returns
@@ -333,27 +332,27 @@ internal bool sema_statement(Statement *stmt) {
         
         case STMT_FUNCTION_DECL: {
             
-            Vector *args = stmt->type->symbols; 
+            Vector *args = stmt->func.type->symbols; 
             for (int i = 0; i < args->index; i++) {
                 Statement *var_decl = (Statement *)args->data[i]; 
-                sema_var_decl(var_decl); 
+                
+                sema_statement(var_decl); 
                 
                 
             }
             
             Statement *block = stmt->func.sc;
-            sema_block(block); 
+            return sema_block(block); 
             
         } break; 
         
         
         case STMT_VAR_DECL: {
-            
-            /*             
-                        Token name = stmt->func.name; 
-                        Type *ty = stmt->func.ty;
-                        Expr *expr = stmt->func.initializer; 
-                         */
+            Expr *expr = stmt->var_decl.initializer; 
+            Type *ty = sema_expr(expr);
+            if (!(ty && stmt->var_decl.type) || !type_equal(ty, stmt->var_decl.type)) {
+                return false; 
+            }
             
         } break;
         
@@ -392,8 +391,6 @@ internal void sema_file(Program *prog) {
         
         // not sure what to do with this but okay
     }
-    
-    
 }
 
 
@@ -428,6 +425,9 @@ main :: proc (s : u8) -> s32 {
         c = a1 + b; // using variables from a outer scope
     }
     
+// function calls
+main(a, b, temp());
+
     return a1+b1;
 }
 

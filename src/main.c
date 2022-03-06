@@ -277,7 +277,7 @@ int main(int argc, char *argv[]) {
     Program prog = {0};
     parse_file(&prog);
     
-    // sema_file(&prog); 
+    sema_file(&prog); 
     
     // gen();
     

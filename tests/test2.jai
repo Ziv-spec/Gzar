@@ -1,21 +1,7 @@
 
 
 
-a : int = 234; // global variables 
-
-main :: proc (something: int, something_else: int) -> int {
-    return something + something_else; 
-}
-
-swap :: proc (a: int, b: int) -> void {
-    temp: int; 
-    
-    temp = a; 
-    a = b; 
-    b = temp;
-    
-    
-    main(a, b, temp());
-    
+main :: proc () -> int {
+    "this is a random string that I will use to test this thingy here" + "alskdjflkajsdf"; 
     
 }
