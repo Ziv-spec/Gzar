@@ -1,18 +1,17 @@
 
-internal void parse_file() {
+internal void parse_file(Program *prog) {
     
-    Program prog = {0}; 
-    prog.decls = init_vec();
-    prog.block.locals = init_vec(); 
-    prog.block.statements = init_vec(); 
-    global_block = prog.block;
+    prog->decls = init_vec();
+    prog->block.locals = init_vec(); 
+    prog->block.statements = init_vec(); 
+    global_block = prog->block;
     
     Token tk = peek(); 
     while (tk.kind != TK_EOF) {
         Statement *stmt = decloration();
         
         if (STMT_DECL_BEGIN < stmt->kind && stmt->kind < STMT_DECL_END) {
-            vec_push(prog.decls, stmt);
+            vec_push(prog->decls, stmt);
         }
         else {
             // TODO(ziv): maybe print different errors for different statement kinds
@@ -83,30 +82,63 @@ internal Expr *factor() {
         Expr *right = factor(); 
         
         // if (type_equal(expr, right))
-        
-        
         expr = init_binary(expr, operation, right);
     }
     
     return expr;
 }
 
+internal Expr *call(); 
+internal Expr *init_call(Expr *name, Expr *args); 
+internal Expr *init_arguments(Expr *arg, Expr *next); 
+internal Expr *arguments(); 
+
+
 internal Expr *unary() {
     
-    while (match(TK_BANG, TK_MINUS)) {
+    if (match(TK_BANG, TK_MINUS)) {
         Token operation = previous();
         Expr *right = unary();
         
         return init_unary(operation, right);
     }
     
-    return primary();
+    return call();
+}
+
+internal Expr *call() {
+    Expr *expr = primary();
+    
+    if (expr->kind == EXPR_LVAR && match(TK_LPARAN)) {
+        Expr *args = arguments(); 
+        if (args) {
+            consume(TK_RPARAN, "Expected ')' in a function call"); 
+        }
+        return init_call(expr, args); 
+    }
+    
+    return expr;
+}
+
+internal Expr *arguments() {
+    if (match(TK_RPARAN)) {
+        return NULL;
+    }
+    
+    Expr *expr = expression();
+    while (match(TK_COMMA)) {
+        Expr *next = expression(); 
+        expr = init_arguments(expr, next); 
+    }
+    
+    return expr;
 }
 
 internal Expr *primary() {
-    if (match(TK_FALSE)) return init_literal(NULL, VALUE_FALSE);
-    if (match(TK_TRUE))  return init_literal(NULL, VALUE_TRUE);
-    if (match(TK_NIL))   return init_literal(NULL, VALUE_NIL);
+    // TODO(ziv): maybe I should introduce the boolean type if so, I would need to change here the TYPE_S64 to well you know boolean which would make sense
+    if (match(TK_FALSE)) return init_literal(0, TYPE_BOOL);
+    if (match(TK_TRUE))  return init_literal((void *)1, TYPE_BOOL);
+    if (match(TK_NIL))   return init_literal(NULL, TYPE_VOID);
     
     // number & string
     if (match(TK_NUMBER, TK_STRING)) { 
@@ -115,13 +147,13 @@ internal Expr *primary() {
         
         if (token.kind == TK_NUMBER) {
             u64 value = atoi(token.str); 
-            result = init_literal((void *)value, VALUE_INTEGER); 
+            result = init_literal((void *)value, TYPE_S64); 
         }
         else {
             char *buff = (char *)malloc(token.len+1); 
             strncpy(buff, token.str, token.len);
             buff[token.len] = '\0';
-            result = init_literal((void *)buff, VALUE_STRING); 
+            result = init_literal((void *)buff, TYPE_STRING); 
             
         }
         
@@ -174,6 +206,7 @@ internal Expr *primary() {
 internal Expr *init_binary(Expr *left, Token operation, Expr *right) {
     Expr *result_expr = (Expr *)malloc(sizeof(Expr));
     result_expr->kind = EXPR_BINARY; 
+    result_expr->type = NULL;
     result_expr->left = left; 
     result_expr->operation = operation; 
     result_expr->right = right;
@@ -183,14 +216,16 @@ internal Expr *init_binary(Expr *left, Token operation, Expr *right) {
 internal Expr *init_unary(Token operation, Expr *right) {
     Expr *result_expr = (Expr *)malloc(sizeof(Expr));
     result_expr->kind = EXPR_UNARY; 
+    result_expr->type = NULL;
     result_expr->unary.operation = operation; 
     result_expr->unary.right = right; 
     return result_expr;
 }
 
-internal Expr *init_literal(void *data, Value_Kind kind) {
+internal Expr *init_literal(void *data, Type_Kind kind) {
     Expr *result_expr = (Expr *)malloc(sizeof(Expr));
     result_expr->kind = EXPR_LITERAL; 
+    result_expr->type = NULL;
     result_expr->literal.kind = kind; 
     result_expr->literal.data = data; 
     return result_expr;
@@ -198,6 +233,7 @@ internal Expr *init_literal(void *data, Value_Kind kind) {
 
 internal Expr *init_grouping(Expr *expr) {
     Expr *result_expr = (Expr *)malloc(sizeof(Expr));
+    result_expr->type = NULL;
     result_expr->kind = EXPR_GROUPING;  
     result_expr->grouping.expr = expr; 
     return result_expr;
@@ -206,6 +242,7 @@ internal Expr *init_grouping(Expr *expr) {
 internal Expr *init_assignement(Expr *left_var, Expr *rvalue) {
     Expr *result_expr = (Expr *)malloc(sizeof(Expr));
     result_expr->kind = EXPR_ASSIGN;  
+    result_expr->type = NULL;
     result_expr->assign.lvar = left_var;  
     result_expr->assign.rvalue = rvalue; 
     return result_expr;
@@ -214,7 +251,24 @@ internal Expr *init_assignement(Expr *left_var, Expr *rvalue) {
 internal Expr *init_lvar(Token name) {
     Expr *result_expr = (Expr *)malloc(sizeof(Expr)); 
     result_expr->kind = EXPR_LVAR;
+    result_expr->type = NULL;
     result_expr->lvar.name = name;
+    return result_expr;
+}
+
+internal Expr *init_arguments(Expr *lvar, Expr *next) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr)); 
+    result_expr->kind = EXPR_ARGUMENTS;
+    result_expr->args.lvar  = lvar;
+    result_expr->args.next = next;
+    return result_expr;
+}
+
+internal Expr *init_call(Expr *name, Expr *args) {
+    Expr *result_expr = (Expr *)malloc(sizeof(Expr)); 
+    result_expr->kind = EXPR_CALL;
+    result_expr->call.name = name;
+    result_expr->call.args = args;
     return result_expr;
 }
 
@@ -263,7 +317,6 @@ internal void scope_add_variable(Scope block, Token name, Type *type) {
 }
 
 internal Type *symbol_exist(Scope block, Token name) {
-    
     Vector *symbols = block.locals;
     for (int i = 0; i < symbols->index; i++) {
         Symbol *s = (Symbol *)symbols->data[i]; 
@@ -283,8 +336,7 @@ internal Type *local_exist(Token var_name) {
     // TODO(ziv): Implement this using a hash map.
     
     Statement *block = get_curr_scope();
-    if (block) {
-        for (int scope_ind = scope_index-1; scope_ind >= 0; scope_ind--) {
+    if (block) {for (int scope_ind = scope_index-1; scope_ind >= 0; scope_ind--) {
             block = scopes[scope_ind]; 
             Assert(block->kind == STMT_SCOPE);
             
@@ -336,7 +388,7 @@ internal Statement *decloration() {
 }
 
 internal Statement *variable_decloration(Token name) {
-    Type *type = vtype(); 
+    Type *type = parse_type(); 
     
     Expr *expr = NULL;
     if (match(TK_ASSIGN)) {
@@ -345,12 +397,22 @@ internal Statement *variable_decloration(Token name) {
     
     consume(TK_SEMI_COLON, "Expected ';' after a variable decloration");
     
-    // Add variable name to local scope
     Statement *block = get_curr_scope();
+    
+    // Add variable name to local scope if it does not exist
     if (block) {
+        Assert(block->kind == STMT_SCOPE);
+        
+        if (symbol_exist(block->block, name)) {
+            // TODO(ziv): change the way that I do this
+            error(name, "Variable declared more than once in the same scope");
+        }
         scope_add_variable(block->block, name, type);
     }
     else {
+        if (symbol_exist(global_block, name)) {
+            error(name, "Variable declared more than once at global scope");
+        }
         scope_add_variable(global_block, name, type);
     }
     
@@ -360,10 +422,10 @@ internal Statement *variable_decloration(Token name) {
 internal Statement *function_decloration(Token name) {
     consume(TK_PROC, "Expected 'proc' keyword for function definition");
     
-    Vector *args = arguments();
+    Vector *args = function_arguments();
     
-    consume(TK_RETURN_TYPE, "Expected '->' after arguments"); 
-    Type *return_type = vtype();
+    consume(TK_RETURN_TYPE, "Expected '->' after function_arguments"); 
+    Type *return_type = parse_type();
     
     // TODO(ziv): enable the option for function prototypes
     consume(TK_RBRACE, "Expected beginning of block '{'");
@@ -378,16 +440,15 @@ internal Statement *function_decloration(Token name) {
     }
     
     // to allow the use of the function name inside the function I first create the function type and insert it into the global scope. Then I parse the block
-    Type *ty = init_type(TYPE_FUNCTION, NULL, args, return_type); 
+    Type *ty = init_type(TYPE_FUNCTION, return_type, args); 
     add_decl(global_block, init_symbol(name, ty, NULL));  // add func decl to global scope
     
     block = scope(block);
     
-    
-    return init_func_decl_stmt(name, args, return_type, block);
+    return init_func_decl_stmt(name, ty, block);
 }
 
-internal Vector *arguments() {
+internal Vector *function_arguments() {
     
     Vector *args = init_vec(); 
     
@@ -397,7 +458,7 @@ internal Vector *arguments() {
         
         Token name = previous(); 
         consume(TK_COLON, "Expected ':' after variable name");
-        Type *type = vtype(); 
+        Type *type = parse_type(); 
         
         Expr *expr = NULL;
         if (match(TK_ASSIGN)) {
@@ -417,11 +478,14 @@ internal Vector *arguments() {
     return args;
 }
 
-internal Type *vtype() {
+internal Type *parse_type() {
     
     // TODO(ziv): support struct/enum types
+    // NOTE(ziv): The function type creation does not happen here 
+    // because doing it that way would restrict me in a couple of 
+    // major ways. So instead I am doing it in the 'function_decloration'
     
-    static Atom_Kind tk_to_atom_type[] =  {
+    static Type_Kind tk_to_atom_type[] =  {
         [TK_S8_TYPE]  = TYPE_S8,
         [TK_S16_TYPE] = TYPE_S16,
         [TK_S32_TYPE] = TYPE_S32,
@@ -431,24 +495,20 @@ internal Type *vtype() {
         [TK_U32_TYPE] = TYPE_U32,
         
         [TK_VOID_TYPE]   = TYPE_VOID, 
-        [TK_INT_TYPE]    = TYPE_INTEGER, 
         [TK_STRING_TYPE] = TYPE_STRING, 
-        
-        // Should this be a "atomic type"? or should it just be a special add-on pointer something type?
-        [TK_STAR] = TYPE_POINTER, 
+        [TK_INT_TYPE]    = TYPE_S64, 
+        [TK_STAR]        = TYPE_POINTER, 
     };
     
     Token_Kind tk_kind = advance().kind;
     if (TK_TYPE_BEGIN <= tk_kind && tk_kind <= TK_TYPE_END) {
         // handle atomic type 
-        Atom_Kind atom_kind = tk_to_atom_type[tk_kind];
-        return init_type(atom_kind, NULL, NULL, NULL); 
+        Type_Kind atom_kind = tk_to_atom_type[tk_kind];
+        return init_type(atom_kind, NULL, NULL); 
     }
     else if (tk_kind == TK_STAR) {
-        return init_type(TYPE_POINTER, vtype(), NULL, NULL);
+        return init_type(TYPE_POINTER, parse_type(), NULL);
     }
-    
-    // how about functions? 
     
     // TODO(ziv): add support for arrays, not only pointers
     
@@ -490,6 +550,7 @@ internal Statement *expr_stmt() {
 internal Statement *init_expr_stmt(Expr *expr) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_EXPR; 
+    stmt->type = NULL; 
     stmt->print_expr = expr; 
     return stmt;
 }
@@ -497,24 +558,25 @@ internal Statement *init_expr_stmt(Expr *expr) {
 internal Statement *init_print_stmt(Expr *expr) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_PRINT_EXPR; 
+    stmt->type = NULL; 
     stmt->print_expr = expr; 
     return stmt;
 }
 
-
-internal Statement *init_func_decl_stmt(Token name, Vector *args, Type *return_type, Statement *sc) {
+internal Statement *init_func_decl_stmt(Token name, Type *ty, Statement *sc) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_FUNCTION_DECL; 
+    stmt->type = NULL; 
     stmt->func.name = name;
-    stmt->func.args = args;
-    stmt->func.return_type = return_type;
-    stmt->func.sc = sc;
+    stmt->func.type = ty;
+    stmt->func.sc   = sc;
     return stmt;
 }
 
 internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_VAR_DECL; 
+    stmt->type = NULL; 
     stmt->var_decl.type = type; 
     stmt->var_decl.name = name; 
     stmt->var_decl.initializer = initializer; 
@@ -524,6 +586,7 @@ internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer) {
 internal Statement *init_scope() {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_SCOPE;
+    stmt->type = NULL; 
     stmt->block.statements = init_vec(); 
     stmt->block.locals = init_vec(); 
     return stmt;
@@ -532,6 +595,7 @@ internal Statement *init_scope() {
 internal Statement *init_return_stmt(Expr *expr) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement));
     stmt->kind = STMT_RETURN; 
+    stmt->type = NULL; 
     stmt->ret = expr; 
     return stmt;
 }
@@ -602,7 +666,7 @@ internal void report(int line, int ch, char *msg) {
     fprintf(stderr, err);
     fprintf(stderr, "\n");
     
-    // rewind 'code' to line 
+    // rewind 'code' to the line 
     for (int l = 0; *code && line-1 > l; code++) {
         if (*code == '\n') {
             l++;
@@ -613,10 +677,8 @@ internal void report(int line, int ch, char *msg) {
     
     char *temp = code; 
     for (; *temp && *temp != '\n'; temp++, count++);
+    fprintf(stderr, slice_to_str(code, count+1));
     
-    strncpy(buff, code, count+1);
-    buff[count+1] = '\0';
-    fprintf(stderr, buff);
     fprintf(stderr, "%*c", ch,'^');
     fprintf(stderr, "\n");
     

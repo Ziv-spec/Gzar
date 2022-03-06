@@ -22,7 +22,7 @@ if "%1" equ "debug" (
   set CL=/MTd /DDEBUG=1 /Od /Zi /Fdgzar.pdb /fsanitize=address
   set LINK=/DEBUG
 ) else (
-  set CL=/O1
+  set CL=/O2
   set LINK=/OPT:REF /OPT:ICF
 )
 

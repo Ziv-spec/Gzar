@@ -2,17 +2,8 @@
 #define PARSER_H
 
 typedef struct Expr Expr; 
-typedef enum Value_Kind Value_Kind; 
 typedef enum Expr_Kind Expr_Kind; 
 typedef Expr Binary; 
-
-enum Value_Kind {
-    VALUE_INTEGER, 
-    VALUE_STRING, 
-    VALUE_FALSE, 
-    VALUE_TRUE, 
-    VALUE_NIL, 
-}; 
 
 enum Expr_Kind {
     EXPR_GROUPING, 
@@ -20,7 +11,9 @@ enum Expr_Kind {
     EXPR_UNARY, 
     EXPR_BINARY, 
     EXPR_ASSIGN, 
-    EXPR_LVAR, 
+    EXPR_LVAR,
+    EXPR_CALL, 
+    EXPR_ARGUMENTS,
 }; 
 
 // TODO(ziv): maybe simplify this model by not using named unions? 
@@ -28,6 +21,7 @@ enum Expr_Kind {
 // but I will have to see whether this adds clarity or not over time. 
 struct Expr {
     Expr_Kind kind; 
+    Type *type;
     
     union {
         struct Grouping {
@@ -35,7 +29,7 @@ struct Expr {
         } grouping;
         
         struct Literal {
-            Value_Kind kind;
+            Type_Kind kind;
             void *data; 
         } literal; 
         
@@ -53,9 +47,20 @@ struct Expr {
             Token name; 
         } lvar; 
         
-        // TODO(ziv): add args expression
-        // TODO(ziv): add a call expression 
+        
         // TODO(ziv): add subscrip expression 
+        // My thoughts after reading this todo a couple weeks later: first I need to implement integer and calling functions before I even think about implementing 
+        // arrays (thought that would be cool)
+        
+        struct Args {
+            Expr *lvar; // current arguemnt
+            Expr *next; // next arguemnt (linked list)
+        } args; 
+        
+        struct Call {
+            Expr *name; 
+            Expr *args; 
+        } call; 
         
         
         // binary expression which the most commonly used
@@ -64,7 +69,7 @@ struct Expr {
         // assume it to be most of the time. 
         struct {
             Expr *left; 
-            Token operation; 
+            Token operation;
             Expr *right; 
         }; 
     }; 
@@ -100,6 +105,7 @@ struct Scope {
 
 struct Statement {
     Statement_Kind kind; 
+    Type *type;
     
     union {
         
@@ -119,8 +125,7 @@ struct Statement {
             
             struct Function {
                 Token name; 
-                Vector *args; 
-                Type *return_type; 
+                Type *type;
                 Statement *sc; 
             } func;
             
@@ -148,7 +153,7 @@ static Scope global_block;
 /* initializers for the different types of expressions */ 
 internal Expr *init_binary(Expr *left, Token operation, Expr *right); 
 internal Expr *init_unary(Token operation, Expr *right); 
-internal Expr *init_literal(void *data, Value_Kind kind); 
+internal Expr *init_literal(void *data, Type_Kind kind); 
 internal Expr *init_grouping(Expr *expr); 
 internal Expr *init_assignement(Expr *lvalue, Expr *rvalue);
 
@@ -176,7 +181,7 @@ internal Statement *init_print_stmt(Expr *expr);
 internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer);
 internal Statement *init_return_stmt(Expr *expr);
 internal Statement *init_scope(); 
-internal Statement *init_func_decl_stmt(Token name, Vector *args, Type *type, Statement *sc);
+internal Statement *init_func_decl_stmt(Token name, Type *ty, Statement *sc);
 
 
 /* helper functions */
@@ -217,8 +222,9 @@ internal Statement *expr_stmt();
 internal Statement *return_stmt();
 
 /* other */
-internal Vector    *arguments();
-internal Type      *vtype();
+internal Vector *function_arguments();
+internal Type   *parse_type();
+internal Type   *symbol_exist(Scope block, Token name); 
 
 internal void parse_file();
 

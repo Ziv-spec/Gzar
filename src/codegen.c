@@ -206,10 +206,12 @@ internal void gen_literal(Expr *expr) {
         //case VALUE_TRUE:  printf("true"); break;
         //case VALUE_NIL:   printf("nil"); break;
         
-        case VALUE_INTEGER: {
-            u64 num = (u64)expr->literal.data; 
-            printf("\tpush %I64d\n", num);
-        } break;
+        /*         
+                case VALUE_LITERAL_INTEGER: {
+                    u64 num = (u64)expr->literal.data; 
+                    printf("\tpush %I64d\n", num);
+                } break;
+                 */
         
         //case VALUE_STRING: {
         //printf((char *)expr->literal.data);

@@ -1,10 +1,9 @@
 //
-// TODO(ziv): Update this
-// Language spec (this is not using BNF but is kind of similar): 
+// Language spec (I might remake this in the BNF): 
 //
 // program -> decloration*
 // 
-// scope -> "{" statement* "}"
+// block -> "{" statement* "}"
 //
 // decloration -> variable_decl
 //     | function_decl
@@ -14,6 +13,7 @@
 //     | while 
 //     | if
 //     | for 
+//     | block
 // 
 // expression -> literal 
 //     | unary
@@ -29,21 +29,21 @@
 //            ">" | "+" | "-" | "*" | "/"
 // 
 // variable_decl -> identifier ":" type ( ("=" expression) | ";" )
-// function_decl -> identifier "::" grouping "->" type scope
+// function_decl -> identifier "::" grouping "->" type block
 // 
 // identifier -> "A-Z" | "a-z" | "_"
 // 
-// NOTE(ziv): For the time being I will now support 16 bit integers in any way
-// type -> "int" | "u32" | "u8" |
-//                 "s32" | "s8"
-//
-// if -> "if" "(" expression ")" scope
-// while -> "while" "(" expression ")" scope
+// type -> "*"? ( "u64" | "u32" | "u8" |
+//                "s64" | "s32" | "s8" |
+//                "int" | "string" | "bool" ) 
+// 
+// if -> "if" "(" expression ")" block
+// while -> "while" "(" expression ")" block
 
-// declorations are statements (correct) but some declorations should have a type I think. 
-// or you know what, a declorations should have a type. but a statment might not. 
+// a function should have a type. but I will not use that type for anything other than
+// for a function call. For this reason I don't spend the time defining a syntax for function pointers. the type is going to be internal.
 
-
+// Toughts for the future
 // if statement -> 
 //     condition
 //     block 
@@ -74,7 +74,7 @@
 
 // only the setup/cleanup for function arguments are what matters to a function otherwise the use of them inside the function is the same across the whole function so storing the type data inside the local/global map which I have is fine but I need to distinct them from this setup/cleanup which they must go through (aka setup for recieving the variables when getting called and cleanup from when they want to return soemthing). 
 
-#define internal static 
+#define internal static
 
 #if DEBUG
 #define Assert(cond) do { if (!(cond)) { __debugbreak(); } } while(0)
@@ -118,6 +118,8 @@ typedef unsigned char bool;
 #define is_digit(ch) ('0'<=(ch) && (ch)<='9')
 #define is_alpha(ch) (('A'<=(ch) && (ch)<='Z') || ('a'<=(ch) && (ch)<='z'))
 #define is_alphanumeric(ch) (is_digit(ch) || is_alpha(ch) || ch == '_')
+
+// #define MAX(a, b) (((a)>(b)) ? (a) : (b))
 
 #define ArrayLength(arr) (sizeof(arr)/sizeof(arr[0]))
 
@@ -209,12 +211,12 @@ static char *code; // currently I only use this for printing error messages insi
 
 
 #include "lexer.h"
-#include "type.h"
+#include "sema.h"
 #include "parser.h"
 #include "codegen.h"
 
 #include "lexer.c"
-#include "type.c"
+#include "sema.c"
 #include "parser.c"
 #include "codegen.c"
 
@@ -272,10 +274,12 @@ int main(int argc, char *argv[]) {
     bool success = lex_file(&lexer);
     if (success == false) return 0;
     
-    parse_file();
+    Program prog = {0};
+    parse_file(&prog);
+    
+    // sema_file(&prog); 
     
     // gen();
-    
     
     free(source_buff); // I don't need to use this but whatever...
     return 0;
