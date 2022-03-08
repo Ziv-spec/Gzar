@@ -77,7 +77,7 @@ internal Expr *term() {
 internal Expr *factor() {
     Expr *expr = unary(); 
     
-    while (match(TK_SLASH, TK_STAR )) {
+    while (match(TK_SLASH, TK_STAR)) {
         Token operation = previous(); 
         Expr *right = factor(); 
         

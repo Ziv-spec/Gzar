@@ -8,7 +8,7 @@
 #define is_unsigned_integer(t) (TYPE_INTEGER_STUB < (t->kind) && (t->kind) < TYPE_UNSIGNED_INTEGER_STUB)
 
 internal Type *get_atom(Type_Kind kind) {
-    Assert(kind < ATOM_ATOMIC_TYPES_STUB);
+    Assert(kind < TYPE_ATOMIC_STUB);
     
     // This is a hack for getting the log2 of a number
     // which results in the correct index for the atom

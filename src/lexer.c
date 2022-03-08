@@ -21,8 +21,8 @@ internal bool get_next_token(Lexer *lexer) {
     
     for (; txt; txt++, loc.ch++) {
         
-        if (*txt == '/') {
-            if (*++txt == '/') { // skip comment
+        if (txt[0] == '/') {
+            if (txt[1] == '/') { // skip comment
                 while (*txt != '\n' && *txt != '\r' && *txt != '\0') { 
                     txt++; loc.ch++; 
                 }
