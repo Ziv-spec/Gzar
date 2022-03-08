@@ -33,7 +33,7 @@ enum Token_Kind {
     TK_INT_TYPE, 
     TK_VOID_TYPE, 
     TK_STRING_TYPE,
-    
+    TK_BOOL_TYPE,
     TK_TYPE_END, 
     
     TK_KEYWORD_END,

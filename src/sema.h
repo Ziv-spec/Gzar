@@ -33,15 +33,16 @@ enum Type_Kind {
     TYPE_STRING = 1 << 9,
     TYPE_BOOL   = 1 << 10,
     
+    TYPE_UNKNOWN  = 1 << 11,
     TYPE_ATOMIC_STUB, 
     
-    TYPE_POINTER  = 1 << 11,
-    TYPE_FUNCTION = 1 << 12,
-    TYPE_ARRAY    = 1 << 13,
+    TYPE_POINTER  = 1 << 12,
+    TYPE_FUNCTION = 1 << 13,
+    TYPE_ARRAY    = 1 << 14,
 }; 
 
 enum Atom_Kind {
-    ATOM_S8 = 1,
+    ATOM_S8 = 0,
     ATOM_S16,
     ATOM_S32,
     ATOM_S64,
@@ -55,6 +56,7 @@ enum Atom_Kind {
     ATOM_STRING,
     ATOM_BOOL,
     
+    ATOM_UNKNOWN,
     ATOM_ATOMIC_TYPES_STUB,
     
     ATOM_VOID_POINTER,
@@ -73,6 +75,7 @@ static Type types_tbl[] = {
     [ATOM_U32] = { TYPE_U32, NULL, NULL }, 
     [ATOM_U64] = { TYPE_U64, NULL, NULL }, 
     
+    [ATOM_UNKNOWN]   = { TYPE_UNKNOWN,NULL, NULL }, 
     [ATOM_VOID]   = { TYPE_VOID,   NULL, NULL }, 
     [ATOM_STRING] = { TYPE_STRING, NULL, NULL }, 
     [ATOM_BOOL]   = { TYPE_BOOL,   NULL, NULL }, 

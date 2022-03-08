@@ -135,10 +135,9 @@ internal Expr *arguments() {
 }
 
 internal Expr *primary() {
-    // TODO(ziv): maybe I should introduce the boolean type if so, I would need to change here the TYPE_S64 to well you know boolean which would make sense
     if (match(TK_FALSE)) return init_literal(0, TYPE_BOOL);
     if (match(TK_TRUE))  return init_literal((void *)1, TYPE_BOOL);
-    if (match(TK_NIL))   return init_literal(NULL, TYPE_VOID);
+    if (match(TK_NIL))   return init_literal(NULL, TYPE_UNKNOWN);
     
     // number & string
     if (match(TK_NUMBER, TK_STRING)) { 
@@ -496,6 +495,7 @@ internal Type *parse_type() {
         
         [TK_VOID_TYPE]   = TYPE_VOID, 
         [TK_STRING_TYPE] = TYPE_STRING, 
+        [TK_BOOL_TYPE]   = TYPE_BOOL, 
         [TK_INT_TYPE]    = TYPE_S64, 
         [TK_STAR]        = TYPE_POINTER, 
     };
@@ -503,6 +503,8 @@ internal Type *parse_type() {
     Token_Kind tk_kind = advance().kind;
     if (TK_TYPE_BEGIN <= tk_kind && tk_kind <= TK_TYPE_END) {
         // handle atomic type 
+        
+        // TODO(ziv): REDO THIS!!!! using the known atomic types 
         Type_Kind atom_kind = tk_to_atom_type[tk_kind];
         return init_type(atom_kind, NULL, NULL); 
     }
@@ -550,7 +552,6 @@ internal Statement *expr_stmt() {
 internal Statement *init_expr_stmt(Expr *expr) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_EXPR; 
-    stmt->type = NULL; 
     stmt->print_expr = expr; 
     return stmt;
 }
@@ -558,7 +559,6 @@ internal Statement *init_expr_stmt(Expr *expr) {
 internal Statement *init_print_stmt(Expr *expr) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_PRINT_EXPR; 
-    stmt->type = NULL; 
     stmt->print_expr = expr; 
     return stmt;
 }
@@ -566,7 +566,6 @@ internal Statement *init_print_stmt(Expr *expr) {
 internal Statement *init_func_decl_stmt(Token name, Type *ty, Statement *sc) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_FUNCTION_DECL; 
-    stmt->type = NULL; 
     stmt->func.name = name;
     stmt->func.type = ty;
     stmt->func.sc   = sc;
@@ -576,7 +575,6 @@ internal Statement *init_func_decl_stmt(Token name, Type *ty, Statement *sc) {
 internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_VAR_DECL; 
-    stmt->type = NULL; 
     stmt->var_decl.type = type; 
     stmt->var_decl.name = name; 
     stmt->var_decl.initializer = initializer; 
@@ -586,7 +584,6 @@ internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer) {
 internal Statement *init_scope() {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_SCOPE;
-    stmt->type = NULL; 
     stmt->block.statements = init_vec(); 
     stmt->block.locals = init_vec(); 
     return stmt;
@@ -595,7 +592,6 @@ internal Statement *init_scope() {
 internal Statement *init_return_stmt(Expr *expr) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement));
     stmt->kind = STMT_RETURN; 
-    stmt->type = NULL; 
     stmt->ret = expr; 
     return stmt;
 }

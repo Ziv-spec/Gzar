@@ -116,6 +116,7 @@ internal bool get_next_token(Lexer *lexer) {
                     [TK_U16_TYPE] = "u16",
                     [TK_U32_TYPE] = "u32",
                     [TK_INT_TYPE] = "int",
+                    [TK_BOOL_TYPE]   = "bool",
                     [TK_STRING_TYPE] = "string",
                     [TK_VOID_TYPE]   = "void",
                     

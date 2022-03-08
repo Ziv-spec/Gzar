@@ -3,6 +3,8 @@
 // like interger | string | void | ... 
 #define is_atomic(t) ((t->kind) < TYPE_ATOMIC_STUB)
 
+#define is_pointer(t) (t->kind == TYPE_POINTER)
+#define is_boolean(t) (t->kind == TYPE_BOOL)
 #define is_integer(t) ((t->kind) < TYPE_UNSIGNED_INTEGER_STUB)
 #define is_signed_integer(t) ((t->kind) < TYPE_INTEGER_STUB)
 #define is_unsigned_integer(t) (TYPE_INTEGER_STUB < (t->kind) && (t->kind) < TYPE_UNSIGNED_INTEGER_STUB)
@@ -24,13 +26,15 @@ internal Type *get_atom(Type_Kind kind) {
 }
 
 internal bool type_equal(Type *t1, Type *t2) {
-    Assert(t1 && t2);
+    if (t1 == t2) {
+        return true; 
+    }
     
     if (t1->kind != t2->kind) {
         return false; 
     }
     
-    while (t1 && t2) {
+    while (t1 && t2 && t1->kind == t2->kind) {
         
         // test whether the kind is of integer kind (s8/16/.. u8/16/..)
         if (is_atomic(t1)) {
@@ -64,18 +68,12 @@ internal bool type_equal(Type *t1, Type *t2) {
         t2 = t2->subtype; 
     }
     
-    Assert(t1 || t2); // NOTE(ziv): This shouldn't really happen
-    // but if for some reason it does then uncomment the code
-    //  below. it will actually check for that instead of just asserting
-    /*
     if (t1 || t2) {
         return false; 
     } 
-    */
     
     return true; 
 }
-
 
 /* 
 internal bool type_compatible(Type *dest, Type *src) {
@@ -88,18 +86,8 @@ internal bool type_compatible(Type *dest, Type *src) {
         if ((is_unsigned_integer(dest) && is_unsigned_integer(src)) || (is_integer(dest) && is_integer(src))) {
             return true;
         }
-        
-        // TODO(ziv): add more rules for implicit casting
-        
     }
-    
-    if (dest->kind == TYPE_POINTER) {
-        if (dest->subtype->kind == TYPE_VOID) {
-            // I should be able to cast any pointer into a void*
-        }
-        
-    }
-    
+
 }
  */
 
@@ -109,7 +97,6 @@ internal Type *get_compatible_type(Type *dest, Type *src) {
         (is_unsigned_integer(dest) && is_unsigned_integer(src))) {
         return dest->kind > src->kind ? dest : src;
     }
-    
     
     // You can convert any pointer type to a void* type implicitly *I think*
     if (dest->kind == TYPE_POINTER && src->kind == TYPE_POINTER) {
@@ -129,8 +116,26 @@ internal Type *init_type(Type_Kind kind, Type *subtype, Vector *symbols) {
     return ty;
 }
 
+internal Type *implicit_cast(Type *t1, Type *t2) {
+    
+    // implicit upcast of integer type 
+    if ((is_signed_integer(t1) && is_signed_integer(t2)) ||
+        (is_unsigned_integer(t1) && is_unsigned_integer(t2))) {
+        return (t1->kind > t2->kind) ? t1 : t2;
+    }
+    
+    if ((t1->kind == TYPE_POINTER && t2->kind == TYPE_UNKNOWN) || 
+        (t2->kind == TYPE_POINTER && t1->kind == TYPE_UNKNOWN)) {
+        return t1->kind == TYPE_POINTER ? t1 : t2;
+    }
+    
+    
+    return NULL; 
+}
+
 internal Type *sema_expr(Expr *expr) {
     if (!expr) return NULL;
+    
     // recursively go and typecheck the expression 
     // and then return the type of the resulting expression
     // do note that in this phase if it failes it just returns
@@ -140,41 +145,51 @@ internal Type *sema_expr(Expr *expr) {
     // an error. Though with the current design I do not allow 
     // for said behaviour. 
     
-    
     Type *result = NULL; 
     
     switch (expr->kind) {
         
         case EXPR_LITERAL: {
-            // the only problem is the NULL type in which case I should get a unknown 
-            // type of some sort. this type can cast to any other type but should remain
-            // anonymous until it is casted to some type explicitly or implicitly
-            return get_atom(expr->literal.kind);
+            // NOTE(ziv): a null literal gets the ATOM_UNKNOWN type
+            // which means that it's type is not yet known and will be 
+            // decided in a later stage
+            // if there are no hints leading to a implicit type cast 
+            // then the type will be a void* type. 
+            return expr->type = get_atom(expr->literal.kind);
         } break;
         
         case EXPR_LVAR: {
-            
             Type *type = local_exist(expr->lvar.name); 
             type = type ? type : symbol_exist(global_block, expr->lvar.name);
             
             Assert(type); // I should be getting a type here 
             // if I don't that means I probably have a bug somewhere 
             
-            return type; 
-            
+            return expr->type = type; 
         } break;
         
         case EXPR_ASSIGN: { // should I put this into the binary thingy? 
-            
             Type *rhs = sema_expr(expr->assign.lvar);
+            if (!rhs) return NULL; 
             Type *lhs = sema_expr(expr->assign.rvalue);
+            if (!lhs) return NULL; 
             
-            if (!rhs || !lhs) {
-                return NULL;
+            // If I have nil literal, I want to implicitly cast it to the 
+            // type onto which I want to assign the nil to. 
+            Expr *lit = expr->assign.rvalue; 
+            if (lit->kind == EXPR_LITERAL) {
+                if (lit->literal.kind == TYPE_UNKNOWN && lit->literal.data == 0 && rhs->kind == TYPE_POINTER) {
+                    return expr->type = rhs;
+                }
+            }
+            
+            result = implicit_cast(rhs, lhs); 
+            if (result) {
+                return expr->type = result;
             }
             
             if (!type_equal(rhs, lhs)) {
-                error(expr->lvar.name, "Unexpected incompatible types '%s' != '%s' on assignment");
+                error(expr->assign.lvar->lvar.name, "Unexpected incompatible types '%%s' != '%%s' on assignment");
                 return NULL; 
             }
             
@@ -182,27 +197,33 @@ internal Type *sema_expr(Expr *expr) {
         
         case EXPR_BINARY: {
             Type *rhs = sema_expr(expr->right);
+            if (!rhs) return NULL; 
             Type *lhs = sema_expr(expr->left);
+            if (!lhs) return NULL; 
             
-            if (!rhs || !lhs) {
-                return NULL;
+            result = implicit_cast(rhs, lhs);
+            if (!result) {
+                if (!type_equal(rhs, lhs)) {
+                    if (is_integer(rhs) && is_integer(lhs))
+                        fprintf(stderr, "Unable to implicitly cast between unsigned and signed integer types");
+                    else
+                        error(expr->operation, "Unexpected incompatible types '%%s' != '%%s'");
+                    return NULL;
+                }
+                result = rhs; 
             }
             
-            /*             
-                        if (!type_compatible(rhs, lhs)) {
-                            // TODO(ziv): errors for failing the implicit type casting 
-                        }
-                         */
             
-            // implicit upcast of integer type 
-            if ((is_signed_integer(rhs) && is_signed_integer(lhs)) ||
-                (is_unsigned_integer(rhs) && is_unsigned_integer(lhs))) {
-                result = (rhs->kind > lhs->kind) ? rhs : lhs;
+            // Make sure that only valid types will continue 
+            if (!is_integer(result) &&
+                !is_boolean(result) &&
+                !is_pointer(result)) {
+                error(expr->operation, "Incompatible type for operation"); 
+                return NULL; 
             }
             
             Token_Kind op = expr->operation.kind; 
             Assert(TK_OP_BEGIN < op && op < TK_OP_END); 
-            
             switch (op) {
                 
                 case TK_PLUS: 
@@ -210,7 +231,6 @@ internal Type *sema_expr(Expr *expr) {
                 case TK_SLASH:
                 case TK_STAR: 
                 {
-                    
                     if ((op == TK_MINUS || op == TK_PLUS)  && 
                         (rhs->kind == TYPE_POINTER && lhs->kind == TYPE_POINTER)) {
                         
@@ -234,11 +254,8 @@ internal Type *sema_expr(Expr *expr) {
                 case TK_EQUAL_EQUAL: 
                 case TK_LESS_EQUAL: 
                 {
-                    if (!type_equal(rhs, lhs)) {
-                        error(expr->operation, "Unexpected incompatible types '%s' != '%s'");
-                        return NULL;
-                    }
-                    
+                    // TYPE_UNKOWN special case (for implicit type casting
+                    expr->type = result;
                     return &types_tbl[ATOM_BOOL];
                 } break; 
                 
@@ -249,24 +266,24 @@ internal Type *sema_expr(Expr *expr) {
                 }; 
                 
             }
+            
         } break;
         
         case EXPR_UNARY: {
             
             Type *rhs = sema_expr(expr->unary.right);
             
-            Token_Kind op = expr->operation.kind; 
+            Token_Kind op = expr->unary.operation.kind; 
             Assert(TK_OP_BEGIN < op && op < TK_OP_END); 
             
             switch (op) {
                 
                 case TK_MINUS: {
                     if (is_integer(rhs) || is_unsigned_integer(rhs)) {
-                        return rhs; 
+                        return expr->type = rhs;
                     }
                     error(expr->unary.operation, "Incompatible type for '-' operation");
                 } break;
-                
                 
                 case TK_STAR: {
                     if (rhs->kind == TYPE_POINTER) {
@@ -290,11 +307,18 @@ internal Type *sema_expr(Expr *expr) {
                 return sema_expr(expr->grouping.expr); 
             } break;
             
+            case EXPR_CALL: {
+                Assert(!"This is not implemented yet");
+            } break; 
+            
             default: {
-                Assert(false); // I should never be getting here
+                Assert(!"I should never be getting here"); 
             }
             
+            
+            
         }
+        
     }
     
     return NULL;
@@ -303,42 +327,27 @@ internal Type *sema_expr(Expr *expr) {
 
 internal bool sema_block(Statement *block);
 
-internal bool sema_var_decl(Statement *var_decl) {
-    Assert(var_decl->kind == STMT_VAR_DECL);
-    
-    Type *t1 = var_decl->var_decl.type; 
-    Type *t2 = sema_expr(var_decl->var_decl.initializer); 
-    if (type_equal(t1, t2)) {
-        var_decl->var_decl.type = t1;
-        return true;
-    }
-    
-    Assert(false);
-    return false;
-}
-
 internal bool sema_statement(Statement *stmt) {
     
     switch (stmt->kind) {
         
+        case STMT_RETURN:
         case STMT_EXPR: {
+            // NOTE(ziv): This is not an error the `expr` is just another name for the ret
             Type *ty = sema_expr(stmt->expr);
-            if (!ty) {
-                fprintf(stderr, "bad boy!!! not types matched bullshit");
-                return false;
-            }
-            
+            return ty ? true : false; 
         } break; 
         
         case STMT_FUNCTION_DECL: {
             
             Vector *args = stmt->func.type->symbols; 
             for (int i = 0; i < args->index; i++) {
-                Statement *var_decl = (Statement *)args->data[i]; 
-                
-                sema_statement(var_decl); 
-                
-                
+                Symbol *symb = (Symbol *)args->data[i]; 
+                Assert(symb->initializer == NULL); // I do not support default values
+                if (symb->type->kind == TYPE_VOID) {
+                    error(symb->name, "Illigal use of type `void`");
+                    return false;
+                }
             }
             
             Statement *block = stmt->func.sc;
@@ -346,19 +355,46 @@ internal bool sema_statement(Statement *stmt) {
             
         } break; 
         
-        
         case STMT_VAR_DECL: {
-            Expr *expr = stmt->var_decl.initializer; 
-            Type *ty = sema_expr(expr);
-            if (!(ty && stmt->var_decl.type) || !type_equal(ty, stmt->var_decl.type)) {
-                return false; 
+            Statement *var_decl = stmt;
+            Assert(var_decl->kind == STMT_VAR_DECL);
+            
+            Type *t1 = var_decl->var_decl.type; 
+            Type *t2 = sema_expr(var_decl->var_decl.initializer); 
+            
+            if (!t1) {
+                if (t2) {
+                    // type is infered
+                    var_decl->var_decl.type = t1;
+                    return true;
+                }
+                return false;
             }
+            
+            if (t1->kind == TYPE_VOID) {
+                error(var_decl->var_decl.name, "Illigal use of type `void`");
+                return false;
+            }
+            
+            if (t2) {
+                if (type_equal(t1, t2)) {
+                    var_decl->var_decl.type = t1;
+                    return true;
+                }
+                
+                error(var_decl->var_decl.name, "Types are not equal something");
+                return false;
+            }
+            return true;
             
         } break;
         
+        case STMT_SCOPE: {
+            return sema_block(stmt);
+        }
+        
         default: {
-            
-            Assert(false); // We should not be getting here
+            Assert(!"We should not be getting here");
         }; 
         
     }
@@ -371,11 +407,12 @@ internal bool sema_block(Statement *block) {
     
     push_scope(block); 
     
-    bool success = true;
+    bool temp, success = true;
     Vector *statements = block->block.statements;
     for (int i = 0; i < statements->index; i++) { 
         Statement *stmt = (Statement *)block->block.statements->data[i]; 
-        success = (!success) ? success : sema_statement(stmt);
+        temp = sema_statement(stmt);
+        success = (!success) ? success : temp;
     }
     
     pop_scope(block); 
@@ -393,42 +430,3 @@ internal void sema_file(Program *prog) {
     }
 }
 
-
-/*
-
-a : int = 234; // global variables 
-
-swap :: proc (a: int, b: int) -> void {
-    temp: int; 
-    
-    temp = a; 
-    a = b; 
-    b = temp;
-    
-}
-
-main :: proc (s : u8) -> s32 {
-    
-    8* 8;   // normal expression  
-	a1: u32; // decloration 
-	b1: s8 = 2==2;  // decloration with initializer
-	a1 = 3;         // assignment expression 
-    
-    b: int = 234 * 3;
-    
-    
-    c : u32; 
-    // recursive scopes
-    { 
-        b: u32 = 10; // redefinition of a variable
-        b = b + 10 * 2;
-        c = a1 + b; // using variables from a outer scope
-    }
-    
-// function calls
-main(a, b, temp());
-
-    return a1+b1;
-}
-
-*/

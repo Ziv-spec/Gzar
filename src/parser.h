@@ -105,7 +105,6 @@ struct Scope {
 
 struct Statement {
     Statement_Kind kind; 
-    Type *type;
     
     union {
         
@@ -134,10 +133,6 @@ struct Statement {
         };
         
     };
-    
-    
-    
-    
 };
 
 
