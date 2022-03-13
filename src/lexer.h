@@ -25,10 +25,12 @@ enum Token_Kind {
     TK_S8_TYPE, 
     TK_S16_TYPE, 
     TK_S32_TYPE, 
+    TK_S64_TYPE, 
     
     TK_U8_TYPE, 
     TK_U16_TYPE, 
     TK_U32_TYPE, 
+    TK_U64_TYPE, 
     
     TK_INT_TYPE, 
     TK_VOID_TYPE, 

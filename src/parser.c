@@ -15,7 +15,7 @@ internal void parse_file(Program *prog) {
         }
         else {
             // TODO(ziv): maybe print different errors for different statement kinds
-            error(tk, "Expected a decloration in global scope");
+            parse_error(tk, "Expected a decloration in global scope");
         }
         
         tk = peek();
@@ -166,7 +166,7 @@ internal Expr *primary() {
             char buff[100]; 
             char *name = slice_to_str(var_name.str, (unsigned int)var_name.len);
             sprintf(buff, "Error: can not use '%s' it has never been declared", name);
-            error(var_name, buff); 
+            parse_error(var_name, buff); 
         }
         
         return init_lvar(var_name);
@@ -365,7 +365,7 @@ internal Statement *scope(Statement *block) {
     
     
     // file has unexpectedly ended 
-    error(peek(), "Unexpected end of file");
+    parse_error(peek(), "Unexpected end of file");
 #if DEBUG
     return NULL;
 #endif 
@@ -404,13 +404,13 @@ internal Statement *variable_decloration(Token name) {
         
         if (symbol_exist(block->block, name)) {
             // TODO(ziv): change the way that I do this
-            error(name, "Variable declared more than once in the same scope");
+            parse_error(name, "Variable declared more than once in the same scope");
         }
         scope_add_variable(block->block, name, type);
     }
     else {
         if (symbol_exist(global_block, name)) {
-            error(name, "Variable declared more than once at global scope");
+            parse_error(name, "Variable declared more than once at global scope");
         }
         scope_add_variable(global_block, name, type);
     }
@@ -488,10 +488,12 @@ internal Type *parse_type() {
         [TK_S8_TYPE]  = TYPE_S8,
         [TK_S16_TYPE] = TYPE_S16,
         [TK_S32_TYPE] = TYPE_S32,
+        [TK_S64_TYPE] = TYPE_S64,
         
-        [TK_S8_TYPE]  = TYPE_U8,
+        [TK_U8_TYPE]  = TYPE_U8,
         [TK_U16_TYPE] = TYPE_U16,
         [TK_U32_TYPE] = TYPE_U32,
+        [TK_U64_TYPE] = TYPE_U32,
         
         [TK_VOID_TYPE]   = TYPE_VOID, 
         [TK_STRING_TYPE] = TYPE_STRING, 
@@ -514,7 +516,7 @@ internal Type *parse_type() {
     
     // TODO(ziv): add support for arrays, not only pointers
     
-    error(peek(), "Expected type after decloration"); // TODO(ziv): maybe this should be more clear.
+    parse_error(peek(), "Expected type after decloration"); // TODO(ziv): maybe this should be more clear.
 #ifdef DEBUG 
     return NULL;
 #endif 
@@ -630,7 +632,7 @@ internal Token consume(Token_Kind kind, char *msg) {
 #endif 
 }
 
-internal void error(Token token, char *msg) {
+internal void parse_error(Token token, char *msg) {
     char buff[255] = {0};
     
     if (token.kind == TK_EOF) {
@@ -647,7 +649,7 @@ internal void error(Token token, char *msg) {
 internal void syntax_error(Token token, const char *err) {
     char buff[100]; 
     sprintf(buff, "Syntax error: %s", err); 
-    error(token, buff); 
+    parse_error(token, buff); 
 }
 
 internal void report(int line, int ch, char *msg) {

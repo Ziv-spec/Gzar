@@ -58,7 +58,7 @@ struct Expr {
         } args; 
         
         struct Call {
-            Expr *name; 
+            Expr *name; // lvar
             Expr *args; 
         } call; 
         
@@ -188,7 +188,7 @@ internal Token previous();
 internal bool  check(Token_Kind kind); 
 internal bool  internal_match(int n, ...);
 internal void  report(int line, int ch, char *msg); 
-internal void  error(Token token, char *msg); 
+internal void  parse_error(Token token, char *msg); 
 internal void  syntax_error(Token token, const char *err);
 internal Token consume(Token_Kind kind, char *msg);
 

@@ -7,6 +7,15 @@ typedef enum Type_Kind Type_Kind;
 typedef enum Atom_Kind Atom_Kind;
 typedef struct Type Type; 
 
+// NOTE(ziv): The `Type` in the compiler works in the following way: 
+// If you have a atomic type, then the kind will be ATOMIC and the subtype 
+// and symbols will be NULL. 
+// If you have a pointer to some other type then you will use the subtype 
+// field to extend the type further. e.g. ****int
+// If you have a function `Type` then it shall be represented as a ATOMIC
+// function type and have a subtype as it's return type and the symbols 
+// as the input arguments for the function with their order.
+
 struct Type {
     Type_Kind kind;  // atomic type
     Type   *subtype; // extension to the atomic (for things like `*int` and so on...)
@@ -57,7 +66,10 @@ enum Atom_Kind {
     ATOM_BOOL,
     
     ATOM_UNKNOWN,
-    ATOM_ATOMIC_TYPES_STUB,
+    // ATOM_ATOMIC_TYPES_STUB,
+    
+    ATOM_POINTER,
+    ATOM_ARRAY,
     
     ATOM_VOID_POINTER,
     

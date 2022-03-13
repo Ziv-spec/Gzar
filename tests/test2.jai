@@ -1,5 +1,5 @@
 
-a : int = 234; // global variables 
+a: int = 234; // global variables
 
 swap :: proc (a: int, b: int) -> void {
     temp: int; 
@@ -19,9 +19,12 @@ main :: proc (s : u8) -> s32 {
 	a1 = 3;         // assignment expression 
     
     b: int = 234 * 3;
+    c: int = 234 ;
     
+    something_else: *int = nil;
+    something_else2: *int = nil;
     
-    c: int = 234; 
+    something_else == something_else2;
     
     // recursive scopes
     { 
@@ -31,8 +34,8 @@ main :: proc (s : u8) -> s32 {
     }
     
     // function calls
-    // main(a, b, swap());
+    
+    swap(b, c);
     
     return a1+c;
 }
-
