@@ -1,4 +1,4 @@
-@echo off
+ @echo off
 
 REM This is where I am going to run most of my tests, and assemble generated assembly code 
 REM Note: to run this script you need to run it from the nasm command prompt. 
@@ -12,11 +12,10 @@ pushd build
 
 
 REM ================= BEGIN TESTING ======================
+ 
+rem call:assert test2.jai 37
 
-call:assert test1.gzr 46
-call:assert test2.gzr 1
-
-rem call:run test2.gzr
+call:run test2.jai
 
 REM ======================================================
 
@@ -30,18 +29,18 @@ goto:eof
 :run
 set testPath=%testDirectory%%~1
 
-gzar.exe %testPath% > test.asm
-if not exist test.asm  EXIT /B 0
+gzar.exe
+if not exist test.asm  EXIT /B 0 
 
-type test.asm
-
-nasm -felf test.asm -o test.o
+rem nasm -felf test.asm -o test.o
+ml64 -nologo /c /Zi test.asm
 if %errorlevel% == 1 (
-	type test.asm
+	rem type test.asm
 	EXIT /B 0
 )
 
-ld test.o -o test.exe
+link /entry:main /nologo test.obj 
+rem ld test.o -o test.exe
 if %errorlevel% == 1  EXIT /B 0
 
 test.exe
@@ -54,19 +53,20 @@ EXIT /B 0
 :assert
 set testPath=%testDirectory%%~1
 
-gzar.exe %testPath% > test.asm
+gzar.exe
 if not exist test.asm  EXIT /B 0 
 
-nasm -felf test.asm -o test.o
+rem nasm -felf test.asm -o test.o
+ml64 -nologo /c /Zi test.asm
 if %errorlevel% == 1 (
-	type test.asm
+	rem type test.asm
 	EXIT /B 0
 )
 
-
 echo | set /p=successfuly build %~1
 
-ld test.o -o test.exe
+link /entry:main /nologo test.obj 
+rem ld test.o -o test.exe
 if %errorlevel% == 1  EXIT /B 0
 
 test.exe
@@ -77,7 +77,6 @@ if %errorlevel% == %~2 (
 )
 
 if 0 == 1 (
-	type test.asm
 	echo | set /p='
 	type %testPath%
 	echo '

@@ -40,9 +40,6 @@
 // if -> "if" "(" expression ")" block
 // while -> "while" "(" expression ")" block
 
-// a function should have a type. but I will not use that type for anything other than
-// for a function call. For this reason I don't spend the time defining a syntax for function pointers. the type is going to be internal.
-
 // Toughts for the future
 // if statement -> 
 //     condition
@@ -119,7 +116,8 @@ typedef unsigned char bool;
 #define is_alpha(ch) (('A'<=(ch) && (ch)<='Z') || ('a'<=(ch) && (ch)<='z'))
 #define is_alphanumeric(ch) (is_digit(ch) || is_alpha(ch) || ch == '_')
 
-// #define MAX(a, b) (((a)>(b)) ? (a) : (b))
+#define MIN(a, b) (((a)<(b)) ? (a) : (b))
+#define MAX(a, b) (((a)>(b)) ? (a) : (b))
 
 #define ArrayLength(arr) (sizeof(arr)/sizeof(arr[0]))
 
@@ -128,7 +126,29 @@ typedef unsigned char bool;
 #include <string.h>
 #include <stdarg.h> 
 
-// TODO(ziv): implement a real mini string minipulation lib for this compiler
+
+/* TODO(ziv):
+Things that I need to refactor in this compielr or just could be better: 
+    - Create a string manipulation library that I would use across the board like in 4coder
+    - Restructure the way that the lexer outputs tokens that a single token is way smaller
+    - Maybe change the parsing algorithem to one which is used in production compilers (though I don't know how much benefits that would bring)
+    - Create a map 
+    - Use indexes to arrays instead of pointers
+    - Use a better algorithem for code generation (aka don't do the stupid things you are trying to do) 
+    - Try to stay away from CRT stuff as much as possible or maybe even remove it alltogether (totaly possible but that would not be as convenient 
+    - Create tests for the language 
+    - Create a minimal standard libray (a super small one) for showcasing what the language is able to do (hopefully when it is working) 
+    - Create a programming enviorment where you can link to the compiler from a dll in which you would  have one function which will generate a exe 
+    - Further optimizations 
+    - More features? This could be seperated into a couple of sections where I could talk about it for a long ass time. Because I don't want to do 
+      that, what I will do is specify a minimum feature set for the language where I know that if I implement those they would be enough for most 
+      problems that are sort of crucial in a language to have. That said, this is a toy-language in which I don't plat to have anything close to 
+      a fully featured or working compiler so I am not going to include advanced features like generics/macros/function pointers/
+      compilated operations that will make my compiler more complex than it absolutely needs to be.
+    - finish!!! This seems like an obvious one but I need to strees this out to myself that I want to at some point have a finished prodcut that 
+      could use as such this is a requirement to not go down the rabbit hole of implementing things to obivion. I don't want to work on this 
+      for a long time. It is not even supposed to be a show of skill just a project that I will do as a learning exercise. 
+*/
 
 // NOTE(ziv): Deprecated
 internal char *slicecpy(char *dest, size_t dest_size, char *src, size_t src_size) {
@@ -212,13 +232,14 @@ static char *code; // currently I only use this for printing error messages insi
 
 #include "lexer.h"
 #include "sema.h"
-#include "parser.h"
 #include "codegen.h"
+#include "parser.h"
 
 #include "lexer.c"
 #include "sema.c"
 #include "parser.c"
-#include "codegen.c"
+#include "x86.c"
+//#include "codegen.c"
 
 int main(int argc, char *argv[]) {
     
@@ -279,7 +300,7 @@ int main(int argc, char *argv[]) {
     
     sema_file(&prog);
     
-    // gen();
+    program_gen(&prog); 
     
     free(source_buff); // I don't need to use this but whatever...
     return 0;

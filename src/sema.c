@@ -94,7 +94,6 @@ internal char *format_types(char *msg, Type *t1, Type *t2) {
 }
 
 internal void type_error(Token line, Type *t1, Type *t2, char *msg) {
-    
     char buff[MAX_LEN] = {0}; 
     char err[MAX_LEN] = {0}; 
     
@@ -105,9 +104,6 @@ internal void type_error(Token line, Type *t1, Type *t2, char *msg) {
     strcat(err, _itoa(line.loc.line, buff, 10)); 
     strcat(err, "\n");
     fprintf(stderr, err);
-    
-    
-    
 }
 
 internal bool type_equal(Type *t1, Type *t2) {
@@ -160,21 +156,28 @@ internal bool type_equal(Type *t1, Type *t2) {
     return true; 
 }
 
-/* 
-internal bool type_compatible(Type *dest, Type *src) {
+internal int get_type_size(Type *type) {
+    int size = 0; 
     
-    if (type_equal(dest, src)) {
-        return true; 
-    }
-    
-    if (dest->kind != src->kind) {
-        if ((is_unsigned_integer(dest) && is_unsigned_integer(src)) || (is_integer(dest) && is_integer(src))) {
-            return true;
+    if (is_integer(type)) {
+        
+        switch (type->kind) {
+            case TYPE_S8: case TYPE_U8:   { size = 1; }
+            case TYPE_S16: case TYPE_U16: { size = 2; }
+            case TYPE_S32: case TYPE_U32: { size = 4; }
+            case TYPE_S64: case TYPE_U64: { size = 8; }
         }
+        
     }
-
+    else if (type->kind == TYPE_POINTER || type->kind == TYPE_ARRAY) {
+        size = 8;
+    }
+    else {
+        Assert(!"Unable to get the size of this type"); 
+    }
+    
+    return size; 
 }
- */
 
 internal Type *get_compatible_type(Type *dest, Type *src) {
     
@@ -463,12 +466,15 @@ internal bool sema_statement(Statement *stmt) {
     
     switch (stmt->kind) {
         
+        
         case STMT_RETURN:
         case STMT_EXPR: {
             // NOTE(ziv): This is not an error the `expr` is just another name for the ret
             Type *ty = sema_expr(stmt->expr);
             return ty ? true : false; 
         } break; 
+        
+        
         
         case STMT_FUNCTION_DECL: {
             
@@ -487,51 +493,49 @@ internal bool sema_statement(Statement *stmt) {
             
         } break; 
         
+        
+        
         case STMT_VAR_DECL: {
-            Statement *var_decl = stmt;
-            Assert(var_decl->kind == STMT_VAR_DECL);
-            
-            Type *lhs = var_decl->var_decl.type; 
-            Type *rhs = sema_expr(var_decl->var_decl.initializer); 
+            Type *lhs = stmt->var_decl.type; 
+            Type *rhs = sema_expr(stmt->var_decl.initializer); 
             
             if (!lhs) {
                 if (rhs) {
                     // type is infered
-                    var_decl->var_decl.type = lhs;
+                    stmt->var_decl.type = lhs;
                     return true;
                 }
                 return false;
             }
             
-            
             if (lhs->kind == TYPE_VOID) {
-                type_error(var_decl->var_decl.name, NULL, NULL, "Illigal use of type `void`");
+                type_error(stmt->var_decl.name, NULL, NULL, "Illigal use of type `void`");
                 return false;
             }
             
             if (rhs) {
-                
                 if (type_equal(lhs, rhs) || (rhs->kind == TYPE_UNKNOWN && lhs->kind == TYPE_POINTER)) {
-                    var_decl->var_decl.initializer->type = lhs; 
-                    var_decl->var_decl.type = lhs;
+                    stmt->var_decl.initializer->type = lhs; 
+                    stmt->var_decl.type = lhs;
                     return true;
                 }
                 
-                type_error(var_decl->var_decl.name, lhs, rhs, "Types do not match `%s` != `%s`");
+                type_error(stmt->var_decl.name, lhs, rhs, "Types do not match `%s` != `%s`");
                 return false;
             }
             return true;
             
         } break;
         
+        
+        
         case STMT_SCOPE: {
-            
             push_scope(stmt); 
             
             bool temp, success = true;
             Vector *statements = stmt->block.statements;
             for (int i = 0; i < statements->index; i++) { 
-                Statement *block_stmt= (Statement *)stmt->block.statements->data[i]; 
+                Statement *block_stmt = (Statement *)stmt->block.statements->data[i]; 
                 temp = sema_statement(block_stmt);
                 success = (!success) ? success : temp;
             }
@@ -539,6 +543,8 @@ internal bool sema_statement(Statement *stmt) {
             pop_scope(stmt); 
             return success;
         }
+        
+        
         
         default: {
             Assert(!"We should not be getting here");
@@ -551,17 +557,9 @@ internal bool sema_statement(Statement *stmt) {
 
 internal void sema_file(Program *prog) {
     
-    int something = 10; 
-    unsigned something_else = 0xff;
-    char something_else_else = 0;
-    int lol = something * something_else; 
-    lol; something_else_else;
-    
     for (int i = 0; i < prog->decls->index; i++) {
         Statement *stmt = (Statement *)prog->decls->data[i]; 
         sema_statement(stmt);
-        
-        // not sure what to do with this but okay
     }
+    
 }
-

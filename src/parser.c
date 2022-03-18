@@ -309,9 +309,9 @@ internal Symbol *init_symbol(Token name, Type *type, Expr *initializer) {
     return symbol;
 }
 
-internal void scope_add_variable(Scope block, Token name, Type *type) {
-    // TODO(ziv): change this to a map`
-    Symbol *symbol = init_symbol(name, type, NULL); 
+internal void scope_add_variable(Scope block, Token name, Type *type, Expr *expr) {
+    // TODO(ziv): change this to a map
+    Symbol *symbol = init_symbol(name, type, expr); 
     add_decl(block, symbol); 
 }
 
@@ -335,7 +335,8 @@ internal Type *local_exist(Token var_name) {
     // TODO(ziv): Implement this using a hash map.
     
     Statement *block = get_curr_scope();
-    if (block) {for (int scope_ind = scope_index-1; scope_ind >= 0; scope_ind--) {
+    if (block) {
+        for (int scope_ind = scope_index-1; scope_ind >= 0; scope_ind--) {
             block = scopes[scope_ind]; 
             Assert(block->kind == STMT_SCOPE);
             
@@ -406,13 +407,13 @@ internal Statement *variable_decloration(Token name) {
             // TODO(ziv): change the way that I do this
             parse_error(name, "Variable declared more than once in the same scope");
         }
-        scope_add_variable(block->block, name, type);
+        scope_add_variable(block->block, name, type, expr);
     }
     else {
         if (symbol_exist(global_block, name)) {
             parse_error(name, "Variable declared more than once at global scope");
         }
-        scope_add_variable(global_block, name, type);
+        scope_add_variable(global_block, name, type, expr);
     }
     
     return init_decl_stmt(name, type, expr);

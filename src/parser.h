@@ -1,10 +1,10 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-typedef struct Expr Expr; 
-typedef enum Expr_Kind Expr_Kind; 
-typedef Expr Binary; 
 
+
+
+typedef enum Expr_Kind Expr_Kind; 
 enum Expr_Kind {
     EXPR_GROUPING, 
     EXPR_LITERAL, 
@@ -19,9 +19,12 @@ enum Expr_Kind {
 // TODO(ziv): maybe simplify this model by not using named unions? 
 // for the time being I don't see this as a major thing that I need to do 
 // but I will have to see whether this adds clarity or not over time. 
+typedef struct Expr Expr; 
 struct Expr {
     Expr_Kind kind; 
     Type *type;
+    Register reg; 
+    
     
     union {
         struct Grouping {
@@ -76,10 +79,6 @@ struct Expr {
 };
 
 typedef enum Statement_Kind Statement_Kind; 
-typedef struct Statement Statement; 
-typedef struct Symbol Symbol; 
-typedef struct Scope Scope;
-
 enum Statement_Kind {
     STMT_EXPR, 
     STMT_PRINT_EXPR, 
@@ -92,17 +91,20 @@ enum Statement_Kind {
     STMT_DECL_END, 
 }; 
 
+typedef struct Symbol Symbol; 
 struct Symbol {
     Token name; 
     Type *type;
     Expr *initializer;
 }; 
 
+typedef struct Scope Scope;
 struct Scope {
-    Vector *locals;
-    Vector *statements;
+    Vector *locals;     // a list of `Symbol` types that represent local variables
+    Vector *statements; // a list of statements inside the scope 
 };
 
+typedef struct Statement Statement; 
 struct Statement {
     Statement_Kind kind; 
     
@@ -142,7 +144,7 @@ struct Program {
     Scope block;
 };
 
-static Scope global_block;
+static Scope global_block = {0};
 
 
 /* initializers for the different types of expressions */ 
@@ -165,7 +167,7 @@ internal void push_scope(Statement *block);
 internal Statement *pop_scope();
 
 internal void add_decl(Scope block, Symbol *decl);
-internal void scope_add_variable(Scope block, Token name, Type *type);
+internal void scope_add_variable(Scope block, Token name, Type *type, Expr *expr);
 
 ////////////////////////////////
 
