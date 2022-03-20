@@ -9,6 +9,7 @@
 #define is_signed_integer(t) ((t->kind) < TYPE_INTEGER_STUB)
 #define is_unsigned_integer(t) (TYPE_INTEGER_STUB < (t->kind) && (t->kind) < TYPE_UNSIGNED_INTEGER_STUB)
 
+
 inline int type_kind_to_atom(Type_Kind kind) {
     
     // This is a hack for getting the log2 of a number
@@ -33,11 +34,7 @@ internal Type *get_atom(Type_Kind kind) {
 internal int get_argument_count(Expr *arguments) {
     int count = 0;
     
-    if (arguments) {
-        count++; 
-        
-        for (; arguments && arguments->kind == EXPR_ARGUMENTS; count++ ,arguments = arguments->args.next);
-    }
+    for (; arguments && arguments->kind == EXPR_ARGUMENTS; count++ ,arguments = arguments->args.next);
     
     return count;
 }

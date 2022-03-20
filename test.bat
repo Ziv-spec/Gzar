@@ -13,8 +13,6 @@ pushd build
 
 REM ================= BEGIN TESTING ======================
  
-rem call:assert test2.jai 37
-
 call:run test2.jai
 
 REM ======================================================
@@ -29,7 +27,7 @@ goto:eof
 :run
 set testPath=%testDirectory%%~1
 
-gzar.exe
+gzar.exe > test.asm
 if not exist test.asm  EXIT /B 0 
 
 rem nasm -felf test.asm -o test.o

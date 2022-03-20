@@ -88,7 +88,7 @@ internal bool get_next_token(Lexer *lexer) {
                 for (; is_digit(*txt); txt++, loc.ch++);
                 token.len = (int)(txt-token.str); 
             }
-            else if (is_alpha(*txt)) {
+            else if (is_alphanumeric(*txt)) {
                 
                 //
                 // Search if token is keyword
@@ -206,5 +206,5 @@ internal bool lex_file(Lexer *lexer) {
 internal int keyword_cmp(char *str1, char *str2) {
     char *temp1 = str1, *temp2 = str2; 
     while (*temp1 && *temp2 && *temp1 == *temp2) { temp1++; temp2++; }
-    return is_alpha(*temp1) || *temp2 || *temp1 == *temp2;
+    return is_alphanumeric(*temp1) || *temp2 || *temp1 == *temp2;
 }

@@ -1,13 +1,15 @@
 
+ //boring: string = "something boring"; 
 
-a: int = 234;     // global variables
-monkey: int = 10; // global variables
-bruh: string = "bruh"; 
-
-main :: proc (something: int) -> int {
-    a: int = 10; 
-    b: int = 9+1;
-    c: int = a+b*3; 
-    return c-6;
+_add :: proc (a: int, b: int) -> int {
+    return a+b;
 }
 
+some_other_function :: proc(a: int, b: int, c: int, d: int) -> int {
+    return b*c - a*d;
+}
+
+main :: proc (something: int) -> int {
+    result: int = _add(1, 3); 
+    return result;
+}

@@ -126,9 +126,12 @@ internal Expr *arguments() {
     }
     
     Expr *expr = expression();
-    while (match(TK_COMMA)) {
-        Expr *next = expression(); 
+    if (match(TK_COMMA)) {
+        Expr *next = arguments(); 
         expr = init_arguments(expr, next); 
+    }
+    else {
+        expr = init_arguments(expr, NULL); 
     }
     
     return expr;
