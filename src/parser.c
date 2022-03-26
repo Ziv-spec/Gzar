@@ -1,24 +1,26 @@
 
-internal void parse_file(Program *prog) {
+// I use the recursive decent algorithem for parsing my language. 
+// For each translation unit I have, I parse it's content and 
+// generate a AST - Abstract Syntax Tree which for the time being 
+// I use as a IR - Immediate representation for generating code from 
+
+internal void parse_translation_unit(Translation_Unit *tu, Token_Stream *restrict s) {
     
-    prog->decls = init_vec();
-    prog->block.locals = init_vec(); 
-    prog->block.statements = init_vec(); 
-    global_block = prog->block;
     
-    Token tk = peek(); 
-    while (tk.kind != TK_EOF) {
-        Statement *stmt = decloration();
+    tu->s = s;
+    tu->decls = init_vec();
+    
+    // 
+    // Parsing of global declorations
+    //
+    
+    while (peek(tu).kind != TK_EOF) {
+        Statement *stmt = parse_decloration(tu);
         
-        if (STMT_DECL_BEGIN < stmt->kind && stmt->kind < STMT_DECL_END) {
-            vec_push(prog->decls, stmt);
-        }
-        else {
-            // TODO(ziv): maybe print different errors for different statement kinds
-            parse_error(tk, "Expected a decloration in global scope");
-        }
-        
-        tk = peek();
+        if (STMT_DECL_BEGIN < stmt->kind && stmt->kind < STMT_DECL_END)
+            vec_push(tu->decls, stmt);
+        else
+            parse_error(tu, peek(tu), "Expected a decloration in global scope");
     }
     
 }
@@ -26,60 +28,60 @@ internal void parse_file(Program *prog) {
 //////////////////////////////////
 /// Parsing of expressions 
 
-internal Expr *expression() {
-    return assignement(); 
+internal Expr *parse_expression(Translation_Unit* tu) {
+    return parse_assignment(tu); 
 }
 
-internal Expr *assignement() {
-    Expr *expr = equality();
-    if (match(TK_ASSIGN)) {
-        return init_assignement(expr, equality());
+internal Expr *parse_assignment(Translation_Unit* tu) {
+    Expr *expr = parse_equality(tu);
+    if (match(tu, TK_ASSIGN)) {
+        return init_assignment(expr, parse_equality(tu));
     }
     return expr;
 }
 
-internal Expr *equality() {
-    Expr *expr = comparison(); 
+internal Expr *parse_equality(Translation_Unit* tu) {
+    Expr *expr = parse_comparison(tu); 
     
-    while (match(TK_BANG_EQUAL, TK_EQUAL_EQUAL)) {
-        Token operator = previous(); 
-        Expr *right = comparison(); 
+    while (match(tu, TK_BANG_EQUAL, TK_EQUAL_EQUAL)) {
+        Token operator = previous(tu); 
+        Expr *right = parse_comparison(tu); 
         expr = init_binary(expr, operator, right);
     }
     
     return expr;
 }
 
-internal Expr *comparison() {
-    Expr *expr = term(); 
+internal Expr *parse_comparison(Translation_Unit* tu) {
+    Expr *expr = parse_term(tu); 
     
-    while (match(TK_GREATER, TK_LESS, TK_GREATER_EQUAL, TK_LESS_EQUAL)) {
-        Token operation = previous(); 
-        Expr *right = term(); 
+    while (match(tu, TK_GREATER, TK_LESS, TK_GREATER_EQUAL, TK_LESS_EQUAL)) {
+        Token operation = previous(tu); 
+        Expr *right = parse_term(tu); 
         expr = init_binary(expr, operation, right);
         
     }
     return expr;
 }
 
-internal Expr *term() {
-    Expr *expr = factor(); 
+internal Expr *parse_term(Translation_Unit* tu) {
+    Expr *expr = parse_factor(tu); 
     
-    while (match(TK_MINUS, TK_PLUS)) {
-        Token operation = previous(); 
-        Expr *right = factor(); 
+    while (match(tu, TK_MINUS, TK_PLUS)) {
+        Token operation = previous(tu); 
+        Expr *right = parse_factor(tu); 
         expr = init_binary(expr, operation, right);
     }
     
     return expr;
 }
 
-internal Expr *factor() {
-    Expr *expr = unary(); 
+internal Expr *parse_factor(Translation_Unit* tu) {
+    Expr *expr = parse_unary(tu); 
     
-    while (match(TK_SLASH, TK_STAR)) {
-        Token operation = previous(); 
-        Expr *right = factor(); 
+    while (match(tu, TK_SLASH, TK_STAR)) {
+        Token operation = previous(tu); 
+        Expr *right = parse_factor(tu); 
         
         // if (type_equal(expr, right))
         expr = init_binary(expr, operation, right);
@@ -88,31 +90,25 @@ internal Expr *factor() {
     return expr;
 }
 
-internal Expr *call(); 
-internal Expr *init_call(Expr *name, Expr *args); 
-internal Expr *init_arguments(Expr *arg, Expr *next); 
-internal Expr *arguments(); 
-
-
-internal Expr *unary() {
+internal Expr *parse_unary(Translation_Unit* tu) {
     
-    if (match(TK_BANG, TK_MINUS)) {
-        Token operation = previous();
-        Expr *right = unary();
+    if (match(tu, TK_BANG, TK_MINUS)) {
+        Token operation = previous(tu);
+        Expr *right = parse_unary(tu);
         
         return init_unary(operation, right);
     }
     
-    return call();
+    return parse_call(tu);
 }
 
-internal Expr *call() {
-    Expr *expr = primary();
+internal Expr *parse_call(Translation_Unit* tu) {
+    Expr *expr = parse_primary(tu);
     
-    if (expr->kind == EXPR_LVAR && match(TK_LPARAN)) {
-        Expr *args = arguments(); 
+    if (expr->kind == EXPR_LVAR && match(tu, TK_LPARAN)) {
+        Expr *args = parse_arguments(tu); 
         if (args) {
-            consume(TK_RPARAN, "Expected ')' in a function call"); 
+            consume(tu, TK_RPARAN, "Expected ')' in a function call"); 
         }
         return init_call(expr, args); 
     }
@@ -120,82 +116,89 @@ internal Expr *call() {
     return expr;
 }
 
-internal Expr *arguments() {
-    if (match(TK_RPARAN)) {
-        return NULL;
-    }
+internal Expr *parse_arguments(Translation_Unit* tu) {
     
-    Expr *expr = expression();
-    if (match(TK_COMMA)) {
-        Expr *next = arguments(); 
-        expr = init_arguments(expr, next); 
-    }
-    else {
-        expr = init_arguments(expr, NULL); 
-    }
+    // arguments
+    Vector *args = init_vec(); 
+    Expr *expr = NULL; 
+    while (!check(tu, TK_RPARAN)) {
+        
+        expr = parse_expression(tu);
+        vec_push(args, expr);
+        
+        if (!match(tu, TK_COMMA)) {
+            break;
+        }
+    } 
     
-    return expr;
+    return init_arguments(args);
 }
 
-internal Expr *primary() {
-    if (match(TK_FALSE)) return init_literal(0, TYPE_BOOL);
-    if (match(TK_TRUE))  return init_literal((void *)1, TYPE_BOOL);
-    if (match(TK_NIL))   return init_literal(NULL, TYPE_UNKNOWN);
+internal Expr *parse_primary(Translation_Unit* tu) {
+    if (match(tu, TK_FALSE)) return init_literal(0, TYPE_BOOL);
+    if (match(tu, TK_TRUE))  return init_literal((void *)1, TYPE_BOOL);
+    if (match(tu, TK_NIL))   return init_literal(NULL, TYPE_UNKNOWN);
     
     // number & string
-    if (match(TK_NUMBER, TK_STRING)) { 
-        Token token = previous();
+    if (match(tu, TK_NUMBER, TK_STRING)) { 
+        Token token = previous(tu);
         Expr *result = NULL; 
         
         if (token.kind == TK_NUMBER) {
-            u64 value = atoi(token.str); 
+            u64 value = atoi(str8_to_cstring(token.str)); 
             result = init_literal((void *)value, TYPE_S64); 
         }
         else {
-            char *buff = (char *)malloc(token.len+1); 
-            strncpy(buff, token.str, token.len);
-            buff[token.len] = '\0';
-            result = init_literal((void *)buff, TYPE_STRING); 
-            
+            result = init_literal((void *)str8_to_cstring(token.str), TYPE_STRING); 
         }
         
         return result;
     }
     
-    if (match(TK_IDENTIFIER)) {
+    if (match(tu, TK_IDENTIFIER)) {
         
-        Token var_name = previous();
-        if (!local_exist(var_name)) {
+        Token var_name = previous(tu);
+        if (!local_exist(tu, var_name)) {
             char buff[100]; 
-            char *name = slice_to_str(var_name.str, (unsigned int)var_name.len);
+            char *name = str8_to_cstring(var_name.str);
             sprintf(buff, "Error: can not use '%s' it has never been declared", name);
-            parse_error(var_name, buff); 
+            parse_error(tu, var_name, buff); 
         }
         
         return init_lvar(var_name);
     }
     
-    if (match(TK_LPARAN, TK_RPARAN)) {
-        Expr *expr = expression(); 
-        consume(TK_RPARAN, "Expected ')' after expression"); 
+    if (match(tu, TK_LPARAN, TK_RPARAN)) {
+        Expr *expr = parse_expression(tu); 
+        consume(tu, TK_RPARAN, "Expected ')' after expression"); 
         return init_grouping(expr); 
     }
     
     char buff[100]; 
-    Token not_literal = previous(); 
-    if (match(TK_SEMI_COLON)) {
-        sprintf(buff, "operation '%s' requires more than one operand", tk_names[not_literal.kind]);
-        syntax_error(not_literal, buff); 
+    Token not_literal = previous(tu); 
+    if (match(tu, TK_SEMI_COLON)) {
+        Assert(!"check whether this works correctly");
+        sprintf(buff, "operation '%c' requires more than one operand", not_literal.kind);
+        syntax_error(tu, not_literal, buff); 
     }
     
-    not_literal = peek(); 
+    not_literal = peek(tu); 
     if (not_literal.kind == TK_EOF) {
         return NULL;
         //error(not_literal, "Unexpected end of file");
     }
     
-    sprintf(buff, "illigal use of '%s'", tk_names[not_literal.kind]);
-    syntax_error(not_literal, buff); 
+    
+    char *temp = NULL; 
+    if (not_literal.kind < TK_DOUBLE_ASCII) {
+        Assert(!"not implemented");
+    }
+    else {
+        temp = str8_to_cstring(not_literal.str); 
+    }
+    
+    sprintf(buff, "illigal use of '%s'", temp);
+    syntax_error(tu, not_literal, buff); 
     
 #if DEBUG
     return NULL; 
@@ -241,7 +244,7 @@ internal Expr *init_grouping(Expr *expr) {
     return result_expr;
 }
 
-internal Expr *init_assignement(Expr *left_var, Expr *rvalue) {
+internal Expr *init_assignment(Expr *left_var, Expr *rvalue) {
     Expr *result_expr = (Expr *)malloc(sizeof(Expr));
     result_expr->kind = EXPR_ASSIGN;  
     result_expr->type = NULL;
@@ -258,11 +261,10 @@ internal Expr *init_lvar(Token name) {
     return result_expr;
 }
 
-internal Expr *init_arguments(Expr *lvar, Expr *next) {
+internal Expr *init_arguments(Vector *args) {
     Expr *result_expr = (Expr *)malloc(sizeof(Expr)); 
     result_expr->kind = EXPR_ARGUMENTS;
-    result_expr->args.lvar  = lvar;
-    result_expr->args.next = next;
+    result_expr->args = args;
     return result_expr;
 }
 
@@ -274,219 +276,205 @@ internal Expr *init_call(Expr *name, Expr *args) {
     return result_expr;
 }
 
-//////////// //////////////////////
-/// helper functions for parsing statements
+//////////////////////////////////
+/// Helper functions for symbols
 
-internal Statement *get_curr_scope() {
-    if (scope_index > 0) {
-        return scopes[scope_index-1]; 
+internal Block *get_curr_scope(Translation_Unit *tu) {
+    
+    if (1 < tu->block_stack.index) {
+        return tu->block_stack.blocks[tu->block_stack.index-1]; 
     }
-    return NULL;
+    return tu->block_stack.blocks[0]; 
 }
 
-internal Statement *next_scop() {
-    return scopes[++scope_index];
+internal bool is_at_global_block(Translation_Unit *tu) {
+    return tu->block_stack.index == 0;
 }
 
-internal void push_scope(Statement *block) {
-    scopes[scope_index++] = block;
+internal void push_scope(Translation_Unit *tu, Statement *block) {
+    Assert(tu->block_stack.index < 100); 
+    
+    tu->block_stack.blocks[tu->block_stack.index++] = &block->block;
 }
 
-internal Statement *pop_scope() {
-    if (scope_index <= 0) {
-        return scopes[scope_index];
-    }
-    return scopes[--scope_index];
-}
-
-internal void add_decl(Scope block, Symbol *decl) {
-    Assert(decl); 
-    vec_push(block.locals, decl);
-}
-
-internal Symbol *init_symbol(Token name, Type *type, Expr *initializer) {
-    Symbol *symbol = (Symbol *)malloc(sizeof(Symbol)); 
-    symbol->name = name; 
-    symbol->type = type; 
-    symbol->initializer = initializer; 
-    return symbol;
-}
-
-internal void scope_add_variable(Scope block, Token name, Type *type, Expr *expr) {
-    // TODO(ziv): change this to a map
-    Symbol *symbol = init_symbol(name, type, expr); 
-    add_decl(block, symbol); 
-}
-
-internal Type *symbol_exist(Scope block, Token name) {
-    Vector *symbols = block.locals;
-    for (int i = 0; i < symbols->index; i++) {
-        Symbol *s = (Symbol *)symbols->data[i]; 
+internal Block *pop_scope(Translation_Unit *tu) {
+    if (tu->block_stack.index <= 0) {
+        Assert(tu->block_stack.index > 0);
         
-        Token known_var_name = s->name; // all variable names which have been declared
-        if (known_var_name.len == name.len && 
-            strncmp(name.str, known_var_name.str, known_var_name.len) == 0) {
-            return s->type; 
-        }
+        return tu->block_stack.blocks[tu->block_stack.index];
     }
-    
-    return NULL;
+    return tu->block_stack.blocks[--tu->block_stack.index];
 }
 
-internal Type *local_exist(Token var_name) {
+internal void add_symbol(Block *block, Symbol *decl) {
+    Assert(decl && block); 
+    Assert(map_set(block->locals, decl->name.str, decl)); 
+}
+
+internal Symbol *symbol_exist(Block *block, Token name) {
+    return map_peek(block->locals, name.str); 
+}
+
+internal Symbol *local_exist(Translation_Unit *tu, Token var_name) {
     Assert(var_name.kind == TK_IDENTIFIER);
-    // TODO(ziv): Implement this using a hash map.
     
-    Statement *block = get_curr_scope();
-    if (block) {
-        for (int scope_ind = scope_index-1; scope_ind >= 0; scope_ind--) {
-            block = scopes[scope_ind]; 
-            Assert(block->kind == STMT_SCOPE);
-            
-            Type *ty = symbol_exist(block->block, var_name); 
-            if (ty) return ty; 
+    Block *block = get_curr_scope(tu);
+    if (!is_at_global_block(tu)) {
+        
+        // I am at a lower scope than global
+        // so I need to go over all of the blocks
+        // from closes to furthest and check whether 
+        // I have a symbol with the same name inside 
+        // it 
+        
+        for (size_t i = tu->block_stack.index; 0 < i; i--) {
+            block = tu->block_stack.blocks[i-1]; 
+            Symbol *symb = symbol_exist(block, var_name); 
+            if (symb) {
+                return symb;
+            }
         }
+        return NULL; 
     }
     
-    return symbol_exist(global_block, var_name); 
+    // return the type of the symbol if it exists
+    return symbol_exist(tu->block_stack.blocks[0], var_name);
 }
 
 //////////////////////////////////
 /// Parsing of statements
 
-internal Statement *scope(Statement *block) {
-    push_scope(block);
+internal Statement *parse_scope_stmt(Translation_Unit* tu, Statement *block) {
+    push_scope(tu, block);
     
-    while (!is_at_end()) {
-        if (match(TK_LBRACE)) {
-            pop_scope(block);
+    while (!is_at_end(tu)) {
+        if (match(tu, TK_LBRACE)) {
+            pop_scope(tu);
             return block; // end
         }
         
-        Statement *decl_stmt = decloration();
-        vec_push(block->block.statements, decl_stmt); 
+        Statement *stmt = parse_decloration(tu);
+        vec_push(block->block.statements, stmt); 
     }
     
-    
     // file has unexpectedly ended 
-    parse_error(peek(), "Unexpected end of file");
+    parse_error(tu, peek(tu), "Unexpected end of file");
 #if DEBUG
     return NULL;
 #endif 
 }
 
-internal Statement *decloration() {
+internal Statement *parse_decloration(Translation_Unit* tu) {
     
-    if (match(TK_IDENTIFIER)) 
-    {
-        // variable decloration / expression / function decloration 
-        Token name = previous(); 
-        if (match(TK_COLON))        return variable_decloration(name); 
-        if (match(TK_DOUBLE_COLON)) return function_decloration(name); 
+    if (match(tu, TK_IDENTIFIER)) {
+        Token name = previous(tu); 
+        if (match(tu, TK_COLON))        return parse_variable_decloration(tu, name); 
+        if (match(tu, TK_DOUBLE_COLON)) return parse_function_decloration(tu, name); 
         
-        back_one();
+        // revert back to the identifier because there is no other match
+        back_one(tu); 
     }
     
-    return statement();
+    return parse_statement(tu);
 }
 
-internal Statement *variable_decloration(Token name) {
-    Type *type = parse_type(); 
+internal Statement *parse_variable_decloration(Translation_Unit* tu, Token name) {
+    // parse the variable 
+    Type *type = parse_type(tu); 
     
     Expr *expr = NULL;
-    if (match(TK_ASSIGN)) {
-        expr = expression(); 
+    if (match(tu, TK_ASSIGN)) {
+        expr = parse_expression(tu); 
     }
     
-    consume(TK_SEMI_COLON, "Expected ';' after a variable decloration");
+    consume(tu, TK_SEMI_COLON, "Expected ';' after a variable decloration");
     
-    Statement *block = get_curr_scope();
-    
-    // Add variable name to local scope if it does not exist
-    if (block) {
-        Assert(block->kind == STMT_SCOPE);
-        
-        if (symbol_exist(block->block, name)) {
-            // TODO(ziv): change the way that I do this
-            parse_error(name, "Variable declared more than once in the same scope");
+    // add symbol to scope
+    Symbol *symb = init_symbol(name, type, expr);
+    {
+        Block *block = get_curr_scope(tu);
+        if (map_get(block->locals, name.str)) {
+            parse_error(tu, name, "Variable declared more than once in the same scope");
         }
-        scope_add_variable(block->block, name, type, expr);
-    }
-    else {
-        if (symbol_exist(global_block, name)) {
-            parse_error(name, "Variable declared more than once at global scope");
+        else {
+            add_symbol(block, symb);
         }
-        scope_add_variable(global_block, name, type, expr);
     }
     
-    return init_decl_stmt(name, type, expr);
+    return init_var_decl_stmt(symb);
 }
 
-internal Statement *function_decloration(Token name) {
-    consume(TK_PROC, "Expected 'proc' keyword for function definition");
+internal Statement *parse_function_decloration(Translation_Unit* tu, Token name) {
     
-    Vector *args = function_arguments();
-    
-    consume(TK_RETURN_TYPE, "Expected '->' after function_arguments"); 
-    Type *return_type = parse_type();
-    
-    // TODO(ziv): enable the option for function prototypes
-    consume(TK_RBRACE, "Expected beginning of block '{'");
-    
-    Statement *block =  init_scope();
-    
-    // add to the scope the function arguments 
-    // so you would be able to use them inside 
-    // the scope 
-    for (int i = 0; i < args->index; i++) {
-        add_decl(block->block, (Symbol *)args->data[i]);
-    }
-    
-    // to allow the use of the function name inside the function I first create the function type and insert it into the global scope. Then I parse the block
-    Type *ty = init_type(TYPE_FUNCTION, return_type, args); 
-    add_decl(global_block, init_symbol(name, ty, NULL));  // add func decl to global scope
-    
-    block = scope(block);
-    
-    return init_func_decl_stmt(name, ty, block);
-}
-
-internal Vector *function_arguments() {
-    
+    // arguments
     Vector *args = init_vec(); 
-    
-    consume(TK_LPARAN, "Expected '(' for arguments");
-    
-    while (!check(TK_RPARAN) && match(TK_IDENTIFIER)) {
-        
-        Token name = previous(); 
-        consume(TK_COLON, "Expected ':' after variable name");
-        Type *type = parse_type(); 
+    consume(tu, TK_LPARAN, "Expected '(' for arguments");
+    while (!check(tu, TK_RPARAN) && match(tu, TK_IDENTIFIER)) {
+        Token var_name = previous(tu); 
+        consume(tu, TK_COLON, "Expected ':' after variable name");
+        Type *type = parse_type(tu); 
         
         Expr *expr = NULL;
-        if (match(TK_ASSIGN)) {
-            expr = expression(); 
+        if (match(tu, TK_ASSIGN)) {
+            expr = parse_expression(tu); 
         }
         
-        Symbol *symb = init_symbol(name, type, expr);
+        Symbol *symb = init_symbol(var_name, type, expr);
         vec_push(args, symb);
         
-        if (!match(TK_COMMA)) {
+        if (!match(tu, TK_COMMA)) {
             break;
         }
     } 
     
-    consume(TK_RPARAN, "Expected ')' for end of arguments");
+    consume(tu, TK_RPARAN, "Expected ')' for end of arguments");
+    consume(tu, TK_RETURN_TYPE, "Expected '->' after arguments"); 
     
-    return args;
+    Type *return_type = parse_type(tu);
+    
+    
+    // to allow the use of the function name inside the function 
+    // I first create the function type and insert it into the global scope. 
+    // Then I parse the block
+    Type *ty = init_type(TYPE_FUNCTION, return_type, args);
+    
+    
+    // function body/fuction prototype
+    Statement *block_stmt = NULL;
+    if (match(tu, TK_RBRACE)) {
+        // function body
+        
+        block_stmt = init_scope();
+        
+        // add to the scope the function arguments 
+        // so you would be able to use them inside 
+        // the scope 
+        for (int i = 0; i < args->index; i++) {
+            add_symbol(&block_stmt->block, (Symbol *)args->data[i]);
+        }
+        
+        // add the func decl to the current scope
+        Block *curr_block = get_curr_scope(tu); 
+        add_symbol(curr_block, init_symbol(name, ty, NULL));
+        
+        block_stmt = parse_scope_stmt(tu, block_stmt);
+    }
+    else {
+        // function prototype
+        consume(tu, TK_SEMI_COLON, "Expected '{' for function body or  ';' for prototype");
+    }
+    
+    return init_func_decl_stmt(name, ty, block_stmt);
 }
 
-internal Type *parse_type() {
+internal Type *parse_type(Translation_Unit *tu) {
     
     // TODO(ziv): support struct/enum types
+    
     // NOTE(ziv): The function type creation does not happen here 
     // because doing it that way would restrict me in a couple of 
     // major ways. So instead I am doing it in the 'function_decloration'
+    // This means that this function can only parse 'simple' types. 
     
     static Type_Kind tk_to_atom_type[] =  {
         [TK_S8_TYPE]  = TYPE_S8,
@@ -506,48 +494,39 @@ internal Type *parse_type() {
         [TK_STAR]        = TYPE_POINTER, 
     };
     
-    Token_Kind tk_kind = advance().kind;
+    Token_Kind tk_kind = advance(tu).kind;
     if (TK_TYPE_BEGIN <= tk_kind && tk_kind <= TK_TYPE_END) {
-        // handle atomic type 
-        
-        // TODO(ziv): REDO THIS!!!! using the known atomic types 
-        Type_Kind atom_kind = tk_to_atom_type[tk_kind];
-        return init_type(atom_kind, NULL, NULL); 
+        return get_atom(tk_to_atom_type[tk_kind]); 
     }
     else if (tk_kind == TK_STAR) {
-        return init_type(TYPE_POINTER, parse_type(), NULL);
+        return init_type(TYPE_POINTER, parse_type(tu), NULL);
     }
     
     // TODO(ziv): add support for arrays, not only pointers
     
-    parse_error(peek(), "Expected type after decloration"); // TODO(ziv): maybe this should be more clear.
+    parse_error(tu, peek(tu), "Expected type after decloration"); 
+    
+    
 #ifdef DEBUG 
     return NULL;
 #endif 
 }
 
-internal Statement *statement() {
-    if (match(TK_PRINT)) return print_stmt();  // this needs more consideration
-    if (match(TK_RETURN)) return return_stmt();
-    if (match(TK_RBRACE)) return scope(init_scope()); 
-    return expr_stmt();
+internal Statement *parse_statement(Translation_Unit* tu) {
+    if (match(tu, TK_RETURN)) return parse_return_stmt(tu);
+    if (match(tu, TK_RBRACE)) return parse_scope_stmt(tu, init_scope()); 
+    return parse_expr_stmt(tu);
 }
 
-internal Statement *return_stmt() {
-    Expr *expr = expression();
-    consume(TK_SEMI_COLON, "Expected ';' after expression");
+internal Statement *parse_return_stmt(Translation_Unit* tu) {
+    Expr *expr = parse_expression(tu);
+    consume(tu, TK_SEMI_COLON, "Expected ';' after expression");
     return init_return_stmt(expr);
 }
 
-internal Statement *print_stmt() {
-    Expr *expr = expression(); 
-    consume(TK_SEMI_COLON, "Expected ';' after a print statement");
-    return init_print_stmt(expr);
-}
-
-internal Statement *expr_stmt() {
-    Expr *expr = expression(); 
-    consume(TK_SEMI_COLON, "Expected ';' after a statement");
+internal Statement *parse_expr_stmt(Translation_Unit* tu) {
+    Expr *expr = parse_expression(tu); 
+    consume(tu, TK_SEMI_COLON, "Expected ';' after a statement");
     return init_expr_stmt(expr);
 }
 
@@ -558,14 +537,7 @@ internal Statement *expr_stmt() {
 internal Statement *init_expr_stmt(Expr *expr) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_EXPR; 
-    stmt->print_expr = expr; 
-    return stmt;
-}
-
-internal Statement *init_print_stmt(Expr *expr) {
-    Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
-    stmt->kind = STMT_PRINT_EXPR; 
-    stmt->print_expr = expr; 
+    stmt->expr = expr; 
     return stmt;
 }
 
@@ -578,12 +550,12 @@ internal Statement *init_func_decl_stmt(Token name, Type *ty, Statement *sc) {
     return stmt;
 }
 
-internal Statement *init_decl_stmt(Token name, Type *type, Expr *initializer) {
+internal Statement *init_var_decl_stmt(Symbol *symb) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_VAR_DECL; 
-    stmt->var_decl.type = type; 
-    stmt->var_decl.name = name; 
-    stmt->var_decl.initializer = initializer; 
+    stmt->var_decl.type = symb->type; 
+    stmt->var_decl.name = symb->name; 
+    stmt->var_decl.initializer = symb->initializer; 
     return stmt;
 }
 
@@ -591,7 +563,7 @@ internal Statement *init_scope() {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
     stmt->kind = STMT_SCOPE;
     stmt->block.statements = init_vec(); 
-    stmt->block.locals = init_vec(); 
+    stmt->block.locals = init_map(sizeof(Symbol)); 
     return stmt;
 }
 
@@ -602,61 +574,77 @@ internal Statement *init_return_stmt(Expr *expr) {
     return stmt;
 }
 
+internal Symbol *init_symbol(Token name, Type *type, Expr *initializer) {
+    Symbol *symbol = (Symbol *)malloc(sizeof(Symbol)); 
+    symbol->name = name; 
+    symbol->type = type; 
+    symbol->initializer = initializer; 
+    return symbol;
+}
+
+internal Type *init_type(Type_Kind kind, Type *subtype, Vector *symbols) {
+    Type *ty = (Type *)malloc(sizeof(Type)); 
+    ty->kind = kind;
+    ty->subtype = subtype;
+    ty->symbols = symbols;
+    return ty;
+}
+
 //////////////////////////////////
 /// General helper functions 
 
-internal void back_one() {
-    tokens_index--;
+internal void back_one(Translation_Unit *tu) {
+    tu->s->current--;
 }
 
-internal int is_at_end() {
-    Assert(tokens_index < tokens_len); 
-    return tokens[tokens_index].kind == TK_EOF;
+internal int is_at_end(Translation_Unit *tu) {
+    Assert(tu->s->current < tu->s->capacity); 
+    return tu->s->s[tu->s->current].kind == TK_EOF;
 }
 
-internal Token peek() {
-    return tokens[tokens_index];
+internal Token peek(Translation_Unit *tu) {
+    return tu->s->s[tu->s->current];
 }
 
-internal Token advance() {
-    if (!is_at_end()) tokens_index++; 
-    return tokens[tokens_index-1];
+internal Token advance(Translation_Unit *tu) {
+    if (!is_at_end(tu)) tu->s->current++; 
+    return tu->s->s[tu->s->current-1];
 }
 
-internal Token previous() {
-    return tokens[tokens_index-1];
+internal Token previous(Translation_Unit *tu) {
+    return tu->s->s[tu->s->current-1];
 }
 
-internal Token consume(Token_Kind kind, char *msg) {
-    if (check(kind)) return advance(); 
-    syntax_error(peek(), msg);
+internal Token consume(Translation_Unit *tu, Token_Kind kind, char *msg) {
+    if (check(tu, kind)) return advance(tu); 
+    syntax_error(tu, peek(tu), msg);
     
 #ifdef DEBUG
     return (Token){0};
 #endif 
 }
 
-internal void parse_error(Token token, char *msg) {
+internal void parse_error(Translation_Unit *tu, Token token, char *msg) {
     char buff[255] = {0};
     
-    if (token.kind == TK_EOF) {
-        strcat(buff, msg);
-        strcat(buff, " at end ");
-        report(token.loc.line, token.loc.ch - token.len, buff); 
-    }
-    else {
-        strcat(buff, msg); 
-        report(token.loc.line, token.loc.ch - token.len, strcat(buff, " at "));
-    }
+    int line = get_line_number(tu->s->start, token.str); 
+    int ch   = get_character_number(tu->s->start, token.str);
+    
+    strcat(buff, msg);
+    report(tu, line, ch, (token.kind == TK_EOF) ? strcat(buff, " at end ") : strcat(buff, " at ")); 
 }
 
-internal void syntax_error(Token token, const char *err) {
+internal void syntax_error(Translation_Unit *tu, Token token, const char *err) {
     char buff[100]; 
     sprintf(buff, "Syntax error: %s", err); 
-    parse_error(token, buff); 
+    parse_error(tu, token, buff); 
 }
 
-internal void report(int line, int ch, char *msg) {
+internal void report(Translation_Unit *tu, int line, int ch, char *msg) {
+    
+    // NOTE(ziv): This is really bad and I should refactor this probably
+    // but this is not important so I don't care for the time being.
+    
     char err[100] = {0};  // holding the error message
     char buff[100] = {0}; // holding the integer as a string
     
@@ -668,18 +656,20 @@ internal void report(int line, int ch, char *msg) {
     fprintf(stderr, err);
     fprintf(stderr, "\n");
     
-    // rewind 'code' to the line 
-    for (int l = 0; *code && line-1 > l; code++) {
-        if (*code == '\n') {
+    
+    // rewind to the line 
+    char *start = tu->s->start; 
+    for (int l = 0; *start && line-1 > l; start++) {
+        if (*start == '\n') {
             l++;
         }
     }
     
     int count = 0; 
     
-    char *temp = code; 
+    char *temp = tu->s->start; 
     for (; *temp && *temp != '\n'; temp++, count++);
-    fprintf(stderr, slice_to_str(code, count+1));
+    fprintf(stderr, str8_to_cstring((String8){tu->s->start, count+1}));
     
     fprintf(stderr, "%*c", ch,'^');
     fprintf(stderr, "\n");
@@ -691,25 +681,25 @@ internal void report(int line, int ch, char *msg) {
     // that I need to think about. 
     // I might change this when I have the will.. :)
     
-    Assert(false);
-    exit(-1); 
+    __debugbreak(); // for the debugger  
+    exit(-1);       // exit the application
 }
 
-internal bool check(Token_Kind kind) { 
-    if (is_at_end()) return false; 
-    return peek().kind == kind; 
+internal bool check(Translation_Unit *tu, Token_Kind kind) { 
+    if (is_at_end(tu)) return false; 
+    return peek(tu).kind == kind; 
 }
 
 
-internal bool internal_match(int n, ...) {
+internal bool internal_match(Translation_Unit *tu, int n, ...) {
     va_list kinds; 
     va_start(kinds, n);
     
     Token_Kind kind; 
     for (int i = 0; i < n; i++) {
         kind = va_arg(kinds, Token_Kind); 
-        if (check(kind)) {
-            advance(); 
+        if (check(tu, kind)) {
+            advance(tu); 
             va_end(kinds);
             return true;
         }

@@ -60,32 +60,26 @@ I will do in the future. That map will contain the allocated
 mapping for all symbols inside a given block
 
 */ 
-internal char *symbol_gen(Token t) {
+internal char *symbol_gen(Translation_Unit *tu, Token t) {
     
-    Statement *block_stmt = get_curr_scope();
-    Scope block = block_stmt->block;
-    
+    Block *block = get_curr_scope(tu);
     
     // the symbol is local 
-    Vector *locals = block.locals; 
+    Map *locals = block->locals; 
     int offset_to_symbol = 0; 
     
     // generate the appropriate offset for the symbol
-    for (int i = 0; i < locals->index; i++){
-        Symbol *s = (Symbol *)locals->data[i];
-        offset_to_symbol += get_type_size(s->type);
-        
-        if (strncmp(s->name.str, t.str, MIN(s->name.len, t.len)) == 0) {
-            break; 
+    for (int i = 0; i < locals->capacity; i++){
+        Bucket b = locals->buckets[i]; 
+        if (b.value) {
+            Symbol *symb = (Symbol *)b.value; 
+            offset_to_symbol += get_type_size(symb->type); 
         }
     }
     
-    
-    
-    if (offset_to_symbol == 0 && symbol_exist(global_block, t)) {
-        return slice_to_str(t.str, t.len);
+    if (is_at_global_block(tu)) {
+        return str8_to_cstring(t.str);
     }
-    
     
     static char str[MAX_LEN];
     snprintf(str, MAX_LEN, "[rbp+%d]", offset_to_symbol);
@@ -113,7 +107,7 @@ int emit(const char *format, ...)
 }
 
 
-internal void expr_gen(Type *func_ty, Expr *expr) {
+internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
     if (!expr) return; 
     
     switch (expr->kind) {
@@ -143,8 +137,8 @@ internal void expr_gen(Type *func_ty, Expr *expr) {
         } break;
         
         case EXPR_BINARY: {
-            expr_gen(func_ty, expr->right); 
-            expr_gen(func_ty, expr->left); 
+            expr_gen(tu, func_ty, expr->right); 
+            expr_gen(tu, func_ty, expr->left); 
             
             Token operation = expr->operation;
             switch (operation.kind) {
@@ -161,19 +155,22 @@ internal void expr_gen(Type *func_ty, Expr *expr) {
                 
                 // TODO(ziv): make division work
                 // case TK_SLASH: 
+                case TK_SLASH: 
                 case TK_STAR:
                 {
                     
                     expr->reg = scratch_alloc(); 
                     emit("  push rdx\n");
                     emit("  mov rax, %s\n", scratch_name(expr->right->reg));
-                    emit("  mul %s\n", scratch_name(expr->left->reg)); 
+                    emit("  %s %s\n", (operation.kind == TK_STAR) ? "mul" : "div", scratch_name(expr->left->reg)); 
                     emit("  mov %s, rax\n", scratch_name(expr->reg)); 
                     emit("  pop rdx\n");
                     
                     scratch_free(expr->right->reg);
                     scratch_free(expr->left->reg);
                 } break; 
+                
+                
                 
                 default: {
                     Assert(!"Not implemented yet");
@@ -190,20 +187,20 @@ internal void expr_gen(Type *func_ty, Expr *expr) {
             int found_index = -1; 
             for (int i = 0; i < func_ty->symbols->index; i++) {
                 Symbol *symb = (Symbol *)func_ty->symbols->data[i]; 
-                if (strncmp(expr->lvar.name.str, symb->name.str, MIN(expr->lvar.name.len, symb->name.len)) == 0) {
+                if (str8_compare(symb->name.str, expr->lvar.name.str) == 0) {
                     found_index = i; 
                     break;
                 }
             }
             
             emit("  mov %s, %s\n", scratch_name(expr->reg), 
-                 (found_index == -1) ? symbol_gen(expr->lvar.name) : fastcall_regs[found_index]); 
+                 (found_index == -1) ? symbol_gen(tu, expr->lvar.name) : fastcall_regs[found_index]); 
             
         } break;
         
         case EXPR_ASSIGN: {
-            expr_gen(func_ty, expr->assign.rvalue);
-            emit("  mov %s, %s\n", symbol_gen(expr->assign.lvar->lvar.name), scratch_name(expr->assign.rvalue->reg)); 
+            expr_gen(tu, func_ty, expr->assign.rvalue);
+            emit("  mov %s, %s\n", symbol_gen(tu, expr->assign.lvar->lvar.name), scratch_name(expr->assign.rvalue->reg)); 
             expr->reg = expr->assign.rvalue->reg;
             
         } break; 
@@ -226,19 +223,14 @@ internal void expr_gen(Type *func_ty, Expr *expr) {
             Register regs[10] = {0}; // TODO(ziv): I should change the way this works 
             int reg_index = 0; 
             
-            Expr *args = expr->call.args; 
-            for (; args && args->kind == EXPR_ARGUMENTS; args = args->args.next) {
-                Expr *lvar = args->args.lvar; 
-                expr_gen(func_ty, lvar); 
-                regs[reg_index++] = lvar->reg; 
-            }
+            // inc the reg_index as I need it using the function type as a input 
             
-            if (args) {
-                // detect the type 
-                expr_gen(func_ty, args); 
-                regs[reg_index++] = args->reg; 
+            Vector *args = expr->call.args->args; 
+            for (int i = 0; i < args->index; i++) {
+                Expr *e = (Expr *)args->data[i];
+                expr_gen(tu, func_ty, e); 
+                regs[reg_index++] = e->reg;
             }
-            
             
             // 
             // Moving the results into the correct registers 
@@ -255,8 +247,7 @@ internal void expr_gen(Type *func_ty, Expr *expr) {
             
             fastcall_free();
             
-            emit("  call %s\n", slice_to_str(expr->call.name->lvar.name.str,
-                                             expr->call.name->lvar.name.len));
+            emit("  call %s\n", str8_to_cstring(expr->call.name->lvar.name.str));
             
             // restore the stack 
             for (int i = 0; i < reg_index; i++) {
@@ -278,28 +269,28 @@ internal void expr_gen(Type *func_ty, Expr *expr) {
 
 static bool is_main = true; 
 
-internal void stmt_gen(Statement *func, Statement *stmt) {
+internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
     if (!stmt) return;
     
     switch (stmt->kind) {
         
         case STMT_VAR_DECL: {
             
-            expr_gen(func->func.type, stmt->var_decl.initializer);
-            emit("  mov %s, %s\n", symbol_gen(stmt->var_decl.name), scratch_name(stmt->var_decl.initializer->reg)); 
+            expr_gen(tu, func->func.type, stmt->var_decl.initializer);
+            emit("  mov %s, %s\n", symbol_gen(tu, stmt->var_decl.name), scratch_name(stmt->var_decl.initializer->reg)); 
             scratch_free(stmt->var_decl.initializer->reg);
         } break;
         
         case STMT_SCOPE: {
-            push_scope(stmt);
+            push_scope(tu, stmt);
             
             // the block of statements I will actually need to travaverse
             for (int i = 0; i < stmt->block.statements->index; i++) {
                 Statement *_stmt = (Statement *)stmt->block.statements->data[i]; 
-                stmt_gen(func, _stmt);
+                stmt_gen(tu, func, _stmt);
             }
             
-            pop_scope();
+            pop_scope(tu);
         } break; 
         
         case STMT_FUNCTION_DECL: {
@@ -308,9 +299,9 @@ internal void stmt_gen(Statement *func, Statement *stmt) {
             // Generation of the function:
             //
             
-            char *func_name = slice_to_str(stmt->func.name.str, stmt->func.name.len);
+            char *func_name = str8_to_cstring(stmt->func.name.str);
             Type *type = stmt->func.type; type;
-            Scope block = stmt->func.sc->block; 
+            Block block = stmt->func.sc->block; 
             
             // prologe
             { 
@@ -325,24 +316,30 @@ internal void stmt_gen(Statement *func, Statement *stmt) {
             int stack_size = 0; 
             { 
                 
-                bool ignore = false; 
-                for (int i = 0; i < block.locals->index; i++){
-                    Symbol *s = (Symbol *)block.locals->data[i];
-                    
-                    for (int j = 0; j < type->symbols->index; j++) {
-                        Symbol *function_symbol = (Symbol *)type->symbols->data[j]; 
-                        if (function_symbol->name.len == s->name.len && 
-                            strncmp(s->name.str, function_symbol->name.str, MIN(s->name.len, function_symbol->name.len)) == 0) {
-                            ignore = true; 
-                            break;
-                        }
-                    }
-                    
-                    if (!ignore) {
-                        stack_size += get_type_size(s->type);
-                    }
-                    ignore = false;
+                // calc how many bytes do all variable declorations take up
+                
+                Map *locals = block.locals; 
+                Map_Iterator mit = map_iterator(locals); 
+                
+                // calc the size of the input arguments to a function 
+                // and then subtract this size from the total 
+                
+                // TODO(ziv): check whether I want to have this limited to 4 arguments 
+                
+                int input_arguments_size = 0; 
+                Vector *symbols = type->symbols; 
+                for (int i = 0; i < symbols->index; i++) {
+                    Symbol *symb = (Symbol *)symbols->data[i]; 
+                    input_arguments_size += get_type_size(symb->type); 
                 }
+                
+                int total_size = 0; 
+                while (map_next(&mit)) {
+                    Symbol *symb = (Symbol *)mit.value; 
+                    total_size += get_type_size(symb->type); 
+                }
+                
+                stack_size = total_size - input_arguments_size; 
                 
                 if (stack_size > 0) {
                     emit("  sub rsp, %d\n", stack_size);  
@@ -350,7 +347,7 @@ internal void stmt_gen(Statement *func, Statement *stmt) {
             }
             
             // generating the body
-            stmt_gen(func, stmt->func.sc);
+            stmt_gen(tu, func, stmt->func.sc);
             
             // epilogue
             {
@@ -371,16 +368,16 @@ internal void stmt_gen(Statement *func, Statement *stmt) {
         } break;
         
         case STMT_EXPR: {
-            expr_gen(func->func.type, stmt->expr); 
+            expr_gen(tu, func->func.type, stmt->expr); 
             scratch_free(stmt->expr->reg);
         } break; 
         
         case STMT_RETURN: {
             
             // function return stmt
-            expr_gen(func->func.type, stmt->expr);
+            expr_gen(tu, func->func.type, stmt->expr);
             emit("  mov rax, %s\n", scratch_name(stmt->expr->reg));
-            emit("  jmp %s_epilogue\n", slice_to_str(func->func.name.str, func->func.name.len));
+            emit("  jmp %s_epilogue\n", str8_to_cstring(func->func.name.str));
             scratch_free(stmt->expr->reg);
         } break; 
         
@@ -398,10 +395,10 @@ internal void stmt_gen(Statement *func, Statement *stmt) {
 // Set of functions for generating globals in the .data segment
 // 
 
-internal void program_gen(Program *prog) {
-    if (!prog) return; 
+internal void x86gen_translation_unit(Translation_Unit *tu) {
+    if (!tu) return; 
     
-    output_file = stdout;
+    output_file = stdout; // this is subject to change
     
     // 
     // Generate the globals inside the .data segment
@@ -409,106 +406,111 @@ internal void program_gen(Program *prog) {
     // interfaces will get generated in this phase
     // 
     
-    Vector *decls = prog->decls;
-    Scope block = prog->block; 
+    Vector *decls = tu->decls;
+    Block *block = tu->block_stack.blocks[0]; 
     
     Assert(0 < decls->index);
     
-    Vector *symbols = block.locals; 
+    Map *symbols_map = block->locals; 
     
-    emit("\n\n"); 
-    if (symbols->index > 0)
-        emit(".data\n");
-    
-    char buff[MAX_LEN];
-    int buff_cursor = 0; 
-    
-    
-    for (int i = 0; i < symbols->index; i++) {
-        Symbol *symb = (Symbol *)symbols->data[i]; 
+    // generate code for the data segment 
+    {
+        emit("\n\n"); 
+        if (symbols_map->count > 0)
+            emit(".data\n");
         
-        // generate the appropriate global data with this
-        switch (symb->type->kind) {
+        char buff[MAX_LEN];
+        s64 buff_cursor = 0; 
+        
+        Map_Iterator it = map_iterator(symbols_map); 
+        
+        while (map_next(&it)) {
+            Symbol *symb = (Symbol *)it.value;
             
-            case TYPE_STRING: {
-                emit("%s db \"%s\", 0\n", 
-                     slice_to_str(symb->name.str, symb->name.len), 
-                     (char *)symb->initializer->literal.data);
-            } break; 
-            
-            // TODO(ziv): add more literal types with different sizes
-            case TYPE_BOOL:
-            case TYPE_S64: { 
-                emit("%s dq %lld\n", 
-                     slice_to_str(symb->name.str, symb->name.len),
-                     (long long)symb->initializer->literal.data);
-            } break; 
-            
-            case TYPE_FUNCTION: {
-                // TODO(ziv): Maybe if I have semantics for declaring functions as private 
-                // then I would not need to do this decloration as pulic or whatever
+            // generate the appropriate global data with this
+            switch (symb->type->kind) {
                 
-                if (is_main) {
-                    // write to a buff
-                    strcpy(&buff[buff_cursor], "PUBLIC ");
-                    buff_cursor += (int)strlen("PUBLIC ");
-                    strncpy(&buff[buff_cursor], symb->name.str, symb->name.len);
-                    buff_cursor += symb->name.len;
-                    //strcpy(&buff[buff_cursor], " PROC");
-                    //buff_cursor += (int)strlen(" PROC");
-                    strcpy(&buff[buff_cursor++], "\n");
-                }
+                case TYPE_STRING: {
+                    emit("%s db \"%s\", 0\n", 
+                         str8_to_cstring(symb->name.str),
+                         (char *)symb->initializer->literal.data);
+                } break; 
                 
+                // TODO(ziv): add more literal types with different sizes
+                case TYPE_BOOL:
+                case TYPE_S64: { 
+                    emit("%s dq %lld\n", 
+                         str8_to_cstring(symb->name.str),
+                         (long long)symb->initializer->literal.data);
+                } break; 
                 
-            } break;
-            
-            default: {
-                Assert(!"Not implemented yet");
-            } break;
-            
+                case TYPE_FUNCTION: {
+                    // TODO(ziv): Maybe if I have semantics for declaring functions as private 
+                    // then I would not need to do this decloration as pulic or whatever
+                    
+                    if (is_main) {
+                        // write to a buff
+                        strcpy(&buff[buff_cursor], "PUBLIC ");
+                        buff_cursor += (int)strlen("PUBLIC ");
+                        strncpy(&buff[buff_cursor], symb->name.str.str, symb->name.str.size);
+                        buff_cursor += symb->name.str.size;
+                        //strcpy(&buff[buff_cursor], " PROC");
+                        //buff_cursor += (int)strlen(" PROC");
+                        strcpy(&buff[buff_cursor++], "\n");
+                    }
+                    
+                    
+                } break;
+                
+                default: {
+                    Assert(!"Not implemented yet");
+                } break;
+                
+            }
         }
+        
+        // output public function declorations
+        emit("\n");
+        strcpy(&buff[buff_cursor++], "\0");
+        emit(buff); 
     }
-    
-    // output public function declorations
-    emit("\n");
-    strcpy(&buff[buff_cursor++], "\0");
-    emit(buff); 
-    
     
     
     // 
     // Now we generate the code for each of the functions 
     // at the order that we see them. 
     // 
-    
-    emit("\n\n"); 
-    emit(".code\n");
-    
-    // skip non function declorations
-    Statement *stmt = (Statement *)decls->data[0]; 
-    int i;
-    
-    for (i = 1; i < decls->index && stmt->kind != STMT_FUNCTION_DECL; i++) {
-        stmt = (Statement *)decls->data[i];
-    }
-    
-    const char *entry_point_name = "main"; 
-    for (; i <= decls->index; i++) {
-        emit("\n");
-        
-        is_main = strncmp(stmt->func.name.str, entry_point_name,
-                          MIN(stmt->func.name.len, strlen(entry_point_name))) == 0;
-        
-        stmt_gen(stmt, stmt);
+    {
+        emit("\n\n"); 
+        emit(".code\n");
         
         // skip non function declorations
-        stmt = (Statement *)decls->data[i]; 
-        for (; i < decls->index && stmt->kind != STMT_FUNCTION_DECL; i++) {
+        Statement *stmt = (Statement *)decls->data[0]; 
+        int i;
+        
+        for (i = 1; i < decls->index && stmt->kind != STMT_FUNCTION_DECL; i++) {
             stmt = (Statement *)decls->data[i];
         }
         
+        const char *entry_point_name = "main"; 
+        for (; i <= decls->index; i++) {
+            emit("\n");
+            
+            String8 s = str8_lit(entry_point_name);
+            is_main = str8_compare(stmt->func.name.str, s) == 0;
+            
+            stmt_gen(tu, stmt, stmt);
+            
+            // skip non function declorations
+            stmt = (Statement *)decls->data[i]; 
+            for (; i < decls->index && stmt->kind != STMT_FUNCTION_DECL; i++) {
+                stmt = (Statement *)decls->data[i];
+            }
+            
+        }
+        
+        emit("END\n");
     }
     
-    emit("END\n");
     
 }

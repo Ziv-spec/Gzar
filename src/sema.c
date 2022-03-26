@@ -27,16 +27,43 @@ inline int type_kind_to_atom(Type_Kind kind) {
 
 internal Type *get_atom(Type_Kind kind) {
     Assert(kind < TYPE_ATOMIC_STUB);
+    
+    // NOTE(ziv): Small explenation of what is happening here:
+    // I don't need to constantly allocate the same 
+    // atomic types if I know that they are atomic.
+    // I have a table with these types already created 
+    // and I use pointers to these preallocated types 
+    // to reduce the amount of memory I am allocating. 
+    // I just need to make sure that this will be okay 
+    // with multithreading if I will ever need it. 
+    
+    // a table for getting more frequently used types
+    static Type types_tbl[] = {
+        [ATOM_S8]  = { TYPE_S8,  NULL, NULL }, 
+        [ATOM_S16] = { TYPE_S16, NULL, NULL }, 
+        [ATOM_S32] = { TYPE_S32, NULL, NULL }, 
+        [ATOM_S64] = { TYPE_S64, NULL, NULL }, 
+        
+        [ATOM_U8]  = { TYPE_U8,  NULL, NULL }, 
+        [ATOM_U16] = { TYPE_U16, NULL, NULL }, 
+        [ATOM_U32] = { TYPE_U32, NULL, NULL }, 
+        [ATOM_U64] = { TYPE_U64, NULL, NULL }, 
+        
+        [ATOM_UNKNOWN]   = { TYPE_UNKNOWN,NULL, NULL }, 
+        [ATOM_VOID]   = { TYPE_VOID,   NULL, NULL }, 
+        [ATOM_STRING] = { TYPE_STRING, NULL, NULL }, 
+        [ATOM_BOOL]   = { TYPE_BOOL,   NULL, NULL }, 
+        
+        // NOTE(ziv): From here the types do not have a 1-1 relationship with the types.
+        // Also, adding more types means that this table will get largeer and might get
+        // evicted from the cash more often. This means that I will probably try to 
+        // minize the size of this table instead of maximize it's usefulness. 
+        
+        // [ATOM_VOID_POINTER] = { TYPE_POINTER, &types_tbl[ATOM_VOID], NULL }, // *void 
+    }; 
+    
     s32 index = type_kind_to_atom(kind);
     return &types_tbl[index]; 
-}
-
-internal int get_argument_count(Expr *arguments) {
-    int count = 0;
-    
-    for (; arguments && arguments->kind == EXPR_ARGUMENTS; count++ ,arguments = arguments->args.next);
-    
-    return count;
 }
 
 internal char *type_to_string(Type *ty) {
@@ -90,7 +117,7 @@ internal char *format_types(char *msg, Type *t1, Type *t2) {
     return _strdup(buff);
 }
 
-internal void type_error(Token line, Type *t1, Type *t2, char *msg) {
+internal void type_error(Translation_Unit *tu, Token line, Type *t1, Type *t2, char *msg) {
     char buff[MAX_LEN] = {0}; 
     char err[MAX_LEN] = {0}; 
     
@@ -98,9 +125,14 @@ internal void type_error(Token line, Type *t1, Type *t2, char *msg) {
     strcat(err, result); 
     strcat(err, " at "); 
     
-    strcat(err, _itoa(line.loc.line, buff, 10)); 
+    int line_num = get_line_number(tu->s->start, line.str);
+    strcat(err, _itoa(line_num, buff, 10)); 
     strcat(err, "\n");
     fprintf(stderr, err);
+    
+    __debugbreak(); 
+    exit(-1);
+    
 }
 
 internal bool type_equal(Type *t1, Type *t2) {
@@ -193,14 +225,6 @@ internal Type *get_compatible_type(Type *dest, Type *src) {
     return NULL;
 }
 
-internal Type *init_type(Type_Kind kind, Type *subtype, Vector *symbols) {
-    Type *ty = (Type *)malloc(sizeof(Type)); 
-    ty->kind = kind;
-    ty->subtype = subtype;
-    ty->symbols = symbols;
-    return ty;
-}
-
 internal Type *implicit_cast(Type *t1, Type *t2) {
     
     // implicit upcast of integer type 
@@ -218,7 +242,7 @@ internal Type *implicit_cast(Type *t1, Type *t2) {
     return NULL; 
 }
 
-internal Type *sema_expr(Expr *expr) {
+internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
     if (!expr) return NULL;
     
     // recursively go and typecheck the expression 
@@ -248,21 +272,19 @@ internal Type *sema_expr(Expr *expr) {
         
         
         case EXPR_LVAR: {
-            Type *type = local_exist(expr->lvar.name); 
-            type = type ? type : symbol_exist(global_block, expr->lvar.name);
+            Symbol *symb = local_exist(tu, expr->lvar.name); 
             
-            Assert(type); // I should be getting a type here 
-            // if I don't that means I probably have a bug somewhere 
+            Assert(symb); // I should be getting a symbol here 
             
-            return expr->type = type; 
+            return expr->type = symb->type; 
         } break;
         
         
         
         case EXPR_ASSIGN: { // should I put this into the binary thingy? 
-            Type *rhs = sema_expr(expr->assign.lvar);
+            Type *rhs = sema_expr(tu, expr->assign.lvar);
             if (!rhs) return NULL; 
-            Type *lhs = sema_expr(expr->assign.rvalue);
+            Type *lhs = sema_expr(tu, expr->assign.rvalue);
             if (!lhs) return NULL; 
             
             // If I have nil literal, I want to implicitly cast it to the 
@@ -280,7 +302,7 @@ internal Type *sema_expr(Expr *expr) {
             }
             
             if (!type_equal(rhs, lhs)) {
-                type_error(expr->assign.lvar->lvar.name, lhs, rhs, "Unexpected incompatible types '%s' != '%s' on assignment");
+                type_error(tu, expr->assign.lvar->lvar.name, lhs, rhs, "Unexpected incompatible types '%s' != '%s' on assignment");
                 return NULL; 
             }
             
@@ -289,9 +311,9 @@ internal Type *sema_expr(Expr *expr) {
         
         
         case EXPR_BINARY: {
-            Type *rhs = sema_expr(expr->right);
+            Type *rhs = sema_expr(tu, expr->right);
             if (!rhs) return NULL; 
-            Type *lhs = sema_expr(expr->left);
+            Type *lhs = sema_expr(tu, expr->left);
             if (!lhs) return NULL; 
             
             result = implicit_cast(rhs, lhs);
@@ -300,7 +322,7 @@ internal Type *sema_expr(Expr *expr) {
                     if (is_integer(rhs) && is_integer(lhs))
                         fprintf(stderr, "Unable to implicitly cast between unsigned and signed integer types");
                     else
-                        type_error(expr->operation, lhs, rhs, "Unexpected incompatible types `%s` != `%s`");
+                        type_error(tu, expr->operation, lhs, rhs, "Unexpected incompatible types `%s` != `%s`");
                     return NULL;
                 }
                 result = rhs; 
@@ -311,12 +333,11 @@ internal Type *sema_expr(Expr *expr) {
             if (!is_integer(result) &&
                 !is_boolean(result) &&
                 !is_pointer(result)) {
-                type_error(expr->operation, NULL, NULL, "Incompatible type for operation"); 
+                type_error(tu, expr->operation, NULL, NULL, "Incompatible type for operation"); 
                 return NULL; 
             }
             
             Token_Kind op = expr->operation.kind; 
-            Assert(TK_OP_BEGIN < op && op < TK_OP_END); 
             switch (op) {
                 
                 case TK_PLUS: 
@@ -329,10 +350,10 @@ internal Type *sema_expr(Expr *expr) {
                         
                         if (op == TK_MINUS) {
                             // ptr - ptr = ptrdiff (of type s64)
-                            return &types_tbl[ATOM_S64];
+                            return get_atom(TYPE_S64);
                         }
                         else {
-                            type_error(expr->operation, NULL, NULL, "Can not add two pointer types");
+                            type_error(tu, expr->operation, NULL, NULL, "Can not add two pointer types");
                         }
                     }
                     
@@ -349,7 +370,7 @@ internal Type *sema_expr(Expr *expr) {
                 {
                     // TYPE_UNKOWN special case (for implicit type casting
                     expr->type = result;
-                    return &types_tbl[ATOM_BOOL];
+                    return get_atom(TYPE_BOOL);
                 } break; 
                 
                 default: {
@@ -366,10 +387,9 @@ internal Type *sema_expr(Expr *expr) {
         
         case EXPR_UNARY: {
             
-            Type *rhs = sema_expr(expr->unary.right);
+            Type *rhs = sema_expr(tu, expr->unary.right);
             
             Token_Kind op = expr->unary.operation.kind; 
-            Assert(TK_OP_BEGIN < op && op < TK_OP_END); 
             
             switch (op) {
                 
@@ -377,14 +397,14 @@ internal Type *sema_expr(Expr *expr) {
                     if (is_integer(rhs) || is_unsigned_integer(rhs)) {
                         return expr->type = rhs;
                     }
-                    type_error(expr->unary.operation, NULL, NULL, "Incompatible type for '-' operation");
+                    type_error(tu, expr->unary.operation, NULL, NULL, "Incompatible type for '-' operation");
                 } break;
                 
                 case TK_STAR: {
                     if (rhs->kind == TYPE_POINTER) {
                         return rhs; 
                     }
-                    type_error(expr->unary.operation, rhs, NULL,  "Incompatible type, must be pointer for dereference operation");
+                    type_error(tu, expr->unary.operation, rhs, NULL,  "Incompatible type, must be pointer for dereference operation");
                     
                 } break; 
                 
@@ -393,7 +413,7 @@ internal Type *sema_expr(Expr *expr) {
                     if (rhs->kind == TYPE_BOOL) {
                         return rhs; 
                     }
-                    type_error(expr->unary.operation, rhs, NULL,  "Incompatible type, must be boolean for operation");
+                    type_error(tu, expr->unary.operation, rhs, NULL,  "Incompatible type, must be boolean for operation");
                 } break; 
             } 
             
@@ -403,22 +423,25 @@ internal Type *sema_expr(Expr *expr) {
         
         case EXPR_CALL: {
             
-            Type *function_type = local_exist(expr->call.name->lvar.name);
-            Expr *args = expr->call.args;
-            Vector *symbols = function_type->symbols; 
+            // check whether the function has been defined
+            Symbol *func_symb = local_exist(tu, expr->call.name->lvar.name);
+            
+            Type *function_type = func_symb->type; 
+            Vector *call_args = expr->call.args->args;
+            Vector *func_args = function_type->symbols;
             
             //
             // check whether the argument count matches
             //
             
-            int call_args_count = get_argument_count(args);
-            int func_args_count = symbols->index; 
+            int call_args_count = call_args->index;
+            int func_args_count = func_args->index; 
             if (call_args_count != func_args_count) {
                 char *msg = "Argument count missmatch when calling a function %d != %d";
                 char *buff = (char *)malloc(strlen(msg) * sizeof(char)); 
                 
                 sprintf(buff, msg, func_args_count, call_args_count); 
-                type_error(expr->call.name->lvar.name, NULL, NULL, buff);
+                type_error(tu, expr->call.name->lvar.name, NULL, NULL, buff);
             }
             
             //
@@ -426,14 +449,15 @@ internal Type *sema_expr(Expr *expr) {
             // the arugments passed to the call node
             //
             
-            for (int i = 0; i < symbols->index && args; i++) { 
-                Symbol *symb = (Symbol *)symbols->data[i];
-                Type *func_arg = symb->type; 
+            int len = call_args_count;
+            for (int i = 0; i < len; i++) { 
+                Symbol *symb = (Symbol *)func_args->data[i];
+                Expr *call_expr = (Expr *)call_args->data[i];
+                Type *func_arg_type = symb->type; 
+                Type *call_arg_type = sema_expr(tu, call_expr);
                 
-                Type *call_arg = (args->kind == EXPR_ARGUMENTS) ? sema_expr(args->args.lvar) : sema_expr(args); 
-                
-                if (!type_equal(func_arg, call_arg)) {
-                    type_error(expr->call.name->lvar.name, func_arg, call_arg, "Unexpected incompatible types `%s` != `%s`");
+                if (!type_equal(func_arg_type, call_arg_type)) {
+                    type_error(tu, expr->call.name->lvar.name, func_arg_type, call_arg_type, "Unexpected incompatible types `%s` != `%s`");
                 }
             }
             
@@ -444,7 +468,7 @@ internal Type *sema_expr(Expr *expr) {
         
         
         case EXPR_GROUPING: {
-            return sema_expr(expr->grouping.expr); 
+            return sema_expr(tu, expr->grouping.expr); 
         } break;
         
         
@@ -459,7 +483,7 @@ internal Type *sema_expr(Expr *expr) {
 }
 
 
-internal bool sema_statement(Statement *stmt) {
+internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
     
     switch (stmt->kind) {
         
@@ -467,7 +491,7 @@ internal bool sema_statement(Statement *stmt) {
         case STMT_RETURN:
         case STMT_EXPR: {
             // NOTE(ziv): This is not an error the `expr` is just another name for the ret
-            Type *ty = sema_expr(stmt->expr);
+            Type *ty = sema_expr(tu, stmt->expr);
             return ty ? true : false; 
         } break; 
         
@@ -480,21 +504,20 @@ internal bool sema_statement(Statement *stmt) {
                 Symbol *symb = (Symbol *)args->data[i]; 
                 Assert(symb->initializer == NULL); // I do not support default values
                 if (symb->type->kind == TYPE_VOID) {
-                    type_error(symb->name, NULL, NULL, "Illigal use of type `void`");
+                    type_error(tu, symb->name, NULL, NULL, "Illigal use of type `void`");
                     return false;
                 }
             }
             
             Statement *block = stmt->func.sc;
-            return sema_statement(block); 
-            
+            return sema_statement(tu, block); 
         } break; 
         
         
         
         case STMT_VAR_DECL: {
             Type *lhs = stmt->var_decl.type; 
-            Type *rhs = sema_expr(stmt->var_decl.initializer); 
+            Type *rhs = sema_expr(tu, stmt->var_decl.initializer); 
             
             if (!lhs) {
                 if (rhs) {
@@ -506,7 +529,7 @@ internal bool sema_statement(Statement *stmt) {
             }
             
             if (lhs->kind == TYPE_VOID) {
-                type_error(stmt->var_decl.name, NULL, NULL, "Illigal use of type `void`");
+                type_error(tu, stmt->var_decl.name, NULL, NULL, "Illigal use of type `void`");
                 return false;
             }
             
@@ -517,7 +540,7 @@ internal bool sema_statement(Statement *stmt) {
                     return true;
                 }
                 
-                type_error(stmt->var_decl.name, lhs, rhs, "Types do not match `%s` != `%s`");
+                type_error(tu, stmt->var_decl.name, lhs, rhs, "Types do not match `%s` != `%s`");
                 return false;
             }
             return true;
@@ -527,17 +550,17 @@ internal bool sema_statement(Statement *stmt) {
         
         
         case STMT_SCOPE: {
-            push_scope(stmt); 
+            push_scope(tu, stmt); 
             
             bool temp, success = true;
             Vector *statements = stmt->block.statements;
             for (int i = 0; i < statements->index; i++) { 
                 Statement *block_stmt = (Statement *)stmt->block.statements->data[i]; 
-                temp = sema_statement(block_stmt);
+                temp = sema_statement(tu, block_stmt);
                 success = (!success) ? success : temp;
             }
             
-            pop_scope(stmt); 
+            pop_scope(tu); 
             return success;
         }
         
@@ -552,11 +575,11 @@ internal bool sema_statement(Statement *stmt) {
     return true;
 }
 
-internal void sema_file(Program *prog) {
+internal void sema_translation_unit(Translation_Unit *tu) {
     
-    for (int i = 0; i < prog->decls->index; i++) {
-        Statement *stmt = (Statement *)prog->decls->data[i]; 
-        sema_statement(stmt);
+    for (int i = 0; i < tu->decls->index; i++) {
+        Statement *stmt = (Statement *)tu->decls->data[i]; 
+        sema_statement(tu, stmt);
     }
     
 }

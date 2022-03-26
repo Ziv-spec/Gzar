@@ -1,210 +1,192 @@
 
-internal bool match_character(char **txt, char c, int *len) {
-    if ((*txt)[0] == c) {
-        (*txt)++;
-        (*len)++;
-        return true;
-    }
-    return false;
-}
-
-
-internal bool get_next_token(Lexer *lexer) { 
-    Location loc = lexer->loc;
-    Token token = {0}; 
+internal Token lex_identifier(char *str) {
     
-    char *txt = lexer->code + lexer->loc.index; // current character
+    const static char keywords[][16] = {
+        "bool",
+        "else",
+        "false",
+        "if",
+        "int",
+        "nil",
+        "return",
+        "s16",
+        "s32",
+        "s64",
+        "s8",
+        "string",
+        "true",
+        "u16",
+        "u32",
+        "u64",
+        "u8",
+        "void",
+        "while",
+    };
     
-    // 
-    // skip whitespace and comments 
-    // 
+    // NOTE(ziv): this is a conversion from index to token table. 
+    // I could have done this in a much better way but you know.. 
+    // it's late and I don't care.. 
+    const static int keywords_to_tk_kind_tbl[] = {
+        [1]  = TK_BOOL_TYPE,
+        [2]  = TK_ELSE, 
+        [3]  = TK_FALSE,
+        [4]  = TK_IF, 
+        [5]  = TK_INT_TYPE, 
+        [6]  = TK_NIL, 
+        [7]  = TK_RETURN, 
+        [8]  = TK_S16_TYPE, 
+        [9]  = TK_S32_TYPE, 
+        [10] = TK_S64_TYPE, 
+        [11] = TK_S8_TYPE, 
+        [12] = TK_STRING_TYPE, 
+        [13] = TK_TRUE, 
+        [14] = TK_U16_TYPE, 
+        [15] = TK_U32_TYPE, 
+        [16] = TK_U64_TYPE, 
+        [17] = TK_U8_TYPE, 
+        [18] = TK_VOID_TYPE, 
+        [19] = TK_WHILE, 
+    }; 
     
-    for (; txt; txt++, loc.ch++) {
-        
-        if (txt[0] == '/') {
-            if (txt[1] == '/') { // skip comment
-                while (*txt != '\n' && *txt != '\r' && *txt != '\0') { 
-                    txt++; loc.ch++; 
-                }
-            }
-        }
-        if (*txt == '\n') {
-            loc.line++;
-            loc.ch = 0;
-        }
-        
-        if (*txt != '\n' && *txt != ' ' && *txt != '\t') {
-            break; 
-        }
-        
-        
-    }
-    
-    // 
-    // lex a token 
-    // 
-    
-    switch (*txt++) {
-        
-        case '{': { token.kind = TK_RBRACE; token.len = 1; } break; 
-        case '}': { token.kind = TK_LBRACE; token.len = 1; } break; 
-        case ')': { token.kind = TK_RPARAN; token.len = 1; } break; 
-        case '(': { token.kind = TK_LPARAN; token.len = 1; } break; 
-        case ';': { token.kind = TK_SEMI_COLON; token.len = 1; } break; 
-        case '+': { token.kind = TK_PLUS;  token.len = 1; }  break; 
-        case '*': { token.kind = TK_STAR;  token.len = 1; }  break; 
-        case '/': { token.kind = TK_SLASH; token.len = 1; } break; 
-        case ',': { token.kind = TK_COMMA; token.len = 1; } break; 
-        
-        case '-': { token.kind = match_character(&txt, '>', &token.len) ? TK_RETURN_TYPE: TK_MINUS; token.len++; } break;
-        case ':': { token.kind = match_character(&txt, ':', &token.len) ? TK_DOUBLE_COLON: TK_COLON; token.len++; } break;
-        case '=': { token.kind = match_character(&txt, '=', &token.len) ? TK_EQUAL_EQUAL : TK_ASSIGN; token.len++; } break;
-        case '>': { token.kind = match_character(&txt, '=', &token.len) ? TK_GREATER_EQUAL : TK_GREATER; token.len++; } break; 
-        case '<': { token.kind = match_character(&txt, '=', &token.len) ? TK_LESS_EQUAL : TK_LESS; token.len++; } break; 
-        case '!': { token.kind = match_character(&txt, '=', &token.len) ? TK_BANG_EQUAL : TK_BANG; token.len++; } break; 
-        
-        case '\0': {
-            token.kind = TK_EOF;
-        } break;
-        
-        case '"': {
-            
-            token.kind = TK_STRING; 
-            token.str  = txt;
-            
-            for (; *txt != '"' && *txt != '\n'; txt++); 
-            token.len = (int)(txt-token.str);
-            txt++; // eat '\"' character
-            loc.ch+=3;
-            
-        } break;
-        
-        default: { 
-            
-            txt--;
-            if (is_digit(*txt)) {
-                token.kind = TK_NUMBER;
-                token.str = txt;
-                for (; is_digit(*txt); txt++, loc.ch++);
-                token.len = (int)(txt-token.str); 
-            }
-            else if (is_alphanumeric(*txt)) {
-                
-                //
-                // Search if token is keyword
-                //
-                
-                // This is map between the keywords and their string representation
-                // I might use a hash map for the mapping in the future but for the time 
-                // being it works so I will take it .
-                static char *keywords[]  = {
-                    [0]         = NULL,
-                    [TK_IF]     = "if",
-                    [TK_ELSE]   = "else",
-                    [TK_WHILE]  = "while",
-                    [TK_FALSE]  = "false",
-                    [TK_TRUE]   = "true",
-                    [TK_NIL]    = "nil",
-                    [TK_RETURN] = "return",
-                    [TK_PRINT]  = "print",
-                    [TK_PROC]   = "proc",
-                    
-                    [TK_S8_TYPE]  = "s8",
-                    [TK_S16_TYPE] = "s16",
-                    [TK_S32_TYPE] = "s32",
-                    [TK_S64_TYPE] = "s64",
-                    [TK_U8_TYPE]  = "u8",
-                    [TK_U16_TYPE] = "u16",
-                    [TK_U32_TYPE] = "u32",
-                    [TK_U64_TYPE] = "u64",
-                    [TK_INT_TYPE] = "int",
-                    [TK_BOOL_TYPE]   = "bool",
-                    [TK_STRING_TYPE] = "string",
-                    [TK_VOID_TYPE]   = "void",
-                    
-                    // this is a bit of a hack though, I am unsure what would be better rn.
-                    [TK_TYPE_BEGIN] = "\0", 
-                    [TK_TYPE_END]   = "\0",
-                    
-                };
-                
-                bool found_keyword = false; 
-                for (int i = 1; i < ArrayLength(keywords); i++) {
-                    // if i don't put the result of the comparison into 'r' then 
-                    // for some reason msvc bugs out and does not produce correct code here
-                    // so I just do this
-                    int r = keyword_cmp(txt, keywords[i]) == 0;
-                    if (r) {
-                        token.kind = i;
-                        found_keyword = true;
-                        break;
-                    }
-                }
-                if (found_keyword) {
-                    // because I do not effect txt in my_strcmp
-                    // here I 'eat' that token
-                    char *keyword = keywords[token.kind];
-                    token.len = (int)strlen(keyword)-1;
-                    while (*keyword++) txt++; 
-                } 
-                else {
-                    
-                    // token is a identifier
-                    token.kind = TK_IDENTIFIER;
-                    token.str = txt;  
-                    for (; is_alphanumeric(*txt); txt++); 
-                    token.len = (int)(txt-token.str); 
-                }
-            }
-            else {
-                // I don't know what is this token. 
-                fprintf(stderr, "Error: Unknown character at %d\n", loc.line);
-                return false;
-            }
-            
-        } break;
-        
-        
-    }
-    
-    loc.ch += token.len;
-    loc.index = (int)(txt - lexer->code);  
-    lexer->loc = loc; 
-    token.loc = loc;
-    
-    lexer->token = token;
-    return true;
-}
-
-internal bool top_next_token(Lexer *lexer) {
-    Location loc = lexer->loc; 
-    if (!get_next_token(lexer)) {
-        return false;  
-    }
-    lexer->loc = loc; // move lexer to old location
-    return true; 
-}
-
-internal bool lex_file(Lexer *lexer) {
-    //
-    // get a token list for the whole program
-    //
+    Token t = {0}; 
     int i = 0;
-    for (;  lexer->token.kind != TK_EOF; i++) {
-        if (get_next_token(lexer)) {
-            tokens[i] = lexer->token;
-        }
-        else {
-            return false;
+    for (; i < ArrayLength(keywords); i++) {
+        if (strncmp(keywords[i], str, strlen(keywords[i])) == 0) {
+            break;
         }
     }
-    tokens_len = i;
     
-    return true;
+    if (i < ArrayLength(keywords)) {
+        t.kind = keywords_to_tk_kind_tbl[i+1];
+        t.str = (String8){ str, strlen(keywords[i]) };
+    }
+    else {
+        // lex a identifier
+        char *start = str; 
+        for (; is_alphanumeric(*str); str++);
+        t.kind = TK_IDENTIFIER; 
+        t.str = (String8) { start, str-start };
+    }
+    return t;
 }
 
-internal int keyword_cmp(char *str1, char *str2) {
-    char *temp1 = str1, *temp2 = str2; 
-    while (*temp1 && *temp2 && *temp1 == *temp2) { temp1++; temp2++; }
-    return is_alphanumeric(*temp1) || *temp2 || *temp1 == *temp2;
+
+////////////////////////////////
+/// main lexing function
+
+internal bool lex_file(Token_Stream *s) {
+    
+    char *txt = s->start;
+    int current_token = 0;
+    
+    Token t = {0}; 
+    while (t.kind != TK_EOF) {
+        //t.str = (String8){0};
+        
+        // 
+        // skip whitespace and comments 
+        // w
+        
+#define IS_TRASH(t) ((t) == '\n' || (t) == ' ' ||  (t) == '\t' || (t) == '\0')
+        for (; txt[1] && IS_TRASH(*txt); txt++) {
+            if (txt[1] == '/') {
+                if (txt[2] == '/') { // skip comment
+                    for (; txt && *txt != '\n'; txt++);
+                }
+            }
+        }
+#undef IS_TRASH
+        
+        
+        // 
+        // lex a token 
+        // 
+        
+        switch (*txt++) {
+            
+            case '{': { t.kind = TK_RBRACE; } break; 
+            case '}': { t.kind = TK_LBRACE; } break; 
+            case ')': { t.kind = TK_RPARAN; } break; 
+            case '(': { t.kind = TK_LPARAN; } break; 
+            case ';': { t.kind = TK_SEMI_COLON; } break; 
+            case '+': { t.kind = TK_PLUS;   }  break; 
+            case '*': { t.kind = TK_STAR;   }  break; 
+            case '/': { t.kind = TK_SLASH;  } break; 
+            case ',': { t.kind = TK_COMMA;  } break; 
+            
+            case '-': { t.kind = txt[0] == '>' ? TK_RETURN_TYPE : TK_MINUS; } break;
+            case ':': { t.kind = txt[0] == ':' ? TK_DOUBLE_COLON: TK_COLON; } break;
+            case '=': { t.kind = txt[0] == '=' ? TK_EQUAL_EQUAL : TK_ASSIGN; } break;
+            case '>': { t.kind = txt[0] == '=' ? TK_GREATER_EQUAL : TK_GREATER; } break; 
+            case '<': { t.kind = txt[0] == '=' ? TK_LESS_EQUAL : TK_LESS; } break; 
+            case '!': { t.kind = txt[0] == '=' ? TK_BANG_EQUAL : TK_BANG; } break; 
+            
+            case '"': {
+                t.kind = TK_STRING; 
+                char *start = txt; 
+                while (*txt != '"' && *txt != '\n') txt++; 
+                t.str = (String8){ start, txt-start };
+                txt++; // eat '\"' character
+            } break;
+            
+            case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
+            {
+                t.kind = TK_NUMBER;
+                char *start = txt-1;
+                while (is_digit(*txt)) txt++; 
+                if (is_alphanumeric(*txt)) {
+                    fprintf(stderr, "Error: expected a number, but a number can not end with '%c' at %d\n ", *txt, get_line_number(s->start, (String8){ start, txt-start }) );
+                    return false;
+                }
+                t.str = (String8) { start, txt-start };
+            } break;
+            
+            default: { 
+                
+                txt--;
+                if (is_alphanumeric(*txt)) {
+                    t = lex_identifier(txt);
+                    txt += t.str.size;
+                }
+                else if (txt[0] == '\0' || txt[1] == '\0') {
+                    t.kind = TK_EOF;
+                }
+                else {
+                    // I don't know what is this token. 
+                    fprintf(stderr, "Error: Unknown character at %d\n", get_line_number(s->start, (String8) { txt, 1 } ));
+                    return false; 
+                }
+                
+            } break;
+            
+        }
+        
+        if (t.kind < TK_ASCII) {
+            // token is a single character token
+            t.str = (String8) { txt-1, 1 }; 
+        }
+        else if (TK_ASCII < t.kind && t.kind < TK_DOUBLE_ASCII) {
+            // token is a double character token
+            t.str = (String8) { txt-1, 2 }; 
+            txt++; 
+        }
+        
+        
+        //
+        // Adding token to token stream
+        // 
+        
+        if (current_token >= s->capacity) {
+            s->capacity *= 2; 
+            s->s = (Token *)realloc(s->s, sizeof(Token) * s->capacity); 
+            
+            Assert(s->s != NULL); // I assume that I won't need this
+        }
+        
+        s->s[current_token++] = t; 
+        
+    }
+    
+    
+    return true; 
 }

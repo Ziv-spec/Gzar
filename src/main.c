@@ -35,112 +35,27 @@
 // 
 // type -> "*"? ( "u64" | "u32" | "u8" |
 //                "s64" | "s32" | "s8" |
-//                "int" | "string" | "bool" ) 
+//                "int" | "string" | "bool" |
+//                "void") 
 // 
+// TODO(ziv): implement these
 // if -> "if" "(" expression ")" block
 // while -> "while" "(" expression ")" block
 
-// Toughts for the future
-// if statement -> 
-//     condition
-//     block 
-//     else-block 
-
-// while statement -> 
-//     condition
-//     block
-
-// var decloration ->
-//     name
-//     initializer
-//     type
-
-// func decloration -> 
-//     name 
-//     input args
-//     block
-//     type 
-
-// so a decloration could be: 
-// decl 
-//     name
-//     expr 
-//     type 
-//     block
-
-
-// only the setup/cleanup for function arguments are what matters to a function otherwise the use of them inside the function is the same across the whole function so storing the type data inside the local/global map which I have is fine but I need to distinct them from this setup/cleanup which they must go through (aka setup for recieving the variables when getting called and cleanup from when they want to return soemthing). 
-
-#define internal static
-
-#if DEBUG
-#define Assert(cond) do { if (!(cond)) { __debugbreak(); } } while(0)
-#else
-#define Assert(cond) 
-#endif
-
-// TODO(ziv): restrucutre the lexer & parser such that I will not need this. 
-typedef struct Location Location; 
-struct Location { 
-    int line; 
-    int ch;
-    int index; 
-};
-
-// 
-// Some language definitions: 
-// 
-
 #define _CRT_SECURE_NO_WARNINGS 1
-#include <stdint.h>
-
-typedef int8_t  s8;
-typedef int16_t s16;
-typedef int32_t s32;
-typedef int64_t s64;
-
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-
-typedef float  f32; 
-typedef double f64;
-
-typedef unsigned char bool;
-
-#define true 1 
-#define false 0
-
-#define is_digit(ch) ('0'<=(ch) && (ch)<='9')
-#define is_alpha(ch) (('A'<=(ch) && (ch)<='Z') || ('a'<=(ch) && (ch)<='z'))
-#define is_alphanumeric(ch) (is_digit(ch) || is_alpha(ch) || ch == '_')
-
-#define MIN(a, b) (((a)<(b)) ? (a) : (b))
-#define MAX(a, b) (((a)>(b)) ? (a) : (b))
-
-#define ArrayLength(arr) (sizeof(arr)/sizeof(arr[0]))
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h> 
 
-
 /* TODO(ziv):
-Things that I need to refactor in this compielr or just could be better: 
-    - Create a string manipulation library that I would use across the board like in 4coder
-    - Restructure the way that the lexer outputs tokens that a single token is way smaller
-    - Maybe change the parsing algorithem to one which is used in production compilers (though I don't know how much benefits that would bring)
-    - Create a map 
-    - Use indexes to arrays instead of pointers
     - Use a better algorithem for code generation (aka don't do the stupid things you are trying to do) 
-    - Try to stay away from CRT stuff as much as possible or maybe even remove it alltogether (totaly possible but that would not be as convenient 
+    - Try to stay away from CRT stuff as much as possible or maybe even remove it alltogether (totaly possible but that would not be as convenient)
     - Create tests for the language 
-    - Create a minimal standard libray (a super small one) for showcasing what the language is able to do (hopefully when it is working) 
-    - Create a programming enviorment where you can link to the compiler from a dll in which you would  have one function which will generate a exe 
-    - Further optimizations 
-    - More features? This could be seperated into a couple of sections where I could talk about it for a long ass time. Because I don't want to do 
+    - Create a minimal standard libray (a super small one) for showcasing what the language is able to do (hopefully when it is working)
+    - Create a programming enviorment where you can link to the compiler from a dll in which you would have one function which will generate a exe?
+- More features? This could be seperated into a couple of sections where I could talk about it for a long ass time. Because I don't want to do 
       that, what I will do is specify a minimum feature set for the language where I know that if I implement those they would be enough for most 
       problems that are sort of crucial in a language to have. That said, this is a toy-language in which I don't plat to have anything close to 
       a fully featured or working compiler so I am not going to include advanced features like generics/macros/function pointers/
@@ -150,96 +65,15 @@ Things that I need to refactor in this compielr or just could be better:
       for a long time. It is not even supposed to be a show of skill just a project that I will do as a learning exercise. 
 */
 
-// NOTE(ziv): Deprecated
-internal char *slicecpy(char *dest, size_t dest_size, char *src, size_t src_size) {
-    Assert(src && dest);
-    char *tdest = dest; 
-    if (src_size > dest_size) return NULL;
-    
-    while (src_size > 0) {
-        *tdest++ = *src++; 
-        src_size--;
-    }
-    *tdest = '\0';
-    return dest;
-}
-
-internal char *slice_to_str(char *slice, unsigned int size) {
-    char *result = (char *)malloc(sizeof(char) * (size + 1));
-    unsigned int i;
-    for (i = 0; i < size; i++) {
-        result[i] = slice[i]; 
-    }
-    result[i] = '\0';
-    return result;
-}
-
-// this is going to be somewhat of a generic way of doing dynamic arrays in C 
-// NOTE(ziv): This is by no means a good way of doing this but it will work :)
-
-typedef struct Vector Vector; 
-struct Vector {
-    int index;
-    int capacity; 
-    void **data;
-}; 
-
-#define DEFAULT_VEC_SIZE 16
-
-internal Vector *init_vec() { 
-    Vector *vec = (Vector *)malloc(sizeof(Vector)); 
-    vec->capacity = DEFAULT_VEC_SIZE; vec->index = 0; 
-    vec->data = malloc(sizeof(void *) * DEFAULT_VEC_SIZE);
-    return vec;
-}
-
-internal Vector *vec_push(Vector *vec, void *elem) {
-    Assert(vec); 
-    
-    if (vec->capacity <= vec->index) {
-        vec->capacity = vec->capacity*2;
-        vec->data = realloc(vec->data, sizeof(void *) * vec->capacity); 
-    }
-    vec->data[vec->index++] = elem;
-    return vec;
-}
-
-internal void *vec_pop(Vector *vec) {
-    Assert(vec && vec->index > 0); 
-    return vec->data[vec->index--];
-}
-
-internal bool vec_equal(Vector *src1, Vector *src2) {
-    
-    if (src1->index != src2->index) 
-        return false; 
-    
-    // NOTE(ziv): maybe I should think of using memcpy 
-    int len = src1->index; 
-    for (int i = 0; i < len; i++) {
-        if (src1->data[i] != src2->data[i]) {
-            return false; 
-        }
-    }
-    
-    return true;
-}
-
-
-static char *code; // currently I only use this for printing error messages inside the 'report' function. I might change the design for this in the future.
-
-
-
+#include "base.h"
 #include "lexer.h"
 #include "sema.h"
-#include "codegen.h"
 #include "parser.h"
 
 #include "lexer.c"
 #include "sema.c"
 #include "parser.c"
 #include "x86.c"
-//#include "codegen.c"
 
 int main(int argc, char *argv[]) {
     
@@ -284,23 +118,31 @@ int main(int argc, char *argv[]) {
     // Setup for compilation
     //
     
-    code = source_buff;
+    Token_Stream token_stream;
     
-    Lexer lexer = {0};
-    lexer.code = source_buff;
-    // most code editors begin from one and not zero e.g. row = 1, col = 1
-    lexer.loc.ch   = 1; 
-    lexer.loc.line = 1; 
+    token_stream.capacity = 1;
+    token_stream.s = realloc(NULL, sizeof(Token));
+    token_stream.start = source_buff;
+    token_stream.current = 0;
     
-    bool success = lex_file(&lexer);
+    bool success = lex_file(&token_stream);
     if (success == false) return 0;
     
-    Program prog = {0};
-    parse_file(&prog);
     
-    sema_file(&prog);
+    Translation_Unit tu = {0}; 
+    tu.block_stack.blocks[0] = realloc(NULL, sizeof(Block)); // init global scope 
+    tu.block_stack.blocks[0]->locals = init_map(sizeof(Symbol));
+    tu.block_stack.blocks[0]->statements = init_vec();
+    tu.block_stack.index = 1;
     
-    program_gen(&prog); 
+    
+    parse_translation_unit(&tu, &token_stream);
+    sema_translation_unit(&tu);
+    x86gen_translation_unit(&tu); 
+    
+    
+    
+    
     
     free(source_buff); // I don't need to use this but whatever...
     return 0;

@@ -1,11 +1,10 @@
 /* date = February 3rd 2022 2:04 pm */
 
-#ifndef TYPE_H
-#define TYPE_H
+#ifndef SEMA_H
+#define SEMA_H
 
 typedef enum Type_Kind Type_Kind;
 typedef enum Atom_Kind Atom_Kind;
-typedef struct Type Type; 
 
 // NOTE(ziv): The `Type` in the compiler works in the following way: 
 // If you have a atomic type, then the kind will be ATOMIC and the subtype 
@@ -16,6 +15,7 @@ typedef struct Type Type;
 // function type and have a subtype as it's return type and the symbols 
 // as the input arguments for the function with their order.
 
+typedef struct Type Type; 
 struct Type {
     Type_Kind kind;  // atomic type
     Type   *subtype; // extension to the atomic (for things like `*int` and so on...)
@@ -75,37 +75,4 @@ enum Atom_Kind {
     
 }; 
 
-// a table for getting more frequently used types
-static Type types_tbl[] = {
-    [ATOM_S8]  = { TYPE_S8,  NULL, NULL }, 
-    [ATOM_S16] = { TYPE_S16, NULL, NULL }, 
-    [ATOM_S32] = { TYPE_S32, NULL, NULL }, 
-    [ATOM_S64] = { TYPE_S64, NULL, NULL }, 
-    
-    [ATOM_U8]  = { TYPE_U8,  NULL, NULL }, 
-    [ATOM_U16] = { TYPE_U16, NULL, NULL }, 
-    [ATOM_U32] = { TYPE_U32, NULL, NULL }, 
-    [ATOM_U64] = { TYPE_U64, NULL, NULL }, 
-    
-    [ATOM_UNKNOWN]   = { TYPE_UNKNOWN,NULL, NULL }, 
-    [ATOM_VOID]   = { TYPE_VOID,   NULL, NULL }, 
-    [ATOM_STRING] = { TYPE_STRING, NULL, NULL }, 
-    [ATOM_BOOL]   = { TYPE_BOOL,   NULL, NULL }, 
-    
-    // NOTE(ziv): From here the types do not have a 1-1 relationship with the types.
-    // Also, adding more types means that this table will get largeer and might get
-    // evicted from the cash more often. This means that I will probably try to 
-    // minize the size of this table instead of maximize it's usefulness. 
-    
-    
-    // [ATOM_VOID_POINTER] = { TYPE_POINTER, &types_tbl[ATOM_VOID], NULL }, // *void 
-    
-}; 
-
-// A table used for checking the types on which a operation can operate on
-
-// maybe have some global variable for the time being (which would get inside the Translation Unit thingy 
-// which will represent the type index into the types list which will have you know the actual types and things 
-
-
-#endif //TYPE_H
+#endif //SEMA_H

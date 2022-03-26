@@ -37,7 +37,7 @@ if %errorlevel% == 1 (
 	EXIT /B 0
 )
 
-link /entry:main /nologo test.obj 
+link /DEBUG /entry:main /nologo test.obj 
 rem ld test.o -o test.exe
 if %errorlevel% == 1  EXIT /B 0
 
