@@ -70,7 +70,6 @@ internal Token lex_identifier(char *str) {
     return t;
 }
 
-
 ////////////////////////////////
 /// main lexing function
 
@@ -85,18 +84,18 @@ internal bool lex_file(Token_Stream *s) {
         
         // 
         // skip whitespace and comments 
-        // w
+        // 
         
-#define IS_TRASH(t) ((t) == '\n' || (t) == ' ' ||  (t) == '\t' || (t) == '\0')
-        for (; txt[1] && IS_TRASH(*txt); txt++) {
-            if (txt[1] == '/') {
-                if (txt[2] == '/') { // skip comment
+        for (; *txt; txt++) {
+            if (!(*txt == '\n' || *txt == ' ' || *txt == '\t' || *txt == '\0')) {
+                if (txt[0] == '/' && txt[1] == '/') {
                     for (; txt && *txt != '\n'; txt++);
+                }
+                else {
+                    break;
                 }
             }
         }
-#undef IS_TRASH
-        
         
         // 
         // lex a token 
@@ -114,7 +113,7 @@ internal bool lex_file(Token_Stream *s) {
             case '/': { t.kind = TK_SLASH;  } break; 
             case ',': { t.kind = TK_COMMA;  } break; 
             
-            case '-': { t.kind = txt[0] == '>' ? TK_RETURN_TYPE : TK_MINUS; } break;
+            case '-': { t.kind = txt[0] == '>' ? TK_RETURN_TYPE : TK_MINUS; } break; 
             case ':': { t.kind = txt[0] == ':' ? TK_DOUBLE_COLON: TK_COLON; } break;
             case '=': { t.kind = txt[0] == '=' ? TK_EQUAL_EQUAL : TK_ASSIGN; } break;
             case '>': { t.kind = txt[0] == '=' ? TK_GREATER_EQUAL : TK_GREATER; } break; 
@@ -131,14 +130,23 @@ internal bool lex_file(Token_Stream *s) {
             
             case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
             {
-                t.kind = TK_NUMBER;
+                
                 char *start = txt-1;
+                if (!is_digit(*start)) {
+                    return false; 
+                }
+                
                 while (is_digit(*txt)) txt++; 
+                
                 if (is_alphanumeric(*txt)) {
-                    fprintf(stderr, "Error: expected a number, but a number can not end with '%c' at %d\n ", *txt, get_line_number(s->start, (String8){ start, txt-start }) );
+                    String8 str = { start, txt-start }; 
+                    fprintf(stderr, "Error: expected a number at %d\n ", get_line_number(s->start, str) );
                     return false;
                 }
-                t.str = (String8) { start, txt-start };
+                
+                t.kind = TK_NUMBER; 
+                t.str = (String8){ start, txt-start }; 
+                
             } break;
             
             default: { 
@@ -161,13 +169,12 @@ internal bool lex_file(Token_Stream *s) {
             
         }
         
+        // update the slice view for single and double character tokens
         if (t.kind < TK_ASCII) {
-            // token is a single character token
-            t.str = (String8) { txt-1, 1 }; 
+            t.str = (String8) { txt-1, 1 }; // token is a single character token
         }
         else if (TK_ASCII < t.kind && t.kind < TK_DOUBLE_ASCII) {
-            // token is a double character token
-            t.str = (String8) { txt-1, 2 }; 
+            t.str = (String8) { txt-1, 2 }; // token is a double character token
             txt++; 
         }
         

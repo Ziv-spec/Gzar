@@ -306,9 +306,11 @@ internal Block *pop_scope(Translation_Unit *tu) {
     return tu->block_stack.blocks[--tu->block_stack.index];
 }
 
-internal void add_symbol(Block *block, Symbol *decl) {
+internal bool add_symbol(Block *block, Symbol *decl) {
     Assert(decl && block); 
-    Assert(map_set(block->locals, decl->name.str, decl)); 
+    bool success = map_set(block->locals, decl->name.str, decl);
+    Assert(success); 
+    return success; 
 }
 
 internal Symbol *symbol_exist(Block *block, Token name) {
@@ -389,8 +391,9 @@ internal Statement *parse_variable_decloration(Translation_Unit* tu, Token name)
     
     consume(tu, TK_SEMI_COLON, "Expected ';' after a variable decloration");
     
-    // add symbol to scope
     Symbol *symb = init_symbol(name, type, expr);
+    
+    // add symbol to scope
     {
         Block *block = get_curr_scope(tu);
         if (map_get(block->locals, name.str)) {
@@ -462,6 +465,11 @@ internal Statement *parse_function_decloration(Translation_Unit* tu, Token name)
     else {
         // function prototype
         consume(tu, TK_SEMI_COLON, "Expected '{' for function body or  ';' for prototype");
+        
+        // add the func decl to the current scope
+        Block *curr_block = get_curr_scope(tu); 
+        add_symbol(curr_block, init_symbol(name, ty, NULL));
+        
     }
     
     return init_func_decl_stmt(name, ty, block_stmt);

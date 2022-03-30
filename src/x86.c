@@ -47,6 +47,14 @@ internal void scratch_free(Register reg) {
     scratch_reg_tbl[reg] = 0;
 }
 
+
+internal void scratch_free_all() {
+    for (int r = 0; r < ArrayLength(scratch_names_tbl); r++) {
+        scratch_reg_tbl[r] = 0;
+        
+    }
+}
+
 /*
 This function generates a local symbol e.g. 
 s: int = 0;  would get turned into a mov rbx, [rbp+8]
@@ -62,11 +70,29 @@ mapping for all symbols inside a given block
 */ 
 internal char *symbol_gen(Translation_Unit *tu, Token t) {
     
+    static char str[MAX_LEN];
+    
     Block *block = get_curr_scope(tu);
     
     // the symbol is local 
     Map *locals = block->locals; 
     int offset_to_symbol = 0; 
+    
+    for (s64 i = tu->block_stack.index-1; i >= 0; i--) {
+        Block *b = tu->block_stack.blocks[i]; 
+        Symbol *symb = symbol_exist(b, t); 
+        if (symb && i == 0) {
+            
+            
+            if (symb->type->kind == TYPE_STRING) {
+                snprintf(str, MAX_LEN, "offset %s", str8_to_cstring(t.str));
+            }
+            else {
+                snprintf(str, MAX_LEN, "%s", str8_to_cstring(t.str));
+            }
+            return str;
+        }
+    }
     
     // generate the appropriate offset for the symbol
     for (int i = 0; i < locals->capacity; i++){
@@ -74,14 +100,14 @@ internal char *symbol_gen(Translation_Unit *tu, Token t) {
         if (b.value) {
             Symbol *symb = (Symbol *)b.value; 
             offset_to_symbol += get_type_size(symb->type); 
+            
+            if (str8_compare(symb->name.str, t.str) == 0) {
+                break;
+            }
         }
     }
     
-    if (is_at_global_block(tu)) {
-        return str8_to_cstring(t.str);
-    }
     
-    static char str[MAX_LEN];
     snprintf(str, MAX_LEN, "[rbp+%d]", offset_to_symbol);
     return str; 
 }
@@ -137,8 +163,8 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
         } break;
         
         case EXPR_BINARY: {
-            expr_gen(tu, func_ty, expr->right); 
             expr_gen(tu, func_ty, expr->left); 
+            expr_gen(tu, func_ty, expr->right); 
             
             Token operation = expr->operation;
             switch (operation.kind) {
@@ -150,7 +176,7 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                          scratch_name(expr->left->reg), scratch_name(expr->right->reg)); 
                     
                     expr->reg = expr->left->reg;
-                    scratch_free(expr->left->reg);
+                    scratch_free(expr->right->reg);
                 } break;
                 
                 // TODO(ziv): make division work
@@ -161,8 +187,9 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                     
                     expr->reg = scratch_alloc(); 
                     emit("  push rdx\n");
-                    emit("  mov rax, %s\n", scratch_name(expr->right->reg));
-                    emit("  %s %s\n", (operation.kind == TK_STAR) ? "mul" : "div", scratch_name(expr->left->reg)); 
+                    emit("  xor rdx, rdx\n");
+                    emit("  mov rax, %s\n", scratch_name(expr->left->reg));
+                    emit("  %s %s\n", (operation.kind == TK_STAR) ? "imul" : "idiv", scratch_name(expr->right->reg)); 
                     emit("  mov %s, rax\n", scratch_name(expr->reg)); 
                     emit("  pop rdx\n");
                     
@@ -223,13 +250,12 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
             Register regs[10] = {0}; // TODO(ziv): I should change the way this works 
             int reg_index = 0; 
             
-            // inc the reg_index as I need it using the function type as a input 
-            
+            // generate expression for call arguments
             Vector *args = expr->call.args->args; 
             for (int i = 0; i < args->index; i++) {
                 Expr *e = (Expr *)args->data[i];
                 expr_gen(tu, func_ty, e); 
-                regs[reg_index++] = e->reg;
+                regs[reg_index++] = e->reg; // saving their scratch registers
             }
             
             // 
@@ -241,7 +267,14 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 emit("  mov %s, %s\n", fastcall_alloc(), scratch_name(regs[i]));
             }
             
-            for (int i = 0; i < reg_index; i++) {
+            reg_index = 0;
+            for (int r = 0; r < ArrayLength(scratch_reg_tbl); r++) {
+                if (scratch_reg_tbl[r]) {
+                    regs[reg_index++] = r;
+                }
+            }
+            
+            for (int i = reg_index-1; i >= 0; i--) {
                 emit("  push %s\n", scratch_name(regs[i])); 
             }
             
@@ -260,6 +293,29 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
             
             
         } break; 
+        
+        case EXPR_GROUPING: {
+            expr_gen(tu, func_ty, expr->grouping.expr); 
+            expr->reg = expr->grouping.expr->reg;
+        } break;
+        
+        case EXPR_UNARY: {
+            expr_gen(tu, func_ty, expr->unary.right);
+            
+            switch (expr->unary.operation.kind) {
+                
+                case TK_MINUS: {
+                    emit("  neg %s\n", scratch_name(expr->unary.right->reg));
+                    expr->reg = expr->unary.right->reg;
+                } break; 
+                
+                default: {
+                    Assert(!"NOT IMPLEMENTED"); 
+                } break; 
+                
+            }
+            
+        }
         
     }
     
@@ -299,69 +355,79 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
             // Generation of the function:
             //
             
+            scratch_free_all(); // we don't want to depend on registers from prefiouse functions
+            
             char *func_name = str8_to_cstring(stmt->func.name.str);
             Type *type = stmt->func.type; type;
-            Block block = stmt->func.sc->block; 
             
-            // prologe
-            { 
-                emit("%s%s\n", func_name, is_main ? ":" : " PROC"); 
-                if (!is_main) {
-                    emit("  push rsp\n");
+            // regular function
+            if (stmt->func.sc) {
+                Block block = stmt->func.sc->block; 
+                
+                // prologe
+                { 
+                    emit("%s%s\n", func_name, is_main ? ":" : " PROC"); 
+                    if (!is_main) {
+                        emit("  push rsp\n");
+                    }
+                    emit("  mov rbp, rsp\n");
                 }
-                emit("  mov rbp, rsp\n");
+                
+                // setting up the stack
+                int stack_size = 0; 
+                { 
+                    
+                    // calc how many bytes do all variable declorations take up
+                    
+                    Map *locals = block.locals; 
+                    Map_Iterator mit = map_iterator(locals); 
+                    
+                    // calc the size of the input arguments to a function 
+                    // and then subtract this size from the total 
+                    
+                    // TODO(ziv): check whether I want to have this limited to 4 arguments 
+                    
+                    int input_arguments_size = 0; 
+                    Vector *symbols = type->symbols; 
+                    for (int i = 0; i < symbols->index; i++) {
+                        Symbol *symb = (Symbol *)symbols->data[i]; 
+                        input_arguments_size += get_type_size(symb->type); 
+                    }
+                    
+                    int total_size = 0; 
+                    while (map_next(&mit)) {
+                        Symbol *symb = (Symbol *)mit.value; 
+                        total_size += get_type_size(symb->type); 
+                    }
+                    
+                    stack_size = total_size - input_arguments_size; 
+                    
+                    if (stack_size > 0) {
+                        emit("  sub rsp, %d\n", stack_size);  
+                    }
+                }
+                
+                // generating the body
+                stmt_gen(tu, func, stmt->func.sc);
+                
+                // epilogue
+                {
+                    emit("%s_epilogue:\n", func_name);
+                    if (stack_size > 0) {
+                        emit("  add rsp, %d\n", stack_size); 
+                    }
+                    if (!is_main) {
+                        emit("  pop rsp\n");
+                    }
+                    emit("  ret\n");
+                    if (!is_main) {
+                        emit("%s ENDP\n", func_name); 
+                    }
+                }
             }
-            
-            // setting up the stack
-            int stack_size = 0; 
-            { 
-                
-                // calc how many bytes do all variable declorations take up
-                
-                Map *locals = block.locals; 
-                Map_Iterator mit = map_iterator(locals); 
-                
-                // calc the size of the input arguments to a function 
-                // and then subtract this size from the total 
-                
-                // TODO(ziv): check whether I want to have this limited to 4 arguments 
-                
-                int input_arguments_size = 0; 
-                Vector *symbols = type->symbols; 
-                for (int i = 0; i < symbols->index; i++) {
-                    Symbol *symb = (Symbol *)symbols->data[i]; 
-                    input_arguments_size += get_type_size(symb->type); 
-                }
-                
-                int total_size = 0; 
-                while (map_next(&mit)) {
-                    Symbol *symb = (Symbol *)mit.value; 
-                    total_size += get_type_size(symb->type); 
-                }
-                
-                stack_size = total_size - input_arguments_size; 
-                
-                if (stack_size > 0) {
-                    emit("  sub rsp, %d\n", stack_size);  
-                }
-            }
-            
-            // generating the body
-            stmt_gen(tu, func, stmt->func.sc);
-            
-            // epilogue
-            {
-                emit("%s_epilogue:\n", func_name);
-                if (stack_size > 0) {
-                    emit("  add rsp, %d\n", stack_size); 
-                }
-                if (!is_main) {
-                    emit("  pop rsp\n");
-                }
-                emit("  ret\n");
-                if (!is_main) {
-                    emit("%s ENDP\n", func_name); 
-                }
+            else {
+                emit("%s proto\n", func_name); 
+                // function prototype.
             }
             
             
@@ -503,8 +569,9 @@ internal void x86gen_translation_unit(Translation_Unit *tu) {
             
             // skip non function declorations
             stmt = (Statement *)decls->data[i]; 
-            for (; i < decls->index && stmt->kind != STMT_FUNCTION_DECL; i++) {
-                stmt = (Statement *)decls->data[i];
+            
+            while (i < decls->index && stmt->kind != STMT_FUNCTION_DECL) {
+                stmt = (Statement *)decls->data[++i];
             }
             
         }

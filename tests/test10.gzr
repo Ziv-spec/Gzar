@@ -1,0 +1,11 @@
+
+a: string = "this works";
+
+puts :: (val: string) -> int; 
+
+main :: () -> int {
+
+	puts(a); 
+
+	return 0;
+}

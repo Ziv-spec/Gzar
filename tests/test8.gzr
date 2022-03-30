@@ -1,0 +1,14 @@
+
+
+func :: (a: int, b: int) -> int {
+	return a*a+ 2*a*b + b*b; // (a+b)*(a+b)
+}
+
+d: int = 100;
+
+main :: () -> int {
+	a: int = 1; 
+	b: int = 2; 
+
+	return func(a, b); 
+}

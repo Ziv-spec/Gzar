@@ -82,18 +82,11 @@ int main(int argc, char *argv[]) {
     // handle the compiler options
     // 
     
-#ifndef DEBUG
     if (argc != 2) {
         fprintf(stdout, "Usage: <source>.zr\n");
         return 0; 
     }
     char *filename = argv[1];
-#else 
-    argc, argv;
-    
-    char *filename = "C:/dev/HW/toylang/tests/test2.jai";
-    
-#endif 
     
     // 
     // open the first file and read it's contents
@@ -128,20 +121,15 @@ int main(int argc, char *argv[]) {
     bool success = lex_file(&token_stream);
     if (success == false) return 0;
     
-    
     Translation_Unit tu = {0}; 
     tu.block_stack.blocks[0] = realloc(NULL, sizeof(Block)); // init global scope 
     tu.block_stack.blocks[0]->locals = init_map(sizeof(Symbol));
     tu.block_stack.blocks[0]->statements = init_vec();
     tu.block_stack.index = 1;
     
-    
     parse_translation_unit(&tu, &token_stream);
     sema_translation_unit(&tu);
     x86gen_translation_unit(&tu); 
-    
-    
-    
     
     
     free(source_buff); // I don't need to use this but whatever...

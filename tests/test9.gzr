@@ -1,0 +1,13 @@
+
+ExitProcess :: (error_level: int) -> int; 
+
+exit :: (error_level: int) -> int {
+	ExitProcess(error_level); 
+}
+
+main :: () -> int {
+
+	exit(-1); // negative numbers
+
+	return 0;
+}

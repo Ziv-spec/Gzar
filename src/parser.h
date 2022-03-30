@@ -178,7 +178,7 @@ internal bool is_at_global_block(Translation_Unit *tu);
 internal Block *get_curr_scope(Translation_Unit *tu);
 internal void push_scope(Translation_Unit *tu, Statement *block);
 internal Block *pop_scope(Translation_Unit *tu);
-internal void add_symbol(Block *block, Symbol *decl); /* adds a symbol decloration to the block */ 
+internal bool add_symbol(Block *block, Symbol *decl); /* adds a symbol decloration to the block */ 
 // TODO(ziv): change the names? 
 internal Symbol *symbol_exist(Block *block, Token name); /* returns the symbol found inside a block */
 internal Symbol *local_exist(Translation_Unit *tu, Token var_name); /* returns the symbol found inside the translation unit */ 

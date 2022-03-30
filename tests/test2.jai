@@ -1,15 +1,27 @@
 
  //boring: string = "something boring"; 
 
-_add :: (a: int, b: int) -> int {
-    return a+b;
-}
+//some other thing that I Had
 
-some_other_function :: (a: int, b: int, c: int, d: int) -> int {
-    return b*c - a*d;
+// I can finally exit a process early
+ExitProcess :: (val: int) -> int;
+puts :: (s: string) -> int; 
+
+something: string = "something\nlike\nthis\n"; 
+
+
+exit :: (error_level: int) -> int {
+    return ExitProcess(error_level);
 }
 
 main :: () -> int {
-    result: int = some_other_function(1, 2, 3, 4); 
+    
+    result: int = 8 * 8;
+    
+    // exit(1);
+    
+    puts(something);
+    
+    
     return result;
 }

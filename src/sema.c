@@ -132,7 +132,6 @@ internal void type_error(Translation_Unit *tu, Token line, Type *t1, Type *t2, c
     
     __debugbreak(); 
     exit(-1);
-    
 }
 
 internal bool type_equal(Type *t1, Type *t2) {
@@ -510,6 +509,9 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
             }
             
             Statement *block = stmt->func.sc;
+            if (!block) {
+                return true;
+            }
             return sema_statement(tu, block); 
         } break; 
         
