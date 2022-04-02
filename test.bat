@@ -28,7 +28,7 @@ call:assert test7.gzr 150
 call:assert test8.gzr 9
 call:assert test9.gzr -1
 
-call:run test10.gzr 0
+call:run test10.gzr
 
 REM ======================================================
 
@@ -57,6 +57,7 @@ cl /nologo test.obj /link kernel32.lib msvcrt.lib
 echo %~1
 test.exe
 
+echo %errorlevel% 
 
 EXIT /B 0
 

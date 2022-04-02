@@ -1,11 +1,17 @@
 
-a: string = "this works";
+a: string = "this works my friend";
 
 puts :: (val: string) -> int; 
 
+square :: (x: int) -> int {
+	return x*x; 
+}
+
 main :: () -> int {
+	x: int = 2; 
+	x_squared: int = square(x); 
 
 	puts(a); 
 
-	return 0;
+	return x_squared;
 }

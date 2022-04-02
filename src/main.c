@@ -9,7 +9,7 @@
 //     | function_decl
 //     | statement
 // 
-// statement-> expression
+// statement -> expression
 //     | while 
 //     | if
 //     | for 
@@ -110,6 +110,8 @@ int main(int argc, char *argv[]) {
     //
     // Setup for compilation
     //
+    
+    // TODO(ziv): Make this nicer
     
     Token_Stream token_stream;
     

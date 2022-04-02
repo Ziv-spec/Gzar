@@ -267,6 +267,8 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 emit("  mov %s, %s\n", fastcall_alloc(), scratch_name(regs[i]));
             }
             
+            
+            // saving voletile registers (aka scratch registers) 
             reg_index = 0;
             for (int r = 0; r < ArrayLength(scratch_reg_tbl); r++) {
                 if (scratch_reg_tbl[r]) {
@@ -278,11 +280,11 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 emit("  push %s\n", scratch_name(regs[i])); 
             }
             
-            fastcall_free();
+            fastcall_free(); // I don't need to use any of the fastcall registers anymore
             
             emit("  call %s\n", str8_to_cstring(expr->call.name->lvar.name.str));
             
-            // restore the stack 
+            // restore voletile registers
             for (int i = 0; i < reg_index; i++) {
                 emit("  pop %s\n", scratch_name(regs[i])); 
             }
