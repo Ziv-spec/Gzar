@@ -26,35 +26,34 @@
 // unary -> ("-" | "!") expression
 // binary -> expression operator expression 
 // operator -> "==" | "!=" | ">=" | "<=" | "<" |
-//            ">" | "+" | "-" | "*" | "/"
+//            ">" | "+" | "-" | "*" | "/" | "&" | 
+//            "|" | "^" | "&&" | "||"
 // 
 // variable_decl -> identifier ":" type ( ("=" expression) | ";" )
-// function_decl -> identifier "::" grouping "->" type block
+// function_decl -> identifier "::" grouping "->" return_type block
 // 
 // identifier -> "A-Z" | "a-z" | "_"
 // 
 // type -> "*"? ( "u64" | "u32" | "u8" |
 //                "s64" | "s32" | "s8" |
 //                "int" | "string" | "bool" |
-//                "void") 
+//                "*void") 
 // 
-// TODO(ziv): implement these
-// if -> "if" "(" expression ")" block
-// while -> "while" "(" expression ")" block
+// return_type type | "void"
+// 
+// if -> "if" expression block
+// while -> "while" expression block
 
 #define _CRT_SECURE_NO_WARNINGS 1
-
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <string.h> // probably I don't really need to use this and can have my own implementations for all the of the functions i use in here
 #include <stdarg.h> 
 
 /* TODO(ziv):
     - Use a better algorithem for code generation (aka don't do the stupid things you are trying to do) 
     - Try to stay away from CRT stuff as much as possible or maybe even remove it alltogether (totaly possible but that would not be as convenient)
-    - Create tests for the language 
     - Create a minimal standard libray (a super small one) for showcasing what the language is able to do (hopefully when it is working)
-    - Create a programming enviorment where you can link to the compiler from a dll in which you would have one function which will generate a exe?
 - More features? This could be seperated into a couple of sections where I could talk about it for a long ass time. Because I don't want to do 
       that, what I will do is specify a minimum feature set for the language where I know that if I implement those they would be enough for most 
       problems that are sort of crucial in a language to have. That said, this is a toy-language in which I don't plat to have anything close to 
@@ -77,13 +76,12 @@
 
 int main(int argc, char *argv[]) {
     
-    
     // 
     // handle the compiler options
     // 
     
     if (argc != 2) {
-        fprintf(stdout, "Usage: <source>.zr\n");
+        fprintf(stdout, "Usage: <source>.gzr\n");
         return 0; 
     }
     char *filename = argv[1];
@@ -107,6 +105,12 @@ int main(int argc, char *argv[]) {
     
     fclose(file);
     
+    
+    // NOTE(ziv): just as a note, this compiler does not free any of it's memory 
+    // it instead lets the operating system free all of the resoruces of the process 
+    // this is because I expect the compiler to be running for a short time and do only 
+    // what it needs to do. 
+    
     //
     // Setup for compilation
     //
@@ -114,26 +118,22 @@ int main(int argc, char *argv[]) {
     // TODO(ziv): Make this nicer
     
     Token_Stream token_stream;
-    
     token_stream.capacity = 1;
     token_stream.s = realloc(NULL, sizeof(Token));
     token_stream.start = source_buff;
     token_stream.current = 0;
     
     bool success = lex_file(&token_stream);
-    if (success == false) return 0;
+    if (success == false) 
+        return 0;
     
     Translation_Unit tu = {0}; 
-    tu.block_stack.blocks[0] = realloc(NULL, sizeof(Block)); // init global scope 
-    tu.block_stack.blocks[0]->locals = init_map(sizeof(Symbol));
-    tu.block_stack.blocks[0]->statements = init_vec();
-    tu.block_stack.index = 1;
-    
     parse_translation_unit(&tu, &token_stream);
+    
     sema_translation_unit(&tu);
+    
     x86gen_translation_unit(&tu); 
     
-    
-    free(source_buff); // I don't need to use this but whatever...
+    free(source_buff); // I don't have to use this but whatever...
     return 0;
 }

@@ -1,0 +1,13 @@
+
+puts :: (str: string) -> int; 
+
+main :: () -> int {
+	i: int = 0; 
+
+	while (i < 5) {
+		puts("something");
+		i = i + 1; 
+	}
+
+    return i;
+}

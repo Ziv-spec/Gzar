@@ -1,0 +1,7 @@
+
+puts :: (str: string) -> int;
+
+main :: () -> int {
+	puts("something");
+	return 0;
+}

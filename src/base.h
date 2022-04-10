@@ -6,7 +6,7 @@
 #define internal static
 
 #if DEBUG
-#define Assert(cond) do { if (!(cond)) { __debugbreak(); } } while(0)
+#define Assert(cond) do { if (!(cond)) __debugbreak(); } while(0)
 #else
 #define Assert(cond) 
 #endif

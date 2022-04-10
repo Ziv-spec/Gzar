@@ -9,8 +9,7 @@
 #define is_signed_integer(t) ((t->kind) < TYPE_INTEGER_STUB)
 #define is_unsigned_integer(t) (TYPE_INTEGER_STUB < (t->kind) && (t->kind) < TYPE_UNSIGNED_INTEGER_STUB)
 
-
-inline int type_kind_to_atom(Type_Kind kind) {
+inline s64 type_kind_to_atom(Type_Kind kind) {
     
     // This is a hack for getting the log2 of a number
     // which results in the correct index for the atom
@@ -22,7 +21,7 @@ inline int type_kind_to_atom(Type_Kind kind) {
 #else
     s32 index = kind; 
 #endif 
-    return index; 
+    return (s64)index; 
 }
 
 internal Type *get_atom(Type_Kind kind) {
@@ -62,7 +61,7 @@ internal Type *get_atom(Type_Kind kind) {
         // [ATOM_VOID_POINTER] = { TYPE_POINTER, &types_tbl[ATOM_VOID], NULL }, // *void 
     }; 
     
-    s32 index = type_kind_to_atom(kind);
+    s64 index = type_kind_to_atom(kind);
     return &types_tbl[index]; 
 }
 
@@ -197,7 +196,10 @@ internal int get_type_size(Type *type) {
         }
         
     }
-    else if (type->kind == TYPE_POINTER || type->kind == TYPE_ARRAY) {
+    else if (type->kind == TYPE_POINTER || type->kind == TYPE_ARRAY || type->kind == TYPE_STRING) {
+        size = 8;
+    }
+    else if (type->kind == TYPE_BOOL) {
         size = 8;
     }
     else {
@@ -272,7 +274,6 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
         
         case EXPR_LVAR: {
             Symbol *symb = local_exist(tu, expr->lvar.name); 
-            
             Assert(symb); // I should be getting a symbol here 
             
             return expr->type = symb->type; 
@@ -339,13 +340,22 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
             Token_Kind op = expr->operation.kind; 
             switch (op) {
                 
+                case TK_AND: 
+                case TK_XOR: 
+                case TK_OR: 
+                {
+                    if (!is_integer(result)) {
+                        type_error(tu, expr->operation, NULL, NULL, "Bitwise operations can operate on integers only");
+                    }
+                    return result;
+                } break; 
+                
                 case TK_PLUS: 
                 case TK_MINUS:
                 case TK_SLASH:
                 case TK_STAR: 
                 {
-                    if ((op == TK_MINUS || op == TK_PLUS)  && 
-                        (rhs->kind == TYPE_POINTER && lhs->kind == TYPE_POINTER)) {
+                    if ((op == TK_MINUS || op == TK_PLUS) && (rhs->kind == TYPE_POINTER && lhs->kind == TYPE_POINTER)) {
                         
                         if (op == TK_MINUS) {
                             // ptr - ptr = ptrdiff (of type s64)
@@ -359,6 +369,17 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
                     return result;
                     
                 } break; 
+                
+                
+                case TK_DOUBLE_AND:
+                case TK_DOUBLE_OR: 
+                {
+                    if (!is_boolean(result)) {
+                        type_error(tu, expr->operation, NULL, NULL, "Logical operations can operation on boolean only");
+                    }
+                    return result;
+                    
+                } break;
                 
                 case TK_GREATER: 
                 case TK_LESS: 
@@ -393,25 +414,18 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
             switch (op) {
                 
                 case TK_MINUS: {
-                    if (is_integer(rhs) || is_unsigned_integer(rhs)) {
-                        return expr->type = rhs;
-                    }
+                    if (is_integer(rhs) || is_unsigned_integer(rhs)) return expr->type = rhs;
                     type_error(tu, expr->unary.operation, NULL, NULL, "Incompatible type for '-' operation");
                 } break;
                 
                 case TK_STAR: {
-                    if (rhs->kind == TYPE_POINTER) {
-                        return rhs; 
-                    }
+                    if (rhs->kind == TYPE_POINTER) return rhs; 
                     type_error(tu, expr->unary.operation, rhs, NULL,  "Incompatible type, must be pointer for dereference operation");
                     
                 } break; 
                 
-                case TK_BANG:
-                {
-                    if (rhs->kind == TYPE_BOOL) {
-                        return rhs; 
-                    }
+                case TK_BANG: {
+                    if (rhs->kind == TYPE_BOOL) return rhs; 
                     type_error(tu, expr->unary.operation, rhs, NULL,  "Incompatible type, must be boolean for operation");
                 } break; 
             } 
@@ -424,6 +438,9 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
             
             // check whether the function has been defined
             Symbol *func_symb = local_exist(tu, expr->call.name->lvar.name);
+            if (!func_symb) {
+                parse_error(tu, expr->call.name->lvar.name, "Expected a function to call");
+            }
             
             Type *function_type = func_symb->type; 
             Vector *call_args = expr->call.args->args;
@@ -460,7 +477,9 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
                 }
             }
             
-            return function_type->subtype; // return type of the function signiture
+            // NOTE(ziv): if the function subtype is NULL that means that I am returning a void 
+            // aka I am not returning anything.
+            return function_type->subtype; 
             
         } break; 
         
@@ -483,6 +502,7 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
 
 
 internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
+    Assert(stmt);
     
     switch (stmt->kind) {
         
@@ -498,9 +518,19 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
         
         case STMT_FUNCTION_DECL: {
             
+            if (is_at_global_block(tu)) {
+                add_symbol(&((Statement *)tu->scopes->data[0])->block, init_symbol(stmt->func.name, stmt->func.type, NULL));
+            }
+            else {
+                add_symbol(&stmt->func.sc->block, init_symbol(stmt->func.name, stmt->func.type, NULL));
+            }
+            
+            push_scope(tu, stmt);
+            
             Vector *args = stmt->func.type->symbols; 
             for (int i = 0; i < args->index; i++) {
                 Symbol *symb = (Symbol *)args->data[i]; 
+                
                 Assert(symb->initializer == NULL); // I do not support default values
                 if (symb->type->kind == TYPE_VOID) {
                     type_error(tu, symb->name, NULL, NULL, "Illigal use of type `void`");
@@ -509,11 +539,45 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
             }
             
             Statement *block = stmt->func.sc;
-            if (!block) {
-                return true;
-            }
-            return sema_statement(tu, block); 
+            if (!block)  {
+                pop_scope(tu); // function scope
+                return true; // function prototype
+            } 
+            
+            bool success = sema_statement(tu, block);
+            pop_scope(tu); // function scope
+            
+            return success; 
         } break; 
+        
+        
+        
+        case STMT_SCOPE: {
+            push_scope(tu, stmt); 
+            
+            int size = 0; // NOTE(ziv): this is used for clac the total size of the block variables
+            // for later use in the code generator
+            
+            bool temp, success = true;
+            Vector *statements = stmt->block.statements;
+            for (int i = 0; i < statements->index; i++) { 
+                Statement *block_stmt = (Statement *)stmt->block.statements->data[i]; 
+                temp = sema_statement(tu, block_stmt);
+                if (block_stmt->kind == STMT_SCOPE) {
+                    size += block_stmt->block.size;
+                }
+                else if (block_stmt->kind == STMT_VAR_DECL) {
+                    size += get_type_size(block_stmt->var_decl.type);
+                }
+                
+                success = (!success) ? success : temp;
+            }
+            
+            stmt->block.size = size;
+            pop_scope(tu); 
+            
+            return success;
+        } break;
         
         
         
@@ -539,33 +603,57 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
                 if (type_equal(lhs, rhs) || (rhs->kind == TYPE_UNKNOWN && lhs->kind == TYPE_POINTER)) {
                     stmt->var_decl.initializer->type = lhs; 
                     stmt->var_decl.type = lhs;
-                    return true;
+                    
+                    int size = get_type_size(lhs); 
+                    Statement *block_stmt = get_curr_scope(tu);
+                    if (block_stmt->kind == STMT_SCOPE) {
+                        block_stmt->block.size += size;
+                    }
+                    else {
+                        Assert(!"I should not be getting here");
+                    }
+                    
+                    return add_symbol(&block_stmt->block, &stmt->var_decl);
                 }
                 
                 type_error(tu, stmt->var_decl.name, lhs, rhs, "Types do not match `%s` != `%s`");
                 return false;
             }
-            return true;
             
+            // If I don't have a initializer
+            Statement *block_stmt = get_curr_scope(tu);
+            return add_symbol(&block_stmt->block, &stmt->var_decl);
         } break;
         
         
-        
-        case STMT_SCOPE: {
-            push_scope(tu, stmt); 
+        case STMT_IF: {
+            Type *ty = sema_expr(tu, stmt->if_else.condition);
             
-            bool temp, success = true;
-            Vector *statements = stmt->block.statements;
-            for (int i = 0; i < statements->index; i++) { 
-                Statement *block_stmt = (Statement *)stmt->block.statements->data[i]; 
-                temp = sema_statement(tu, block_stmt);
-                success = (!success) ? success : temp;
+            if (ty->kind != TYPE_BOOL)
+                type_error(tu, stmt->if_else.position , get_atom(TYPE_BOOL), ty, "Expected boolean type `%s` != `%s`");
+            
+            if (!sema_statement(tu, stmt->if_else.true_block)) 
+                return false; 
+            
+            if (stmt->if_else.false_block && !sema_statement(tu, stmt->if_else.false_block))
+                return false; 
+            
+            return true; 
+        } break;
+        
+        
+        case STMT_WHILE: {
+            Type *ty = sema_expr(tu, stmt->if_else.condition);
+            
+            if (ty->kind != TYPE_BOOL) {
+                type_error(tu, stmt->if_else.position , get_atom(TYPE_BOOL), ty, "Expected boolean type `%s` != `%s`");
             }
             
-            pop_scope(tu); 
-            return success;
-        }
-        
+            if (!sema_statement(tu, stmt->loop.block)) 
+                return false; 
+            
+            return true; 
+        } break; 
         
         
         default: {
@@ -584,4 +672,5 @@ internal void sema_translation_unit(Translation_Unit *tu) {
         sema_statement(tu, stmt);
     }
     
+    // NOTE(ziv): I don't pop the global scope as I will use in later cases
 }

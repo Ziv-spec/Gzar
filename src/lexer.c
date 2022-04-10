@@ -87,7 +87,7 @@ internal bool lex_file(Token_Stream *s) {
         // 
         
         for (; *txt; txt++) {
-            if (!(*txt == '\n' || *txt == ' ' || *txt == '\t' || *txt == '\0')) {
+            if (!(*txt == '\n' || *txt == ' ' || *txt == '\t' || *txt == '\0' || *txt == '\r')) {
                 if (txt[0] == '/' && txt[1] == '/') {
                     for (; txt && *txt != '\n'; txt++);
                 }
@@ -112,6 +112,7 @@ internal bool lex_file(Token_Stream *s) {
             case '*': { t.kind = TK_STAR;   }  break; 
             case '/': { t.kind = TK_SLASH;  } break; 
             case ',': { t.kind = TK_COMMA;  } break; 
+            case '^': { t.kind = TK_XOR;  } break; 
             
             case '-': { t.kind = txt[0] == '>' ? TK_RETURN_TYPE : TK_MINUS; } break; 
             case ':': { t.kind = txt[0] == ':' ? TK_DOUBLE_COLON: TK_COLON; } break;
@@ -119,6 +120,9 @@ internal bool lex_file(Token_Stream *s) {
             case '>': { t.kind = txt[0] == '=' ? TK_GREATER_EQUAL : TK_GREATER; } break; 
             case '<': { t.kind = txt[0] == '=' ? TK_LESS_EQUAL : TK_LESS; } break; 
             case '!': { t.kind = txt[0] == '=' ? TK_BANG_EQUAL : TK_BANG; } break; 
+            
+            case '&': { t.kind = txt[0] == '&' ? TK_DOUBLE_AND : TK_AND; } break; 
+            case '|': { t.kind = txt[0] == '|' ? TK_DOUBLE_OR : TK_OR; } break; 
             
             case '"': {
                 t.kind = TK_STRING; 
@@ -193,7 +197,6 @@ internal bool lex_file(Token_Stream *s) {
         s->s[current_token++] = t; 
         
     }
-    
     
     return true; 
 }

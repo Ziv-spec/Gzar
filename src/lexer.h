@@ -22,6 +22,9 @@ enum Token_Kind {
     TK_RBRACE     = '{',
     TK_LBRACE     = '}', 
     TK_SEMI_COLON = ';',
+    TK_AND        = '&', 
+    TK_OR         = '|', 
+    TK_XOR        = '^', 
     
     TK_ASCII = 256,
     
@@ -31,6 +34,8 @@ enum Token_Kind {
     TK_EQUAL_EQUAL   = '=' + 320, // ==
     TK_DOUBLE_COLON  = ':' + 320, // ::
     TK_RETURN_TYPE   = '-' + 320, // ->
+    TK_DOUBLE_AND    = '&' + 320, // &&
+    TK_DOUBLE_OR     = '|' + 320, // ||
     
     TK_DOUBLE_ASCII  = 256 + 320, 
     

@@ -4,9 +4,8 @@ internal void scratch_free(Register r);
 internal const char *scratch_name(Register r); 
 
 // for creating labels
-internal int labal_create(); 
-internal const char *labal_name(int l); 
-
+internal int label_create(); 
+internal const char *label_name(int l); 
 
 static char *fastcall_regs[] = {
     "rcx", "rdx", "r8", "r9"
@@ -20,7 +19,6 @@ internal const char *scratch_name(Register r) {
     return scratch_names_tbl[r];
 }
 
-
 static bool scratch_reg_tbl[ArrayLength(scratch_names_tbl)] = {0}; 
 
 internal Register scratch_alloc() {
@@ -33,90 +31,142 @@ internal Register scratch_alloc() {
     return r-1; 
 }
 
-static int fastcall_index = 0; 
-
-internal char *fastcall_alloc() {
-    return fastcall_regs[fastcall_index++]; 
-}
-
-internal void fastcall_free() {
-    fastcall_index = 0;
-}
-
 internal void scratch_free(Register reg) {
     scratch_reg_tbl[reg] = 0;
 }
 
-
 internal void scratch_free_all() {
     for (int r = 0; r < ArrayLength(scratch_names_tbl); r++) {
         scratch_reg_tbl[r] = 0;
-        
     }
 }
 
-/*
-This function generates a local symbol e.g. 
-s: int = 0;  would get turned into a mov rbx, [rbp+8]
-so the variable 's' is assisiated with the offset 8
-from the base pointer 'rbp'. 
-
-For this reason I need to know the order and size of each 
-of the other symbols inside a given block. This can be solved
-in a more elegant way naturally by using a hash map which 
-I will do in the future. That map will contain the allocated 
-mapping for all symbols inside a given block
-
-*/ 
 internal char *symbol_gen(Translation_Unit *tu, Token t) {
     
     static char str[MAX_LEN];
     
-    Block *block = get_curr_scope(tu);
-    
     // the symbol is local 
-    Map *locals = block->locals; 
-    int offset_to_symbol = 0; 
     
-    for (s64 i = tu->block_stack.index-1; i >= 0; i--) {
-        Block *b = tu->block_stack.blocks[i]; 
-        Symbol *symb = symbol_exist(b, t); 
-        if (symb && i == 0) {
+    for (s64 j = tu->scopes->index-1; j >= 0 ; j--) {
+        Statement *stmt = tu->scopes->data[j]; 
+        
+        if (stmt->kind == STMT_FUNCTION_DECL) {
+            // I am at a function scope, I need to generate the appropriate reg names to use
             
+            if (str8_compare(stmt->func.name.str, t.str) == 0) {
+                snprintf(str, MAX(t.str.size, MAX_LEN), "%s", t.str.str);
+            }
             
-            if (symb->type->kind == TYPE_STRING) {
-                snprintf(str, MAX_LEN, "offset %s", str8_to_cstring(t.str));
+            Type *type = stmt->func.type;
+            for (int i = 0; i < type->symbols->index; i++) {
+                Symbol *symb = (Symbol *)type->symbols->data[i]; 
+                if (str8_compare(symb->name.str, t.str) == 0) {
+                    
+                    // generate the appropriate name using the index
+                    if (i < 4) {
+                        snprintf(str, MAX(symb->name.str.size, MAX_LEN), "%s", fastcall_regs[i]);
+                    }
+                    else {
+                        //param = [rbp + Z], Z = 16 + (param_num * 8) 
+                        snprintf(str, MIN(symb->name.str.size, MAX_LEN), "[rbp+%d]", 16 + i * 8 );
+                    }
+                    
+                    return str; 
+                }
             }
-            else {
-                snprintf(str, MAX_LEN, "%s", str8_to_cstring(t.str));
-            }
-            return str;
         }
+        else if (stmt->kind == STMT_SCOPE) {
+            // if i have found the symbol inside the current scope
+            
+            Block *block = &stmt->block;
+            Symbol *symb = symbol_exist(block, t);
+            if (symb) {
+                
+                if (j == 0) { // global scope
+                    if (symb->type->kind == TYPE_STRING) {
+                        snprintf(str, MAX_LEN, "offset %s", str8_to_cstring(t.str));
+                    }
+                    else {
+                        snprintf(str, MAX_LEN, "%s", str8_to_cstring(t.str));
+                    }
+                    return str;
+                }
+                
+                int symbol_offset = 0;
+                Map_Iterator it = map_iterator(block->locals);
+                while (map_next(&it)) {
+                    
+                    Symbol *value = it.value; 
+                    String8 name = it.key; 
+                    
+                    if (str8_compare(symb->name.str, name) == 0) {
+                        break;
+                    }
+                    
+                    symbol_offset += get_type_size(value->type);
+                    
+                }
+                
+                // @nocheckin
+                //local = [rbp - Y], Y = (local_variable_usage -= size, return local_variable_usage) 
+                snprintf(str, MAX(symb->name.str.size, MAX_LEN), "[rsp+%d]", (symbol_offset + block->offset) + 32);
+                return str;
+            }
+            
+        }
+        
+        
     }
     
-    // generate the appropriate offset for the symbol
-    for (int i = 0; i < locals->capacity; i++){
-        Bucket b = locals->buckets[i]; 
-        if (b.value) {
-            Symbol *symb = (Symbol *)b.value; 
-            offset_to_symbol += get_type_size(symb->type); 
-            
-            if (str8_compare(symb->name.str, t.str) == 0) {
-                break;
+    /*     
+        Map *locals = stmt->block.locals; 
+        int offset_to_symbol = 0; 
+         */
+    
+    /*     
+        // if I can not find the symbol inside the current scope
+        // to back to outer scopes and generate look for the correct symbol
+        
+        // generate the appropriate offset for the symbol
+        for (int i = 0; i < locals->capacity; i++){
+            Bucket b = locals->buckets[i]; 
+            if (b.value) {
+                Symbol *symb = (Symbol *)b.value; 
+                offset_to_symbol += get_type_size(symb->type); 
+                
+                if (str8_compare(symb->name.str, t.str) == 0) {
+                    break;
+                }
             }
         }
-    }
+        
+         */
     
+    snprintf(str, MAX_LEN, "[rbp+%d]", 99); 
     
-    snprintf(str, MAX_LEN, "[rbp+%d]", offset_to_symbol);
     return str; 
 }
 
-internal char *scratch_string_alloc(char *str) {
+internal char *scratch_string_alloc(Translation_Unit *tu, char *str) {
     // generates a string label for later use
-    return str;
+    
+    static char name[MAX_LEN];
+    snprintf(name, MAX_LEN, "offset $%d", tu->unnamed_strings->index);
+    vec_push(tu->unnamed_strings, str);
+    
+    return name;
 }
 
+internal int label_create() {
+    static int label_index = 0; 
+    return label_index++; 
+}
+
+internal const char *label_name(int l) {
+    static char str[MAX_LEN];
+    snprintf(str, MAX_LEN, "L%d", l);
+    return str;
+}
 
 static FILE *output_file;
 
@@ -144,7 +194,7 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
             switch (expr->literal.kind) {
                 
                 case TYPE_STRING: {
-                    char *str = scratch_string_alloc(expr->literal.data);
+                    char *str = scratch_string_alloc(tu, expr->literal.data);
                     emit("  mov %s, %s\n", scratch_name(expr->reg), str);
                 } break; 
                 
@@ -179,8 +229,6 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                     scratch_free(expr->right->reg);
                 } break;
                 
-                // TODO(ziv): make division work
-                // case TK_SLASH: 
                 case TK_SLASH: 
                 case TK_STAR:
                 {
@@ -197,7 +245,57 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                     scratch_free(expr->left->reg);
                 } break; 
                 
+                case TK_LESS: 
+                case TK_GREATER:
+                case TK_EQUAL_EQUAL: 
+                case TK_GREATER_EQUAL: 
+                case TK_LESS_EQUAL: 
+                case TK_BANG_EQUAL: 
+                {
+                    expr->reg = scratch_alloc();
+                    emit("  cmp %s, %s\n", scratch_name(expr->left->reg), scratch_name(expr->right->reg)); 
+                    
+                    char *op = NULL;
+                    if (operation.kind == TK_LESS)             op = "setl";
+                    else if (operation.kind == TK_GREATER)     op = "setg";
+                    else if (operation.kind == TK_BANG_EQUAL)  op = "setne";
+                    else if (operation.kind == TK_EQUAL_EQUAL) op = "sete";
+                    else if (operation.kind == TK_LESS_EQUAL)  op = "setle";
+                    else if (operation.kind == TK_GREATER_EQUAL) op = "setge";
+                    else {
+                        Assert(!"Should not be getting here");
+                    }
+                    
+                    emit("  %s al\n", op);
+                    emit("  movzx rax, al\n");
+                    emit("  mov %s, rax\n", scratch_name(expr->reg));
+                    
+                    scratch_free(expr->right->reg);
+                    scratch_free(expr->left->reg);
+                } break;
                 
+                
+                case TK_AND: 
+                case TK_XOR: 
+                case TK_OR: 
+                {
+                    emit("  %s %s, %s\n", operation.kind == TK_AND ? "and" : operation.kind == TK_OR ? "or" : "xor" ,
+                         scratch_name(expr->left->reg), scratch_name(expr->right->reg)); 
+                    
+                    expr->reg = expr->left->reg;
+                    scratch_free(expr->right->reg);
+                } break;
+                
+                
+                case TK_DOUBLE_AND:
+                case TK_DOUBLE_OR: 
+                {
+                    emit("  %s %s, %s\n", operation.kind == TK_DOUBLE_AND ? "and" : "or",
+                         scratch_name(expr->left->reg), scratch_name(expr->right->reg)); 
+                    
+                    expr->reg = expr->left->reg;
+                    scratch_free(expr->right->reg);
+                } break; 
                 
                 default: {
                     Assert(!"Not implemented yet");
@@ -211,17 +309,8 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
         case EXPR_LVAR: {
             expr->reg = scratch_alloc(); 
             
-            int found_index = -1; 
-            for (int i = 0; i < func_ty->symbols->index; i++) {
-                Symbol *symb = (Symbol *)func_ty->symbols->data[i]; 
-                if (str8_compare(symb->name.str, expr->lvar.name.str) == 0) {
-                    found_index = i; 
-                    break;
-                }
-            }
-            
             emit("  mov %s, %s\n", scratch_name(expr->reg), 
-                 (found_index == -1) ? symbol_gen(tu, expr->lvar.name) : fastcall_regs[found_index]); 
+                 symbol_gen(tu, expr->lvar.name)); 
             
         } break;
         
@@ -234,20 +323,17 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
         
         case EXPR_CALL: {
             
+            // NOTE(ziv): how this works:
             // generate all of the expressions 
             // take their results and put into the correct calling convention rules 
             // push the regs, 
             // call the function name
-            // then pop and restore them later 
-            // take the result in rax 
-            // move it into a new scratch reg 
+            // then pop the regs
+            // take the result in rax if there is any
+            // move it into a new scratch reg for later use
             
-            
-            //
             // Generating the results of the expressions
-            //
-            
-            Register regs[10] = {0}; // TODO(ziv): I should change the way this works 
+            Register regs[10] = {0};  // buffer to store the scratch registers from generated expression
             int reg_index = 0; 
             
             // generate expression for call arguments
@@ -255,32 +341,37 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
             for (int i = 0; i < args->index; i++) {
                 Expr *e = (Expr *)args->data[i];
                 expr_gen(tu, func_ty, e); 
-                regs[reg_index++] = e->reg; // saving their scratch registers
+                regs[reg_index++] = e->reg; // saving scratch registers holding the values to the function call
             }
             
             // 
-            // Moving the results into the correct registers 
-            // that which follow the calling convention 
+            // Moving the results into the correct place
+            // that which follow the calling convention
+            // aka first 4 into __fastcall regs, and the
+            // other ones into the stack
             // 
             
-            for (int i = 0; i < reg_index; i++) {
-                emit("  mov %s, %s\n", fastcall_alloc(), scratch_name(regs[i]));
-            }
-            
-            
-            // saving voletile registers (aka scratch registers) 
-            reg_index = 0;
-            for (int r = 0; r < ArrayLength(scratch_reg_tbl); r++) {
-                if (scratch_reg_tbl[r]) {
-                    regs[reg_index++] = r;
+            if (reg_index <= ArrayLength(fastcall_regs)) {
+                for (int i = 0; i < reg_index; i++) {
+                    emit("  mov %s, %s\n", fastcall_regs[i], scratch_name(regs[i]));
+                    scratch_free(regs[i]);
                 }
             }
+            else {
+                // this is if I have more than 4 arguments
+                Assert(!"Not implemented yet"); 
+            }
             
+            // NOTE(ziv): I am reusing the 'regs' buffer here for a different purpose
+            reg_index = 0;
+            for (int r = 0; r < ArrayLength(scratch_reg_tbl); r++) {
+                // saving voletile registers (aka scratch registers) that I might not want to be destroyed
+                if (scratch_reg_tbl[r])
+                    regs[reg_index++] = r;
+            }
             for (int i = reg_index-1; i >= 0; i--) {
                 emit("  push %s\n", scratch_name(regs[i])); 
             }
-            
-            fastcall_free(); // I don't need to use any of the fastcall registers anymore
             
             emit("  call %s\n", str8_to_cstring(expr->call.name->lvar.name.str));
             
@@ -289,10 +380,20 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 emit("  pop %s\n", scratch_name(regs[i])); 
             }
             
-            // move the result expected to be in `rax` into a scratch register
-            expr->reg = scratch_alloc();
-            emit("  mov %s, rax\n", scratch_name(expr->reg)); 
             
+            Symbol *func = local_exist(tu, expr->call.name->lvar.name); 
+            Type *func_type = func->type;
+            
+            
+            // If we don't expect a return value, don't put code to expect it.
+            if (!(func_type->subtype->kind == TYPE_VOID)) {
+                // move the result expected to be in `rax` into a scratch register
+                expr->reg = scratch_alloc();
+                emit("  mov %s, rax\n", scratch_name(expr->reg)); 
+            }
+            else {
+                expr->reg = -1;  // aka do not expect a register from this node
+            }
             
         } break; 
         
@@ -335,16 +436,76 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
         case STMT_VAR_DECL: {
             
             expr_gen(tu, func->func.type, stmt->var_decl.initializer);
-            emit("  mov %s, %s\n", symbol_gen(tu, stmt->var_decl.name), scratch_name(stmt->var_decl.initializer->reg)); 
-            scratch_free(stmt->var_decl.initializer->reg);
+            if (stmt->var_decl.initializer) {
+                emit("  mov %s, %s\n", symbol_gen(tu, stmt->var_decl.name), scratch_name(stmt->var_decl.initializer->reg)); 
+                scratch_free(stmt->var_decl.initializer->reg);
+            }
+            else {
+                // give an initial value of 0
+                emit("  mov qword ptr %s, 0\n", symbol_gen(tu, stmt->var_decl.name)); 
+                
+            }
+            
+        } break;
+        
+        case STMT_IF: {
+            
+            Expr *condition = stmt->if_else.condition;
+            
+            expr_gen(tu, func->func.type, condition);
+            
+            emit("  test %s, 1\n", scratch_name(condition->reg)); 
+            
+            scratch_free(condition->reg);
+            
+            int over_true_block = label_create();
+            emit("  je  %s\n", label_name(over_true_block));
+            
+            Statement *true_block = stmt->if_else.true_block;
+            stmt_gen(tu, func, true_block); 
+            
+            emit("%s:\n", label_name(over_true_block));
+            
+            Statement *false_block = stmt->if_else.false_block;
+            if (false_block) {
+                stmt_gen(tu, func, false_block); 
+            }
+            
+        } break; 
+        
+        
+        case STMT_WHILE: {
+            
+            int loop_beginning = label_create();
+            emit("%s:\n", label_name(loop_beginning));
+            // handle condition 
+            
+            Expr *condition = stmt->loop.condition;
+            expr_gen(tu, func->func.type, condition);
+            emit("  test %s, 1\n", scratch_name(condition->reg)); 
+            scratch_free(condition->reg);
+            
+            // handle body
+            int over_body = label_create();
+            emit("  je  %s\n", label_name(over_body));
+            Statement *block = stmt->loop.block;
+            stmt_gen(tu, func, block); 
+            emit("  jmp %s\n", label_name(loop_beginning));
+            emit("%s:\n", label_name(over_body));
+            
         } break;
         
         case STMT_SCOPE: {
             push_scope(tu, stmt);
             
+            stmt->block.offset = tu->offset;
+            
             // the block of statements I will actually need to travaverse
             for (int i = 0; i < stmt->block.statements->index; i++) {
                 Statement *_stmt = (Statement *)stmt->block.statements->data[i]; 
+                if (_stmt->kind == STMT_VAR_DECL) {
+                    tu->offset += get_type_size(_stmt->var_decl.type);
+                }
                 stmt_gen(tu, func, _stmt);
             }
             
@@ -353,91 +514,91 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
         
         case STMT_FUNCTION_DECL: {
             
-            //
-            // Generation of the function:
-            //
-            
-            scratch_free_all(); // we don't want to depend on registers from prefiouse functions
+            // TODO(ziv): do a push and pop and something in here
+            scratch_free_all(); // registers we used in another function should not matter here
+            // so we clear their use data. 
             
             char *func_name = str8_to_cstring(stmt->func.name.str);
-            Type *type = stmt->func.type; type;
             
-            // regular function
-            if (stmt->func.sc) {
-                Block block = stmt->func.sc->block; 
-                
-                // prologe
-                { 
-                    emit("%s%s\n", func_name, is_main ? ":" : " PROC"); 
-                    if (!is_main) {
-                        emit("  push rsp\n");
-                    }
-                    emit("  mov rbp, rsp\n");
-                }
-                
-                // setting up the stack
-                int stack_size = 0; 
-                { 
-                    
-                    // calc how many bytes do all variable declorations take up
-                    
-                    Map *locals = block.locals; 
-                    Map_Iterator mit = map_iterator(locals); 
-                    
-                    // calc the size of the input arguments to a function 
-                    // and then subtract this size from the total 
-                    
-                    // TODO(ziv): check whether I want to have this limited to 4 arguments 
-                    
-                    int input_arguments_size = 0; 
-                    Vector *symbols = type->symbols; 
-                    for (int i = 0; i < symbols->index; i++) {
-                        Symbol *symb = (Symbol *)symbols->data[i]; 
-                        input_arguments_size += get_type_size(symb->type); 
-                    }
-                    
-                    int total_size = 0; 
-                    while (map_next(&mit)) {
-                        Symbol *symb = (Symbol *)mit.value; 
-                        total_size += get_type_size(symb->type); 
-                    }
-                    
-                    stack_size = total_size - input_arguments_size; 
-                    
-                    if (stack_size > 0) {
-                        emit("  sub rsp, %d\n", stack_size);  
-                    }
-                }
-                
-                // generating the body
-                stmt_gen(tu, func, stmt->func.sc);
-                
-                // epilogue
-                {
-                    emit("%s_epilogue:\n", func_name);
-                    if (stack_size > 0) {
-                        emit("  add rsp, %d\n", stack_size); 
-                    }
-                    if (!is_main) {
-                        emit("  pop rsp\n");
-                    }
-                    emit("  ret\n");
-                    if (!is_main) {
-                        emit("%s ENDP\n", func_name); 
-                    }
-                }
-            }
-            else {
+            // function prototype
+            if (!stmt->func.sc) {
                 emit("%s proto\n", func_name); 
-                // function prototype.
+                return;
             }
             
+            // NOTE(ziv): Some info about how the fastcall calling convention works: 
+            // arguments are passed on the registers rdx, rcx, r8, r9. Then it is pushed 
+            // onto the stack in backwards order than in the function so: 
+            // func(a, b, c, d, e, f);
+            // 
+            // a - rdx
+            // b - rcx, 
+            // c - r8
+            // d - r9
+            // e - [rsp+40]
+            // f - [rsp+48]
+            // 
+            // Now you might ask yourself why + 40/48? 
+            // Well, you have something called home space/shadow space
+            // this is some space allocated by the function for saving
+            // the registers you called with so you could use them for 
+            // other usages other than storing these variables. 
+            // The caller is supposed to allocate it. 
+            // Also, notice how f is higher in the stack which is 
+            // because it is pushed first, then e is pushed onto the
+            // stack and so on.
+            // 
+            // The callee might expect the stack to be 16 aligned for 
+            // wide register use xmm0/ymm0... that external functions
+            // might internally. 
+            
+            
+            // caller
+            //X = round_up(min(32, callee_usage * 8) + local_variable_usage, 16) + 8 
+            //       ^                                      ^                     ^
+            //    stack alignment                      not much to say,   remembmer 'push rsp'
+            
+            push_scope(tu, stmt); 
+            
+            Block block = stmt->func.sc->block;
+            int local_variable_usage = block.size;
+            
+            int stack_size = local_variable_usage <= 0 ? 32 : (32 + 16 + local_variable_usage) & ~(16-1) + 8; 
+            
+            // prologe
+            { 
+                emit("%s%s\n", func_name, is_main ? ":" : " PROC"); 
+                if (!is_main) emit("  push rsp\n");
+                emit("  mov rbp, rsp\n");
+                if (local_variable_usage > 0 || is_main) emit("  sub rsp, %d\n", stack_size);  
+            }
+            
+            // generating the body
+            {
+                stmt_gen(tu, func, stmt->func.sc);
+            }
+            
+            // epilogue
+            {
+                emit("%s_epilogue:\n", func_name);
+                if (local_variable_usage > 0 || is_main)  emit("  add rsp, %d\n", stack_size); 
+                if (!is_main)        emit("  pop rbp\n");
+                emit("  ret\n");
+                if (!is_main)        emit("%s ENDP\n", func_name); 
+            }
+            
+            tu->offset = 0;
+            pop_scope(tu);
             
         } break;
         
         case STMT_EXPR: {
             expr_gen(tu, func->func.type, stmt->expr); 
-            scratch_free(stmt->expr->reg);
+            
+            if (stmt->expr->reg > 0) {
+                scratch_free(stmt->expr->reg);
+            }
+            
         } break; 
         
         case STMT_RETURN: {
@@ -450,13 +611,11 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
         } break; 
         
         
-        
-        
         default: {
             Assert(!"Not implemented yet");
         } break; 
-        
     }
+    
 }
 
 // 
@@ -475,73 +634,10 @@ internal void x86gen_translation_unit(Translation_Unit *tu) {
     // 
     
     Vector *decls = tu->decls;
-    Block *block = tu->block_stack.blocks[0]; 
+    Statement *block_stmt = tu->scopes->data[0]; 
+    Block *block = &block_stmt->block;
     
     Assert(0 < decls->index);
-    
-    Map *symbols_map = block->locals; 
-    
-    // generate code for the data segment 
-    {
-        emit("\n\n"); 
-        if (symbols_map->count > 0)
-            emit(".data\n");
-        
-        char buff[MAX_LEN];
-        s64 buff_cursor = 0; 
-        
-        Map_Iterator it = map_iterator(symbols_map); 
-        
-        while (map_next(&it)) {
-            Symbol *symb = (Symbol *)it.value;
-            
-            // generate the appropriate global data with this
-            switch (symb->type->kind) {
-                
-                case TYPE_STRING: {
-                    emit("%s db \"%s\", 0\n", 
-                         str8_to_cstring(symb->name.str),
-                         (char *)symb->initializer->literal.data);
-                } break; 
-                
-                // TODO(ziv): add more literal types with different sizes
-                case TYPE_BOOL:
-                case TYPE_S64: { 
-                    emit("%s dq %lld\n", 
-                         str8_to_cstring(symb->name.str),
-                         (long long)symb->initializer->literal.data);
-                } break; 
-                
-                case TYPE_FUNCTION: {
-                    // TODO(ziv): Maybe if I have semantics for declaring functions as private 
-                    // then I would not need to do this decloration as pulic or whatever
-                    
-                    if (is_main) {
-                        // write to a buff
-                        strcpy(&buff[buff_cursor], "PUBLIC ");
-                        buff_cursor += (int)strlen("PUBLIC ");
-                        strncpy(&buff[buff_cursor], symb->name.str.str, symb->name.str.size);
-                        buff_cursor += symb->name.str.size;
-                        //strcpy(&buff[buff_cursor], " PROC");
-                        //buff_cursor += (int)strlen(" PROC");
-                        strcpy(&buff[buff_cursor++], "\n");
-                    }
-                    
-                    
-                } break;
-                
-                default: {
-                    Assert(!"Not implemented yet");
-                } break;
-                
-            }
-        }
-        
-        // output public function declorations
-        emit("\n");
-        strcpy(&buff[buff_cursor++], "\0");
-        emit(buff); 
-    }
     
     
     // 
@@ -555,7 +651,6 @@ internal void x86gen_translation_unit(Translation_Unit *tu) {
         // skip non function declorations
         Statement *stmt = (Statement *)decls->data[0]; 
         int i;
-        
         for (i = 1; i < decls->index && stmt->kind != STMT_FUNCTION_DECL; i++) {
             stmt = (Statement *)decls->data[i];
         }
@@ -578,8 +673,71 @@ internal void x86gen_translation_unit(Translation_Unit *tu) {
             
         }
         
-        emit("END\n");
     }
     
+    
+    Map *symbols_map = block->locals; 
+    
+    // generate code for the data segment 
+    {
+        emit("\n\n"); 
+        if (symbols_map->count > 0)
+            emit(".data\n");
+        
+        for (int i = 0; i < tu->unnamed_strings->index; i++) {
+            emit("$%d db \"%s\", 0\n", i,  (char *)tu->unnamed_strings->data[i]); 
+        }
+        
+        char buff[MAX_LEN];
+        s64 buff_cursor = 0; 
+        
+        Map_Iterator it = map_iterator(symbols_map); 
+        while (map_next(&it)) {
+            Symbol *symb = (Symbol *)it.value;
+            
+            // generate the appropriate global data with this
+            switch (symb->type->kind) {
+                
+                case TYPE_STRING: {
+                    emit("%s db \"%s\", 0\n", 
+                         str8_to_cstring(symb->name.str),
+                         (char *)symb->initializer->literal.data);
+                } break; 
+                
+                // TODO(ziv): add more literal types with different sizes
+                case TYPE_BOOL:
+                case TYPE_S64: { 
+                    if ((long long)symb->initializer) {
+                        emit("%s dq %lld\n", 
+                             str8_to_cstring(symb->name.str), (long long)symb->initializer->literal.data);
+                    }
+                    else {
+                        emit("%s dq %lld\n", 
+                             str8_to_cstring(symb->name.str), 0);
+                    }
+                    
+                    
+                } break; 
+                
+                case TYPE_FUNCTION: break;
+                
+                default: {
+                    Assert(!"Not implemented yet");
+                } break;
+                
+            }
+        }
+        
+        // entry point is main
+        strcpy(&buff[buff_cursor], "PUBLIC main");
+        buff_cursor += (int)strlen("PUBLIC main");
+        strcpy(&buff[buff_cursor++], "\n");
+        // output public function declorations
+        emit("\n");
+        strcpy(&buff[buff_cursor++], "\0");
+        emit(buff); 
+    }
+    
+    emit("END\n");
     
 }

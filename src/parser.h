@@ -91,9 +91,11 @@ struct Expr {
 typedef enum Statement_Kind Statement_Kind; 
 enum Statement_Kind {
     STMT_EXPR, 
-    STMT_PRINT_EXPR, 
     STMT_RETURN,
     STMT_SCOPE,
+    
+    STMT_IF,  // change to if_else
+    STMT_WHILE, // change to loop
     
     STMT_DECL_BEGIN, 
     STMT_VAR_DECL,
@@ -112,6 +114,10 @@ typedef struct Block Block;
 struct Block {
     Map *locals;        // a hashtable of `Symbol` types to store the locals declared in a block
     Vector *statements; // a list of statements inside the scope 
+    
+    // the following is needed for code generation
+    int size;   // the total size of the block
+    int offset; // the offset from the beginning of the function
 };
 
 typedef struct Statement Statement; 
@@ -130,22 +136,34 @@ struct Statement {
             Statement *sc; 
         } func;
         
+        struct {
+            Token position; // this is just used for reporting errors to the user (maybe I could put it somewhere else but meh)
+            Expr *condition;
+            Statement *true_block; 
+            Statement *false_block; 
+        } if_else; 
+        
+        struct {
+            Token position; // same as the if_else thingy up ^
+            Expr *condition; 
+            Statement *block;
+        } loop;
+        
         Block block;
     };
 };
 
-typedef struct Translation_Unit Translation_Unit; 
+typedef struct Translation_Unit 
+Translation_Unit; 
 struct Translation_Unit {
     Token_Stream *restrict s; // Stream of tokens from the lexer
+    Vector *unnamed_strings;  // constnat strings which don't have a name (used in the x86 gen)
     Vector *decls;
     
-    // NOTE(ziv): The index 0 inside this stack is 
-    // reserved for the global block such that it 
-    // is never freed.
-    struct {
-        Block *blocks[100]; // TODO(ziv): maybe not hardcode this?
-        size_t index;
-    } block_stack;
+    // anything that defines a scope can be in here. e.g. functions/blocks
+    Vector *scopes; 
+    int offset; 
+    
 };
 
 /* TODO(ziv): rethink this!!!! please!!!!
@@ -175,9 +193,9 @@ internal Token consume(Translation_Unit *tu, Token_Kind kind, char *msg);
 ////////////////////////////////
 
 internal bool is_at_global_block(Translation_Unit *tu); 
-internal Block *get_curr_scope(Translation_Unit *tu);
+internal Statement *get_curr_scope(Translation_Unit *tu);
 internal void push_scope(Translation_Unit *tu, Statement *block);
-internal Block *pop_scope(Translation_Unit *tu);
+internal Statement *pop_scope(Translation_Unit *tu);
 internal bool add_symbol(Block *block, Symbol *decl); /* adds a symbol decloration to the block */ 
 // TODO(ziv): change the names? 
 internal Symbol *symbol_exist(Block *block, Token name); /* returns the symbol found inside a block */
@@ -187,7 +205,9 @@ internal Symbol *local_exist(Translation_Unit *tu, Token var_name); /* returns t
 
 /* resolving statements */
 internal void parse_translation_unit(Translation_Unit *tu, Token_Stream *restrict s);
-internal Statement *parse_scope_stmt(Translation_Unit* tu, Statement *block);
+internal Statement *parse_scope_stmt(Translation_Unit* tu);
+internal Statement *parse_if_stmt(Translation_Unit *tu); 
+internal Statement *parse_while_stmt(Translation_Unit *tu); 
 internal Statement *parse_decloration(Translation_Unit* tu);
 internal Statement *parse_variable_decloration(Translation_Unit* tu, Token name);
 internal Statement *parse_function_decloration(Translation_Unit* tu, Token name);
@@ -200,6 +220,8 @@ internal Type   *parse_type(Translation_Unit *tu);
 /* resolving expressions */
 internal Expr *parse_expression(Translation_Unit* tu);
 internal Expr *parse_assignment(Translation_Unit* tu);
+internal Expr *parse_logical(Translation_Unit* tu);
+internal Expr *parse_bitwise(Translation_Unit* tu);
 internal Expr *parse_equality(Translation_Unit* tu); 
 internal Expr *parse_comparison(Translation_Unit* tu); 
 internal Expr *parse_term(Translation_Unit* tu);

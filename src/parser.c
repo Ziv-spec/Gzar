@@ -2,13 +2,19 @@
 // I use the recursive decent algorithem for parsing my language. 
 // For each translation unit I have, I parse it's content and 
 // generate a AST - Abstract Syntax Tree which for the time being 
-// I use as a IR - Immediate representation for generating code from 
+// I use it as a IR - Immediate representation for generating code from
+// This is not perfect but will suffice for the time being.
 
 internal void parse_translation_unit(Translation_Unit *tu, Token_Stream *restrict s) {
     
+    // init translation unit
+    tu->s = s; // update token stream
+    tu->decls = init_vec(); // init decls vector
+    tu->unnamed_strings = init_vec();
+    tu->scopes = init_vec();
+    tu->offset = 0; 
     
-    tu->s = s;
-    tu->decls = init_vec();
+    vec_push(tu->scopes, init_scope());
     
     // 
     // Parsing of global declorations
@@ -33,10 +39,35 @@ internal Expr *parse_expression(Translation_Unit* tu) {
 }
 
 internal Expr *parse_assignment(Translation_Unit* tu) {
-    Expr *expr = parse_equality(tu);
+    Expr *expr = parse_logical(tu);
     if (match(tu, TK_ASSIGN)) {
-        return init_assignment(expr, parse_equality(tu));
+        return init_assignment(expr, parse_logical(tu));
     }
+    return expr;
+}
+
+
+internal Expr *parse_logical(Translation_Unit* tu) {
+    Expr *expr = parse_bitwise(tu); 
+    
+    while (match(tu, TK_DOUBLE_AND, TK_DOUBLE_OR)) {
+        Token operator = previous(tu); 
+        Expr *right = parse_bitwise(tu); 
+        expr = init_binary(expr, operator, right);
+    }
+    
+    return expr;
+}
+
+internal Expr *parse_bitwise(Translation_Unit* tu) {
+    Expr *expr = parse_equality(tu); 
+    
+    while (match(tu, TK_OR, TK_XOR, TK_AND)) {
+        Token operator = previous(tu); 
+        Expr *right = parse_equality(tu); 
+        expr = init_binary(expr, operator, right);
+    }
+    
     return expr;
 }
 
@@ -83,7 +114,6 @@ internal Expr *parse_factor(Translation_Unit* tu) {
         Token operation = previous(tu); 
         Expr *right = parse_factor(tu); 
         
-        // if (type_equal(expr, right))
         expr = init_binary(expr, operation, right);
     }
     
@@ -158,12 +188,15 @@ internal Expr *parse_primary(Translation_Unit* tu) {
     if (match(tu, TK_IDENTIFIER)) {
         
         Token var_name = previous(tu);
-        if (!local_exist(tu, var_name)) {
-            char buff[100]; 
-            char *name = str8_to_cstring(var_name.str);
-            sprintf(buff, "Error: can not use '%s' it has never been declared", name);
-            parse_error(tu, var_name, buff); 
-        }
+        
+        /* @nocheckin
+                if (!local_exist(tu, var_name)) {
+                    char buff[100]; 
+                    char *name = str8_to_cstring(var_name.str);
+                    sprintf(buff, "Error: can not use '%s' it has never been declared", name);
+                    parse_error(tu, var_name, buff); 
+                }
+                 */
         
         return init_lvar(var_name);
     }
@@ -279,31 +312,23 @@ internal Expr *init_call(Expr *name, Expr *args) {
 //////////////////////////////////
 /// Helper functions for symbols
 
-internal Block *get_curr_scope(Translation_Unit *tu) {
-    
-    if (1 < tu->block_stack.index) {
-        return tu->block_stack.blocks[tu->block_stack.index-1]; 
+internal Statement *get_curr_scope(Translation_Unit *tu) {
+    if (1 < tu->scopes->index) {
+        return tu->scopes->data[tu->scopes->index-1]; 
     }
-    return tu->block_stack.blocks[0]; 
+    return tu->scopes->data[0];  // global scope
 }
 
 internal bool is_at_global_block(Translation_Unit *tu) {
-    return tu->block_stack.index == 0;
+    return tu->scopes->index == 1;
 }
 
 internal void push_scope(Translation_Unit *tu, Statement *block) {
-    Assert(tu->block_stack.index < 100); 
-    
-    tu->block_stack.blocks[tu->block_stack.index++] = &block->block;
+    vec_push(tu->scopes, block);
 }
 
-internal Block *pop_scope(Translation_Unit *tu) {
-    if (tu->block_stack.index <= 0) {
-        Assert(tu->block_stack.index > 0);
-        
-        return tu->block_stack.blocks[tu->block_stack.index];
-    }
-    return tu->block_stack.blocks[--tu->block_stack.index];
+internal Statement *pop_scope(Translation_Unit *tu) {
+    return vec_pop(tu->scopes);
 }
 
 internal bool add_symbol(Block *block, Symbol *decl) {
@@ -320,33 +345,48 @@ internal Symbol *symbol_exist(Block *block, Token name) {
 internal Symbol *local_exist(Translation_Unit *tu, Token var_name) {
     Assert(var_name.kind == TK_IDENTIFIER);
     
-    Block *block = get_curr_scope(tu);
     if (!is_at_global_block(tu)) {
         
-        // I am at a lower scope than global
-        // so I need to go over all of the blocks
-        // from closes to furthest and check whether 
-        // I have a symbol with the same name inside 
-        // it 
-        
-        for (size_t i = tu->block_stack.index; 0 < i; i--) {
-            block = tu->block_stack.blocks[i-1]; 
-            Symbol *symb = symbol_exist(block, var_name); 
-            if (symb) {
-                return symb;
+        // from bottom to top scopes, check whether the symbol exists in it
+        for (size_t i = tu->scopes->index-1; 0 < i; i--) {
+            
+            Statement *stmt = (Statement *)tu->scopes->data[i];
+            if (stmt->kind == STMT_SCOPE) {
+                Symbol *symb = symbol_exist(&stmt->block, var_name); 
+                if (symb)  return symb;
+                
             }
+            else if (stmt->kind == STMT_FUNCTION_DECL) {
+                if (str8_compare(var_name.str, stmt->func.name.str) == 0) {
+                    return init_symbol(stmt->func.name, stmt->func.type, NULL);
+                }
+                
+                Vector *symbols = stmt->func.type->symbols; 
+                for (int j = 0; j < symbols->index; j++) {
+                    Symbol *symb = symbols->data[j]; 
+                    if (str8_compare(symb->name.str, var_name.str) == 0)
+                        return symb;
+                    
+                }
+            }
+            else {
+                Assert(!"Should not be getting here");
+            }
+            
+            //return NULL;
         }
-        return NULL; 
+        
     }
     
     // return the type of the symbol if it exists
-    return symbol_exist(tu->block_stack.blocks[0], var_name);
+    return symbol_exist(&((Statement *)tu->scopes->data[0])->block, var_name);
 }
 
 //////////////////////////////////
 /// Parsing of statements
 
-internal Statement *parse_scope_stmt(Translation_Unit* tu, Statement *block) {
+internal Statement *parse_scope_stmt(Translation_Unit* tu) {
+    Statement *block = init_scope();
     push_scope(tu, block);
     
     while (!is_at_end(tu)) {
@@ -395,13 +435,8 @@ internal Statement *parse_variable_decloration(Translation_Unit* tu, Token name)
     
     // add symbol to scope
     {
-        Block *block = get_curr_scope(tu);
-        if (map_get(block->locals, name.str)) {
-            parse_error(tu, name, "Variable declared more than once in the same scope");
-        }
-        else {
-            add_symbol(block, symb);
-        }
+        Statement *block = get_curr_scope(tu);
+        add_symbol(&block->block, symb);
     }
     
     return init_var_decl_stmt(symb);
@@ -447,28 +482,22 @@ internal Statement *parse_function_decloration(Translation_Unit* tu, Token name)
     if (match(tu, TK_RBRACE)) {
         // function body
         
-        block_stmt = init_scope();
         
-        // add to the scope the function arguments 
-        // so you would be able to use them inside 
-        // the scope 
-        for (int i = 0; i < args->index; i++) {
-            add_symbol(&block_stmt->block, (Symbol *)args->data[i]);
-        }
+        block_stmt = parse_scope_stmt(tu);
         
+        // @nocheckin
         // add the func decl to the current scope
-        Block *curr_block = get_curr_scope(tu); 
-        add_symbol(curr_block, init_symbol(name, ty, NULL));
         
-        block_stmt = parse_scope_stmt(tu, block_stmt);
     }
     else {
         // function prototype
         consume(tu, TK_SEMI_COLON, "Expected '{' for function body or  ';' for prototype");
         
-        // add the func decl to the current scope
-        Block *curr_block = get_curr_scope(tu); 
-        add_symbol(curr_block, init_symbol(name, ty, NULL));
+        /*         
+                // add the func decl to the current scope
+                Block *curr_block = get_curr_scope(tu); 
+                add_symbol(curr_block, init_symbol(name, ty, NULL));
+                 */
         
     }
     
@@ -522,7 +551,10 @@ internal Type *parse_type(Translation_Unit *tu) {
 
 internal Statement *parse_statement(Translation_Unit* tu) {
     if (match(tu, TK_RETURN)) return parse_return_stmt(tu);
-    if (match(tu, TK_RBRACE)) return parse_scope_stmt(tu, init_scope()); 
+    if (match(tu, TK_RBRACE)) return parse_scope_stmt(tu); 
+    if (match(tu, TK_IF)) return parse_if_stmt(tu); 
+    if (match(tu, TK_WHILE)) return parse_while_stmt(tu); 
+    
     return parse_expr_stmt(tu);
 }
 
@@ -537,6 +569,50 @@ internal Statement *parse_expr_stmt(Translation_Unit* tu) {
     consume(tu, TK_SEMI_COLON, "Expected ';' after a statement");
     return init_expr_stmt(expr);
 }
+
+internal Statement *init_if_stmt(Expr *condition, Statement *true_block,  Statement *false_block) {
+    Statement *stmt = (Statement *)malloc(sizeof(Statement));
+    stmt->kind = STMT_IF; 
+    stmt->if_else.condition = condition; 
+    stmt->if_else.true_block = true_block; 
+    stmt->if_else.false_block = false_block; 
+    return stmt;
+}
+
+internal Statement *init_while_stmt(Expr *condition, Statement *block) {
+    Statement *stmt = (Statement *)malloc(sizeof(Statement));
+    stmt->kind = STMT_WHILE; 
+    stmt->loop.condition = condition; 
+    stmt->loop.block = block; 
+    return stmt;
+}
+
+internal Statement *parse_if_stmt(Translation_Unit *tu) {
+    Expr *condition = parse_expression(tu); 
+    
+    consume(tu, TK_RBRACE, "Expected '{' for beginning of block"); 
+    Statement *true_block = parse_scope_stmt(tu); 
+    
+    Statement *false_block = NULL;
+    if (match(tu, TK_ELSE)) {
+        consume(tu, TK_RBRACE, "Expected '{' for beginning of block"); 
+        false_block = parse_scope_stmt(tu); 
+    }
+    
+    return init_if_stmt(condition, true_block, false_block); 
+}
+
+internal Statement *parse_while_stmt(Translation_Unit *tu) {
+    
+    Expr *condition = parse_expression(tu); 
+    
+    consume(tu, TK_RBRACE, "Expected beginning of block '{' for while statement");
+    Statement *block = parse_scope_stmt(tu); 
+    
+    return init_while_stmt(condition, block); 
+}
+
+
 
 
 //////////////////////////////////
@@ -572,6 +648,8 @@ internal Statement *init_scope() {
     stmt->kind = STMT_SCOPE;
     stmt->block.statements = init_vec(); 
     stmt->block.locals = init_map(sizeof(Symbol)); 
+    stmt->block.size = 0; 
+    stmt->block.offset = 0; 
     return stmt;
 }
 
@@ -715,3 +793,4 @@ internal bool internal_match(Translation_Unit *tu, int n, ...) {
     va_end(kinds);
     return false; 
 }
+

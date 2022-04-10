@@ -1,0 +1,10 @@
+
+
+func :: (a: int, b: int, c: int, d: int, e: int, f: int) -> int {
+	return a + b + c + d + e + f;
+}
+
+
+main :: () -> int {
+	return func(1, 1, 2, 2, 2, 2);
+}

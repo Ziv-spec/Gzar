@@ -1,0 +1,20 @@
+
+puts :: (val: string) -> void; 
+
+
+main :: () -> int {
+
+	i: int = 90; 
+	
+	puts("wow");
+
+	if (i > 40) {
+		return i + 10;
+	}
+	else {
+		return i - 10;
+	}
+
+
+	return 0; 
+}
