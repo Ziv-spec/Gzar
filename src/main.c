@@ -12,7 +12,6 @@
 // statement -> expression
 //     | while 
 //     | if
-//     | for 
 //     | block
 // 
 // expression -> literal 
@@ -132,7 +131,13 @@ int main(int argc, char *argv[]) {
     
     sema_translation_unit(&tu);
     
-    x86gen_translation_unit(&tu); 
+    x86gen_translation_unit(&tu, "C:/dev/hw/toylang/build/test.asm"); 
+    
+    // NOTE(ziv): calling the assembler and the linker for final assembly of the executable
+    // This is very slow, and for the time being can not be avoided. One way to speed things 
+    // up would be to not need assembler. This would require me to ouput x86-64 machine code
+    // for the time being I am not doing that, if I see that it is worth it, I might try.
+    system("ml64 -nologo /c test.asm >nul && cl /nologo test.obj /link kernel32.lib msvcrt.lib"); 
     
     free(source_buff); // I don't have to use this but whatever...
     return 0;

@@ -26,12 +26,6 @@ pushd build
 
 
 
-
-
-
-
-
-
 REM ================= BEGIN TESTING ======================
  
 rem call:run test2.jai
@@ -54,55 +48,17 @@ call:assert test13.gzr 5
 call:assert test14.gzr 100
 call:assert test15.gzr 10
 
-
 REM ======================================================
-
-
 
 
 
 popd
 goto:eof
 
-:run
-set testPath=%testDirectory%%~1
-
-gzar.exe %testPath% > test.asm
-if not exist test.asm  EXIT /B 0 
-
-ml64 -nologo /c /Zi test.asm >nul
-if %errorlevel% == 1 (
-	rem type test.asm
-	EXIT /B 0
-)
-
-rem link /DEBUG /entry:main /nologo test.obj kernel32.lib msvcrt.lib
-cl /nologo test.obj /link /debug kernel32.lib msvcrt.lib
-
-echo %~1
-test.exe
-
-echo %errorlevel% 
-
-EXIT /B 0
-
-
-
 :assert
 set testPath=%testDirectory%%~1
-
-gzar.exe %testPath% > test.asm
-if not exist test.asm  EXIT /B 0 
-
-ml64 -nologo /c /Zi test.asm >nul
-if %errorlevel% == 1 (
-	EXIT /B 0
-)
-
-cl /nologo test.obj /link  kernel32.lib msvcrt.lib
-
+gzar.exe %testPath%
 test.exe
-
 if %errorlevel% == %~2 (
 	echo %~1...OK
 ) else (

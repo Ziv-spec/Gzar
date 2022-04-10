@@ -412,6 +412,14 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                     expr->reg = expr->unary.right->reg;
                 } break; 
                 
+                
+                case TK_BANG: {
+                    emit("  not %s\n", scratch_name(expr->unary.right->reg));
+                    emit("  and %s, 1\n", scratch_name(expr->unary.right->reg)); 
+                    
+                    expr->reg = expr->unary.right->reg;
+                } break; 
+                
                 default: {
                     Assert(!"NOT IMPLEMENTED"); 
                 } break; 
@@ -622,10 +630,20 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
 // Set of functions for generating globals in the .data segment
 // 
 
-internal void x86gen_translation_unit(Translation_Unit *tu) {
+internal void x86gen_translation_unit(Translation_Unit *tu, const char *filename) {
     if (!tu) return; 
     
-    output_file = stdout; // this is subject to change
+    
+    // 
+    // open the first file and read it's contents
+    // 
+    
+    FILE *file = fopen(filename,  "w+"); 
+    if (!file) {
+        fprintf(stderr, "Error: failed to open file '%s'\n", filename);
+    }
+    
+    output_file = file; // this is subject to change
     
     // 
     // Generate the globals inside the .data segment
@@ -739,5 +757,7 @@ internal void x86gen_translation_unit(Translation_Unit *tu) {
     }
     
     emit("END\n");
+    
+    fclose(file);
     
 }
