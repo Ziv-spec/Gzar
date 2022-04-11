@@ -131,7 +131,7 @@ int main(int argc, char *argv[]) {
     
     sema_translation_unit(&tu);
     
-    x86gen_translation_unit(&tu, "C:/dev/hw/toylang/build/test.asm"); 
+    x86gen_translation_unit(&tu, "test.asm"); 
     
     // NOTE(ziv): calling the assembler and the linker for final assembly of the executable
     // This is very slow, and for the time being can not be avoided. One way to speed things 
