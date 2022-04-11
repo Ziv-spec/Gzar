@@ -135,7 +135,7 @@ internal Expr *parse_unary(Translation_Unit* tu) {
 internal Expr *parse_call(Translation_Unit* tu) {
     Expr *expr = parse_primary(tu);
     
-    if (expr->kind == EXPR_LVAR && match(tu, TK_LPARAN)) {
+    if (expr && expr->kind == EXPR_LVAR && match(tu, TK_LPARAN)) {
         Expr *args = parse_arguments(tu); 
         if (args) {
             consume(tu, TK_RPARAN, "Expected ')' in a function call"); 
@@ -186,18 +186,7 @@ internal Expr *parse_primary(Translation_Unit* tu) {
     }
     
     if (match(tu, TK_IDENTIFIER)) {
-        
         Token var_name = previous(tu);
-        
-        /* @nocheckin
-                if (!local_exist(tu, var_name)) {
-                    char buff[100]; 
-                    char *name = str8_to_cstring(var_name.str);
-                    sprintf(buff, "Error: can not use '%s' it has never been declared", name);
-                    parse_error(tu, var_name, buff); 
-                }
-                 */
-        
         return init_lvar(var_name);
     }
     
@@ -210,25 +199,28 @@ internal Expr *parse_primary(Translation_Unit* tu) {
     char buff[100]; 
     Token not_literal = previous(tu); 
     if (match(tu, TK_SEMI_COLON)) {
-        Assert(!"check whether this works correctly");
-        sprintf(buff, "operation '%c' requires more than one operand", not_literal.kind);
+        //Assert(!"check whether this works correctly");
+        sprintf(buff, "Can not have empty expressions");
         syntax_error(tu, not_literal, buff); 
+        return NULL;
     }
     
     not_literal = peek(tu); 
     if (not_literal.kind == TK_EOF) {
+        parse_error(tu, not_literal, "Unexpected end of file");
         return NULL;
-        //error(not_literal, "Unexpected end of file");
     }
     
     
     char *temp = NULL; 
     if (not_literal.kind < TK_DOUBLE_ASCII) {
-        Assert(!"not implemented");
+        sprintf(buff, "operation '%c' requires two operands", not_literal.kind);
+        syntax_error(tu, not_literal, buff); 
+#if DEBUG
+        return NULL;
+#endif 
     }
-    else {
-        temp = str8_to_cstring(not_literal.str); 
-    }
+    temp = str8_to_cstring(not_literal.str); 
     
     sprintf(buff, "illigal use of '%s'", temp);
     syntax_error(tu, not_literal, buff); 
@@ -387,6 +379,7 @@ internal Symbol *local_exist(Translation_Unit *tu, Token var_name) {
 
 internal Statement *parse_scope_stmt(Translation_Unit* tu) {
     Statement *block = init_scope();
+    
     push_scope(tu, block);
     
     while (!is_at_end(tu)) {
@@ -465,41 +458,26 @@ internal Statement *parse_function_decloration(Translation_Unit* tu, Token name)
         }
     } 
     
+    // function type 
     consume(tu, TK_RPARAN, "Expected ')' for end of arguments");
     consume(tu, TK_RETURN_TYPE, "Expected '->' after arguments"); 
     
     Type *return_type = parse_type(tu);
-    
-    
-    // to allow the use of the function name inside the function 
-    // I first create the function type and insert it into the global scope. 
-    // Then I parse the block
     Type *ty = init_type(TYPE_FUNCTION, return_type, args);
-    
     
     // function body/fuction prototype
     Statement *block_stmt = NULL;
-    if (match(tu, TK_RBRACE)) {
-        // function body
-        
-        
+    if (match(tu, TK_RBRACE)) { // function body
         block_stmt = parse_scope_stmt(tu);
-        
-        // @nocheckin
-        // add the func decl to the current scope
-        
     }
-    else {
-        // function prototype
+    else { // function prototype
         consume(tu, TK_SEMI_COLON, "Expected '{' for function body or  ';' for prototype");
-        
-        /*         
-                // add the func decl to the current scope
-                Block *curr_block = get_curr_scope(tu); 
-                add_symbol(curr_block, init_symbol(name, ty, NULL));
-                 */
-        
     }
+    
+    Statement *curr_block = get_curr_scope(tu);
+    Assert(curr_block->kind == STMT_SCOPE); 
+    
+    add_symbol(&curr_block->block, init_symbol(name, ty, NULL));
     
     return init_func_decl_stmt(name, ty, block_stmt);
 }

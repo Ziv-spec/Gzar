@@ -273,8 +273,14 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
         
         
         case EXPR_LVAR: {
+            
             Symbol *symb = local_exist(tu, expr->lvar.name); 
-            Assert(symb); // I should be getting a symbol here 
+            if (!symb) {
+                char buff[100]; 
+                char *name = str8_to_cstring(expr->lvar.name.str);
+                sprintf(buff, "Error: can not use '%s' it has never been declared", name);
+                parse_error(tu, expr->lvar.name, buff); 
+            }
             
             return expr->type = symb->type; 
         } break;
@@ -465,12 +471,19 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
             // the arugments passed to the call node
             //
             
+            Statement *block = get_curr_scope(tu);
+            
             int len = call_args_count;
             for (int i = 0; i < len; i++) { 
                 Symbol *symb = (Symbol *)func_args->data[i];
                 Expr *call_expr = (Expr *)call_args->data[i];
                 Type *func_arg_type = symb->type; 
                 Type *call_arg_type = sema_expr(tu, call_expr);
+                
+                // update the block size to include the callee usage size
+                if (i > 4) {
+                    block->block.size += get_type_size(symb->type);
+                }
                 
                 if (!type_equal(func_arg_type, call_arg_type)) {
                     type_error(tu, expr->call.name->lvar.name, func_arg_type, call_arg_type, "Unexpected incompatible types `%s` != `%s`");
@@ -573,7 +586,7 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
                 success = (!success) ? success : temp;
             }
             
-            stmt->block.size = size;
+            stmt->block.size += size;
             pop_scope(tu); 
             
             return success;
@@ -605,15 +618,15 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
                     stmt->var_decl.type = lhs;
                     
                     int size = get_type_size(lhs); 
-                    Statement *block_stmt = get_curr_scope(tu);
-                    if (block_stmt->kind == STMT_SCOPE) {
-                        block_stmt->block.size += size;
+                    Statement *temp_stmt = get_curr_scope(tu);
+                    if (temp_stmt->kind == STMT_SCOPE) {
+                        temp_stmt->block.size += size;
                     }
                     else {
                         Assert(!"I should not be getting here");
                     }
                     
-                    return add_symbol(&block_stmt->block, &stmt->var_decl);
+                    return add_symbol(&temp_stmt->block, &stmt->var_decl);
                 }
                 
                 type_error(tu, stmt->var_decl.name, lhs, rhs, "Types do not match `%s` != `%s`");

@@ -1,11 +1,9 @@
 
+    func :: (a: int, b: int, c: int, d: int, e: int, f: int) -> int {
+    return a + b + c + d + e + f;
+}
+
 main :: () -> int {
     
-    result: bool = 9 > 1 && 3 < 1;
-    
-    if (result) {
-        return 5; 
-    }
-    
-    return 55;
+    return func(1, 2, 3, 4, 5, 6);
 }

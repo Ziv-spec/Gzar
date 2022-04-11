@@ -61,16 +61,8 @@ internal char *symbol_gen(Translation_Unit *tu, Token t) {
             for (int i = 0; i < type->symbols->index; i++) {
                 Symbol *symb = (Symbol *)type->symbols->data[i]; 
                 if (str8_compare(symb->name.str, t.str) == 0) {
-                    
-                    // generate the appropriate name using the index
-                    if (i < 4) {
-                        snprintf(str, MAX(symb->name.str.size, MAX_LEN), "%s", fastcall_regs[i]);
-                    }
-                    else {
-                        //param = [rbp + Z], Z = 16 + (param_num * 8) 
-                        snprintf(str, MIN(symb->name.str.size, MAX_LEN), "[rbp+%d]", 16 + i * 8 );
-                    }
-                    
+                    //param = [rbp + Z], Z = 16 + (param_num * 8) 
+                    snprintf(str, MAX(symb->name.str.size, MAX_LEN), "[rbp+%d]", 16 + i * 8 );
                     return str; 
                 }
             }
@@ -83,12 +75,7 @@ internal char *symbol_gen(Translation_Unit *tu, Token t) {
             if (symb) {
                 
                 if (j == 0) { // global scope
-                    if (symb->type->kind == TYPE_STRING) {
-                        snprintf(str, MAX_LEN, "offset %s", str8_to_cstring(t.str));
-                    }
-                    else {
-                        snprintf(str, MAX_LEN, "%s", str8_to_cstring(t.str));
-                    }
+                    snprintf(str, MAX_LEN, symb->type->kind == TYPE_STRING ? "offset %s" : "%s", str8_to_cstring(t.str));
                     return str;
                 }
                 
@@ -115,34 +102,9 @@ internal char *symbol_gen(Translation_Unit *tu, Token t) {
             
         }
         
-        
     }
     
-    /*     
-        Map *locals = stmt->block.locals; 
-        int offset_to_symbol = 0; 
-         */
-    
-    /*     
-        // if I can not find the symbol inside the current scope
-        // to back to outer scopes and generate look for the correct symbol
-        
-        // generate the appropriate offset for the symbol
-        for (int i = 0; i < locals->capacity; i++){
-            Bucket b = locals->buckets[i]; 
-            if (b.value) {
-                Symbol *symb = (Symbol *)b.value; 
-                offset_to_symbol += get_type_size(symb->type); 
-                
-                if (str8_compare(symb->name.str, t.str) == 0) {
-                    break;
-                }
-            }
-        }
-        
-         */
-    
-    snprintf(str, MAX_LEN, "[rbp+%d]", 99); 
+    Assert(!"Why am I getting here?"); // this might suggest a bug in my semantic analyzer
     
     return str; 
 }
@@ -351,15 +313,14 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
             // other ones into the stack
             // 
             
-            if (reg_index <= ArrayLength(fastcall_regs)) {
-                for (int i = 0; i < reg_index; i++) {
-                    emit("  mov %s, %s\n", fastcall_regs[i], scratch_name(regs[i]));
-                    scratch_free(regs[i]);
-                }
+            for (int i = 0; i < MIN(reg_index, 4); i++) {
+                emit("  mov %s, %s\n", fastcall_regs[i], scratch_name(regs[i]));
+                scratch_free(regs[i]);
             }
-            else {
-                // this is if I have more than 4 arguments
-                Assert(!"Not implemented yet"); 
+            
+            for (int i = 4; i < reg_index; i++) {
+                emit("  mov [rsp+%d], %s\n",i*8, scratch_name(regs[i]));
+                scratch_free(regs[i]);
             }
             
             // NOTE(ziv): I am reusing the 'regs' buffer here for a different purpose
@@ -569,16 +530,25 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
             push_scope(tu, stmt); 
             
             Block block = stmt->func.sc->block;
-            int local_variable_usage = block.size;
+            int local_variable_and_callee_usage = block.size;
             
-            int stack_size = local_variable_usage <= 0 ? 32 : (32 + 16 + local_variable_usage) & ~(16-1) + 8; 
+            int stack_size = local_variable_and_callee_usage <= 0 ? 32 : (32 + 16 + local_variable_and_callee_usage ) & ~(16-1) + 8; 
             
             // prologe
             { 
                 emit("%s%s\n", func_name, is_main ? ":" : " PROC"); 
                 if (!is_main) emit("  push rsp\n");
                 emit("  mov rbp, rsp\n");
-                if (local_variable_usage > 0 || is_main) emit("  sub rsp, %d\n", stack_size);  
+                if (local_variable_and_callee_usage > 0 || is_main) emit("  sub rsp, %d\n", stack_size);  
+            }
+            
+            // generate the saving of the __fastcall registers
+            {
+                Vector *symbols = stmt->func.type->symbols; 
+                int argument_count = MIN(symbols->index, 4); // I need to save upto 4 registers
+                for (int i = 0; i < argument_count; i++) {
+                    emit("  mov [rbp+%d], %s\n", 16+i*8, fastcall_regs[i]);
+                }
             }
             
             // generating the body
@@ -589,7 +559,7 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
             // epilogue
             {
                 emit("%s_epilogue:\n", func_name);
-                if (local_variable_usage > 0 || is_main)  emit("  add rsp, %d\n", stack_size); 
+                if (local_variable_and_callee_usage > 0 || is_main)  emit("  add rsp, %d\n", stack_size); 
                 if (!is_main)        emit("  pop rbp\n");
                 emit("  ret\n");
                 if (!is_main)        emit("%s ENDP\n", func_name); 

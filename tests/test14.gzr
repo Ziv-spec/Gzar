@@ -1,6 +1,4 @@
 
-puts :: (val: string) -> void; 
-
 
 main :: () -> int {
 
@@ -15,6 +13,7 @@ main :: () -> int {
 		return i - 10;
 	}
 
-
 	return 0; 
 }
+
+puts :: (val: string) -> void; 
