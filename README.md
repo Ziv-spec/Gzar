@@ -8,6 +8,11 @@ The language might support pointers (we shall see) and if I will have the time, 
 ## How to compile the Gzar compiler 
 Make sure that you have visual studio 2019 C/C++ compiler installed and run the build file from any command line you have.
 
+## Running the compiler
+You need to run the compiler from the x64 native command prompt for VS 
+which will initialize the enviorment for the ml64 assembler that my compiler
+uses, and the linker.
+
 ## Code generation
 The compiler will output unoptimized assembly masm syntax
 

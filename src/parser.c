@@ -7,6 +7,8 @@
 
 internal void parse_translation_unit(Translation_Unit *tu, Token_Stream *restrict s) {
     
+    // TODO(ziv): put this in a function? 
+    
     // init translation unit
     tu->s = s; // update token stream
     tu->decls = init_vec(); // init decls vector
