@@ -38,11 +38,12 @@ call:assert test7.gzr 150
 call:assert test8.gzr 9
 call:assert test9.gzr -1
 call:assert test10.gzr 4
-call:assert test11.gzr 1
+call:assert test11.gzr 0
 call:assert test12.gzr 0
 call:assert test13.gzr 5
 call:assert test14.gzr 100
 call:assert test15.gzr 10
+call:assert test16.gzr 4
 
 REM ======================================================
 

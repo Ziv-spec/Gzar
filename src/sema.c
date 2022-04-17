@@ -15,12 +15,8 @@ inline s64 type_kind_to_atom(Type_Kind kind) {
     // which results in the correct index for the atom
     // inside the `types_tbl`
     
-#if 1 // this is only useful if I want the types to be 2^n for creating a bitfield
     f32 something = kind; 
     s32 index = (*(s32 *)&something >> 23) - 127;
-#else
-    s32 index = kind; 
-#endif 
     return (s64)index; 
 }
 
@@ -48,7 +44,7 @@ internal Type *get_atom(Type_Kind kind) {
         [ATOM_U32] = { TYPE_U32, NULL, NULL }, 
         [ATOM_U64] = { TYPE_U64, NULL, NULL }, 
         
-        [ATOM_UNKNOWN]   = { TYPE_UNKNOWN,NULL, NULL }, 
+        [ATOM_UNKNOWN] = { TYPE_UNKNOWN,NULL, NULL }, 
         [ATOM_VOID]   = { TYPE_VOID,   NULL, NULL }, 
         [ATOM_STRING] = { TYPE_STRING, NULL, NULL }, 
         [ATOM_BOOL]   = { TYPE_BOOL,   NULL, NULL }, 
@@ -186,13 +182,16 @@ internal bool type_equal(Type *t1, Type *t2) {
 internal int get_type_size(Type *type) {
     int size = 0; 
     
+    if (!type) 
+        return 0; 
+    
     if (is_integer(type)) {
         
         switch (type->kind) {
-            case TYPE_S8: case TYPE_U8:   { size = 1; }
-            case TYPE_S16: case TYPE_U16: { size = 2; }
-            case TYPE_S32: case TYPE_U32: { size = 4; }
-            case TYPE_S64: case TYPE_U64: { size = 8; }
+            case TYPE_S8: case TYPE_U8:   { size = 1; } break; 
+            case TYPE_S16: case TYPE_U16: { size = 2; } break;
+            case TYPE_S32: case TYPE_U32: { size = 4; } break;
+            case TYPE_S64: case TYPE_U64: { size = 8; } break;
         }
         
     }
@@ -246,15 +245,6 @@ internal Type *implicit_cast(Type *t1, Type *t2) {
 internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
     if (!expr) return NULL;
     
-    // recursively go and typecheck the expression 
-    // and then return the type of the resulting expression
-    // do note that in this phase if it failes it just returns
-    // a NULL type. This will signal that there has been an 
-    // error. This is done so in the future I would be able 
-    // to continue compilation even if I have found  such of
-    // an error. Though with the current design I do not allow 
-    // for said behaviour. 
-    
     Type *result = NULL; 
     
     switch (expr->kind) {
@@ -287,14 +277,13 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
         
         
         
-        case EXPR_ASSIGN: { // should I put this into the binary thingy? 
+        case EXPR_ASSIGN: { 
             Type *rhs = sema_expr(tu, expr->assign.lvar);
             if (!rhs) return NULL; 
             Type *lhs = sema_expr(tu, expr->assign.rvalue);
             if (!lhs) return NULL; 
             
-            // If I have nil literal, I want to implicitly cast it to the 
-            // type onto which I want to assign the nil to. 
+            // handling the weird stuff about nil
             Expr *lit = expr->assign.rvalue; 
             if (lit->kind == EXPR_LITERAL) {
                 if (lit->literal.kind == TYPE_UNKNOWN && lit->literal.data == 0 && rhs->kind == TYPE_POINTER) {
@@ -322,11 +311,16 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
             Type *lhs = sema_expr(tu, expr->left);
             if (!lhs) return NULL; 
             
+            // TODO(ziv): REWORK THIS because this currently does not work 
+            
             result = implicit_cast(rhs, lhs);
             if (!result) {
                 if (!type_equal(rhs, lhs)) {
-                    if (is_integer(rhs) && is_integer(lhs))
+                    if (is_integer(rhs) && is_integer(lhs)) {
                         fprintf(stderr, "Unable to implicitly cast between unsigned and signed integer types");
+                        __debugbreak();
+                        exit(-1);
+                    }
                     else
                         type_error(tu, expr->operation, lhs, rhs, "Unexpected incompatible types `%s` != `%s`");
                     return NULL;
@@ -335,7 +329,6 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
             }
             
             
-            // Make sure that only valid types will continue 
             if (!is_integer(result) &&
                 !is_boolean(result) &&
                 !is_pointer(result)) {
@@ -353,7 +346,7 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
                     if (!is_integer(result)) {
                         type_error(tu, expr->operation, NULL, NULL, "Bitwise operations can operate on integers only");
                     }
-                    return result;
+                    return expr->type = result;
                 } break; 
                 
                 case TK_PLUS: 
@@ -365,14 +358,14 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
                         
                         if (op == TK_MINUS) {
                             // ptr - ptr = ptrdiff (of type s64)
-                            return get_atom(TYPE_S64);
+                            return expr->type = get_atom(TYPE_S64);
                         }
                         else {
                             type_error(tu, expr->operation, NULL, NULL, "Can not add two pointer types");
                         }
                     }
                     
-                    return result;
+                    return expr->type = result;
                     
                 } break; 
                 
@@ -383,7 +376,7 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
                     if (!is_boolean(result)) {
                         type_error(tu, expr->operation, NULL, NULL, "Logical operations can operation on boolean only");
                     }
-                    return result;
+                    return expr->type = result;
                     
                 } break;
                 
@@ -452,9 +445,6 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
             Vector *call_args = expr->call.args->args;
             Vector *func_args = function_type->symbols;
             
-            //
-            // check whether the argument count matches
-            //
             
             int call_args_count = call_args->index;
             int func_args_count = func_args->index; 
@@ -472,7 +462,6 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
             //
             
             Statement *block = get_curr_scope(tu);
-            
             int len = call_args_count;
             for (int i = 0; i < len; i++) { 
                 Symbol *symb = (Symbol *)func_args->data[i];
@@ -480,7 +469,7 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
                 Type *func_arg_type = symb->type; 
                 Type *call_arg_type = sema_expr(tu, call_expr);
                 
-                // update the block size to include the callee usage size
+                // NOTE(ziv): This is for later use in the backend 
                 if (i > 4) {
                     block->block.size += get_type_size(symb->type);
                 }
@@ -522,8 +511,7 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
         
         case STMT_RETURN:
         case STMT_EXPR: {
-            // NOTE(ziv): This is not an error the `expr` is just another name for the ret
-            Type *ty = sema_expr(tu, stmt->expr);
+            Type *ty = sema_expr(tu, stmt->expr); // expr is the same as ret in this case
             return ty ? true : false; 
         } break; 
         
@@ -544,7 +532,7 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
             for (int i = 0; i < args->index; i++) {
                 Symbol *symb = (Symbol *)args->data[i]; 
                 
-                Assert(symb->initializer == NULL); // I do not support default values
+                Assert(symb->initializer == NULL); // TODO(ziv): Make sure that this yeild error
                 if (symb->type->kind == TYPE_VOID) {
                     type_error(tu, symb->name, NULL, NULL, "Illigal use of type `void`");
                     return false;
@@ -553,12 +541,12 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
             
             Statement *block = stmt->func.sc;
             if (!block)  {
-                pop_scope(tu); // function scope
-                return true; // function prototype
+                pop_scope(tu); 
+                return true;
             } 
             
             bool success = sema_statement(tu, block);
-            pop_scope(tu); // function scope
+            pop_scope(tu); 
             
             return success; 
         } break; 
@@ -569,7 +557,7 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
             push_scope(tu, stmt); 
             
             int size = 0; // NOTE(ziv): this is used for clac the total size of the block variables
-            // for later use in the code generator
+            // for later use in the backend
             
             bool temp, success = true;
             Vector *statements = stmt->block.statements;
@@ -629,6 +617,12 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
                     return add_symbol(&temp_stmt->block, &stmt->var_decl);
                 }
                 
+                if (is_integer(lhs) && is_integer(rhs)) {
+                    stmt->var_decl.type = lhs;
+                    stmt->var_decl.initializer->type = lhs;
+                    return true;
+                }
+                
                 type_error(tu, stmt->var_decl.name, lhs, rhs, "Types do not match `%s` != `%s`");
                 return false;
             }
@@ -685,5 +679,5 @@ internal void sema_translation_unit(Translation_Unit *tu) {
         sema_statement(tu, stmt);
     }
     
-    // NOTE(ziv): I don't pop the global scope as I will use in later cases
+    // NOTE(ziv): I don't pop the global scope as I will use it in later cases
 }

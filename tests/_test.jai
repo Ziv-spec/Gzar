@@ -1,9 +1,22 @@
-
-    func :: (a: int, b: int, c: int, d: int, e: int, f: int) -> int {
-    return a + b + c + d + e + f;
-}
+// external function puts
+puts :: (str: string) -> int; 
 
 main :: () -> int {
+	i: int = 0; // there is also support for &, |, ^, +, -, *, /
     
-    return func(1, 2, 3, 4, 5, 6);
+	while (i < 5) {
+		puts("something");
+		i = i + 1; 
+	}
+    
+    {
+        something: int = 0; // recursive scopes
+    }
+    
+    var: bool = i > 5;
+    if var && true { // you can try to use the || operator insted 
+        return 0;
+    }
+    
+    return i;
 }

@@ -1,5 +1,9 @@
 
-internal Register scratch_alloc(); 
+internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt);
+internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr);
+int emit(const char *format, ...);
+internal char *scratch_string_alloc(Translation_Unit *tu, char *str); 
+internal Register scratch_alloc(int size); 
 internal void scratch_free(Register r);
 internal const char *scratch_name(Register r); 
 
@@ -11,28 +15,52 @@ static char *fastcall_regs[] = {
     "rcx", "rdx", "r8", "r9"
 }; 
 
-static char *scratch_names_tbl[] = { 
-    "rbx", "r10", "r11", "r12", "r13", "r14", "r15" 
+static char *scratch_names_tbl[][7] = { 
+    { "bl",  "r10b", "r11b", "r12b", "r13b", "r14b", "r15b" },
+    { "bx",  "r10w", "r11w", "r12w", "r13w", "r14w", "r15w" }, 
+    { "ebx", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d" }, 
+    { "rbx", "r10",  "r11",  "r12",  "r13",  "r14",  "r15"  } 
 };
 
 internal const char *scratch_name(Register r) {
-    return scratch_names_tbl[r];
+    
+    int size = 0; 
+    switch (r.size) {
+        case 1: size = 0; break; 
+        case 2: size = 1; break; 
+        case 4: size = 2; break; 
+        case 8: size = 3; break; 
+        
+        default: {
+            Assert(!"I should not be getting here");
+        }
+        
+    }
+    
+    return scratch_names_tbl[size][r.r];
 }
 
-static bool scratch_reg_tbl[ArrayLength(scratch_names_tbl)] = {0}; 
+static bool scratch_reg_tbl[7] = {0}; 
 
-internal Register scratch_alloc() {
-    Register r = 0; 
-    while (scratch_reg_tbl[r++]);
-    scratch_reg_tbl[r-1] = true; 
+internal Register scratch_alloc(int size) {
+    Register reg = {0};
     
-    Assert(r-1 < ArrayLength(scratch_names_tbl)); 
+    reg.size = size;
     
-    return r-1; 
+    while (scratch_reg_tbl[reg.r++]);
+    scratch_reg_tbl[reg.r-1] = true; 
+    
+    
+    //~ TODO(ziv): REDO THIS 
+    //Assert(reg.r-1 < ArrayLength(scratch_names_tbl)); 
+    
+    reg.r = reg.r-1;
+    
+    return reg; 
 }
 
 internal void scratch_free(Register reg) {
-    scratch_reg_tbl[reg] = 0;
+    scratch_reg_tbl[reg.r] = 0;
 }
 
 internal void scratch_free_all() {
@@ -132,8 +160,7 @@ internal const char *label_name(int l) {
 
 static FILE *output_file;
 
-int emit(const char *format, ...)
-{
+int emit(const char *format, ...) {
     va_list arg;
     int done;
     
@@ -148,10 +175,13 @@ int emit(const char *format, ...)
 internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
     if (!expr) return; 
     
+    //~
+	int size = get_type_size(expr->type); 
+    
     switch (expr->kind) {
         
         case EXPR_LITERAL: {
-            expr->reg = scratch_alloc(); 
+            expr->reg = scratch_alloc(size); 
             
             switch (expr->literal.kind) {
                 
@@ -166,6 +196,21 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                     emit("  mov %s, %lld\n", scratch_name(expr->reg), (long long)expr->literal.data); 
                 } break; 
                 
+                case TYPE_S8:
+                case TYPE_U8: {
+                    emit("  mov %s, %lld\n", scratch_name(expr->reg), (long long)expr->literal.data);
+                } break; 
+                
+                case TYPE_S16:
+                case TYPE_U16: {
+                    emit("  mov %s, %lld\n", scratch_name(expr->reg), (long long)expr->literal.data);
+                } break;
+                
+                case TYPE_S32: 
+                case TYPE_U32: {
+                    emit("  mov %s, %lld\n", scratch_name(expr->reg), (long long)expr->literal.data);
+                } break; 
+                
                 default: {
                     Assert(!"Not implemented yet");
                 } break;
@@ -177,6 +222,25 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
         case EXPR_BINARY: {
             expr_gen(tu, func_ty, expr->left); 
             expr_gen(tu, func_ty, expr->right); 
+            
+            int reg_size = get_type_size(expr->type); 
+            
+            if (reg_size != expr->left->reg.size) {
+                emit("  movsx %s, %s\n", 
+                     scratch_name((Register){ expr->left->reg.r, reg_size }), 
+                     scratch_name(expr->left->reg));
+                
+                expr->left->reg.size = reg_size; 
+            }
+            
+            if (reg_size != expr->right->reg.size) {
+                emit("  movsx %s, %s\n", 
+                     scratch_name((Register){ expr->right->reg.r, reg_size  }), 
+                     scratch_name(expr->right->reg));
+                
+                expr->right->reg.size = reg_size; 
+            }
+            
             
             Token operation = expr->operation;
             switch (operation.kind) {
@@ -195,7 +259,7 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 case TK_STAR:
                 {
                     
-                    expr->reg = scratch_alloc(); 
+                    expr->reg = scratch_alloc(size); 
                     emit("  push rdx\n");
                     emit("  xor rdx, rdx\n");
                     emit("  mov rax, %s\n", scratch_name(expr->left->reg));
@@ -214,7 +278,7 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 case TK_LESS_EQUAL: 
                 case TK_BANG_EQUAL: 
                 {
-                    expr->reg = scratch_alloc();
+                    expr->reg = scratch_alloc(size);
                     emit("  cmp %s, %s\n", scratch_name(expr->left->reg), scratch_name(expr->right->reg)); 
                     
                     char *op = NULL;
@@ -269,7 +333,7 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
         } break; 
         
         case EXPR_LVAR: {
-            expr->reg = scratch_alloc(); 
+            expr->reg = scratch_alloc(size); 
             
             emit("  mov %s, %s\n", scratch_name(expr->reg), 
                  symbol_gen(tu, expr->lvar.name)); 
@@ -328,7 +392,7 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
             for (int r = 0; r < ArrayLength(scratch_reg_tbl); r++) {
                 // saving voletile registers (aka scratch registers) that I might not want to be destroyed
                 if (scratch_reg_tbl[r])
-                    regs[reg_index++] = r;
+                    regs[reg_index++] = (Register){r, 8};
             }
             for (int i = reg_index-1; i >= 0; i--) {
                 emit("  push %s\n", scratch_name(regs[i])); 
@@ -349,11 +413,11 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
             // If we don't expect a return value, don't put code to expect it.
             if (!(func_type->subtype->kind == TYPE_VOID)) {
                 // move the result expected to be in `rax` into a scratch register
-                expr->reg = scratch_alloc();
+                expr->reg = scratch_alloc(8);
                 emit("  mov %s, rax\n", scratch_name(expr->reg)); 
             }
             else {
-                expr->reg = -1;  // aka do not expect a register from this node
+                expr->reg.r = -1;  // aka do not expect a register from this node
             }
             
         } break; 
@@ -495,33 +559,8 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
                 return;
             }
             
-            // NOTE(ziv): Some info about how the fastcall calling convention works: 
-            // arguments are passed on the registers rdx, rcx, r8, r9. Then it is pushed 
-            // onto the stack in backwards order than in the function so: 
-            // func(a, b, c, d, e, f);
-            // 
-            // a - rdx
-            // b - rcx, 
-            // c - r8
-            // d - r9
-            // e - [rsp+40]
-            // f - [rsp+48]
-            // 
-            // Now you might ask yourself why + 40/48? 
-            // Well, you have something called home space/shadow space
-            // this is some space allocated by the function for saving
-            // the registers you called with so you could use them for 
-            // other usages other than storing these variables. 
-            // The caller is supposed to allocate it. 
-            // Also, notice how f is higher in the stack which is 
-            // because it is pushed first, then e is pushed onto the
-            // stack and so on.
-            // 
-            // The callee might expect the stack to be 16 aligned for 
-            // wide register use xmm0/ymm0... that external functions
-            // might internally. 
-            
-            
+            // handling win64 calling convention: 
+            //
             // caller
             //X = round_up(min(32, callee_usage * 8) + local_variable_usage, 16) + 8 
             //       ^                                      ^                     ^
@@ -573,7 +612,7 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
         case STMT_EXPR: {
             expr_gen(tu, func->func.type, stmt->expr); 
             
-            if (stmt->expr->reg > 0) {
+            if (stmt->expr->reg.r > 0) {
                 scratch_free(stmt->expr->reg);
             }
             
@@ -583,7 +622,19 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
             
             // function return stmt
             expr_gen(tu, func->func.type, stmt->expr);
-            emit("  mov rax, %s\n", scratch_name(stmt->expr->reg));
+            
+            char *inst = is_signed_integer(stmt->expr) ? "movsx" : "movzx"; 
+            
+            if (stmt->expr->reg.size == 8) {
+                emit("  mov rax, %s\n", scratch_name(stmt->expr->reg));
+            }
+            else if (stmt->expr->reg.size == 4) {
+                emit("  mov eax, %s\n", scratch_name(stmt->expr->reg));
+            }
+            else {
+                emit("  %s rax, %s\n", inst, scratch_name(stmt->expr->reg));
+            }
+            
             emit("  jmp %s_epilogue\n", str8_to_cstring(func->func.name.str));
             scratch_free(stmt->expr->reg);
         } break; 

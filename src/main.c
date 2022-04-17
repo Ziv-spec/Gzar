@@ -63,10 +63,17 @@
       for a long time. It is not even supposed to be a show of skill just a project that I will do as a learning exercise. 
 */
 
+typedef struct Register Register; 
+struct Register {
+    int r; // register index itself
+    int size; // register size in bytes
+}; 
+
 #include "base.h"
 #include "lexer.h"
 #include "sema.h"
 #include "parser.h"
+
 
 #include "lexer.c"
 #include "sema.c"

@@ -2,6 +2,6 @@
 
 main :: () -> int {
 	result: bool; 
-	result = 2 > 1 == 1 < 2;
+	result = 2 > 2;
 	return result;
 }

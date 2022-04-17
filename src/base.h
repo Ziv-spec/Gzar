@@ -114,7 +114,7 @@ internal int get_character_number(char *start, String8 str) {
 }
 
 ////////////////////////////////
-/// Vector type 
+/// Vectors
 
 // this is going to be somewhat of a generic way of doing dynamic arrays in C 
 // NOTE(ziv): This is by no means a good way of doing this but it will work :)
@@ -151,7 +151,7 @@ internal void *vec_pop(Vector *vec) {
 }
 
 internal bool vec_equal(Vector *src1, Vector *src2) {
-    
+    Assert(src1 && src2); 
     if (src1->index != src2->index) 
         return false; 
     
@@ -166,9 +166,8 @@ internal bool vec_equal(Vector *src1, Vector *src2) {
     return true;
 }
 
-
 ////////////////////////////////
-/// Hashtable type 
+/// Hashtables
 
 typedef struct Bucket Bucket; 
 struct Bucket {
@@ -371,6 +370,29 @@ internal bool map_next(Map_Iterator *it) {
     return false;
 }
 
-typedef long long Register; 
+////////////////////////////////
+/// Memory
+
+/* 
+typedef struct M_Arena M_Arena; 
+struct M_Arena {
+    void *; 
+    
+}; 
+
+
+internal bool is_power_of_two(unsigned int *x) {
+    return (x & (x-1)) == 0;
+}
+
+internal align_forward(unsigned int *ptr, size_t align) {
+    unsigned int *p, a, modulo; 
+    
+    Assert(is_power_of_two(align));
+    
+    
+    
+}
+ */
 
 #endif //BASE_H

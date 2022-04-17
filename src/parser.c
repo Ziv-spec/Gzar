@@ -10,8 +10,8 @@ internal void parse_translation_unit(Translation_Unit *tu, Token_Stream *restric
     // TODO(ziv): put this in a function? 
     
     // init translation unit
-    tu->s = s; // update token stream
-    tu->decls = init_vec(); // init decls vector
+    tu->s = s; 
+    tu->decls = init_vec(); 
     tu->unnamed_strings = init_vec();
     tu->scopes = init_vec();
     tu->offset = 0; 
@@ -171,7 +171,6 @@ internal Expr *parse_primary(Translation_Unit* tu) {
     if (match(tu, TK_TRUE))  return init_literal((void *)1, TYPE_BOOL);
     if (match(tu, TK_NIL))   return init_literal(NULL, TYPE_UNKNOWN);
     
-    // number & string
     if (match(tu, TK_NUMBER, TK_STRING)) { 
         Token token = previous(tu);
         Expr *result = NULL; 
@@ -300,6 +299,7 @@ internal Expr *init_call(Expr *name, Expr *args) {
     result_expr->kind = EXPR_CALL;
     result_expr->call.name = name;
     result_expr->call.args = args;
+    result_expr->type = NULL;
     return result_expr;
 }
 
@@ -372,7 +372,7 @@ internal Symbol *local_exist(Translation_Unit *tu, Token var_name) {
         
     }
     
-    // return the type of the symbol if it exists
+    // last search in the global scope
     return symbol_exist(&((Statement *)tu->scopes->data[0])->block, var_name);
 }
 
@@ -394,7 +394,6 @@ internal Statement *parse_scope_stmt(Translation_Unit* tu) {
         vec_push(block->block.statements, stmt); 
     }
     
-    // file has unexpectedly ended 
     parse_error(tu, peek(tu), "Unexpected end of file");
 #if DEBUG
     return NULL;
@@ -408,7 +407,7 @@ internal Statement *parse_decloration(Translation_Unit* tu) {
         if (match(tu, TK_COLON))        return parse_variable_decloration(tu, name); 
         if (match(tu, TK_DOUBLE_COLON)) return parse_function_decloration(tu, name); 
         
-        // revert back to the identifier because there is no other match
+        // revert back to the identifier because match ate the identifer
         back_one(tu); 
     }
     
@@ -416,7 +415,7 @@ internal Statement *parse_decloration(Translation_Unit* tu) {
 }
 
 internal Statement *parse_variable_decloration(Translation_Unit* tu, Token name) {
-    // parse the variable 
+    
     Type *type = parse_type(tu); 
     
     Expr *expr = NULL;

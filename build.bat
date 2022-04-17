@@ -19,7 +19,7 @@ if "%VSCMD_ARG_TGT_ARCH%" neq "x64" (
 )
 
 if "%1" equ "debug" (
-  set CL=/MTd /DDEBUG=1 /Od /Zi /Fdgzar.pdb /fsanitize=address
+  set CL=/MTd /FC /DDEBUG=1 /Od /Zi /Fdgzar.pdb /fsanitize=address
   set LINK=/DEBUG
 ) else (
   set CL=/O2

@@ -191,7 +191,11 @@ internal bool lex_file(Token_Stream *s) {
             s->capacity *= 2; 
             s->s = (Token *)realloc(s->s, sizeof(Token) * s->capacity); 
             
-            Assert(s->s != NULL); // I assume that I won't need this
+            if (s->s == NULL) {
+                fprintf(stderr, "Error: failed to allocate memory\n");
+                return false; 
+            }
+            
         }
         
         s->s[current_token++] = t; 
