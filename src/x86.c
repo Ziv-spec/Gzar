@@ -396,16 +396,22 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 if (scratch_reg_tbl[r])
                     regs[reg_index++] = (Register){r, 8};
             }
-            for (int i = reg_index-1; i >= 0; i--) {
-                emit("  push %s\n", scratch_name(regs[i])); 
-            }
+            
+            
+            /*             
+                        for (int i = reg_index-1; i >= 0; i--) {
+                            emit("  push %s\n", scratch_name(regs[i])); 
+                        }
+                         */
             
             emit("  call %s\n", str8_to_cstring(expr->call.name->lvar.name.str));
             
-            // restore voletile registers
-            for (int i = 0; i < reg_index; i++) {
-                emit("  pop %s\n", scratch_name(regs[i])); 
-            }
+            /*             
+                        // restore voletile registers
+                        for (int i = 0; i < reg_index; i++) {
+                            emit("  pop %s\n", scratch_name(regs[i])); 
+                        }
+                         */
             
             
             Symbol *func = local_exist(tu, expr->call.name->lvar.name); 
@@ -582,9 +588,17 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
             // prologe
             { 
                 emit("%s%s\n", func_name, is_main ? ":" : " PROC"); 
-                if (!is_main) emit("  push rsp\n");
+                if (!is_main) emit("  push rbp\n");
                 emit("  mov rbp, rsp\n");
-                if (local_variable_and_callee_usage > 0 || is_main) emit("  sub rsp, %d\n", stack_size);  
+                
+                emit("  push rbx\n"); 
+                emit("  push r10\n"); 
+                emit("  push r11\n"); 
+                emit("  push r12\n"); 
+                emit("  push r13\n"); 
+                emit("  push r14\n"); 
+                emit("  push r15\n"); 
+                emit("  sub rsp, %d\n", stack_size);  
             }
             
             // generate the saving of the __fastcall registers
@@ -604,7 +618,15 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
             // epilogue
             {
                 emit("%s_epilogue:\n", func_name);
-                if (local_variable_and_callee_usage > 0 || is_main)  emit("  add rsp, %d\n", stack_size); 
+                emit("  add rsp, %d\n", stack_size); 
+                emit("  pop r15\n"); 
+                emit("  pop r14\n"); 
+                emit("  pop r13\n"); 
+                emit("  pop r12\n"); 
+                emit("  pop r11\n"); 
+                emit("  pop r10\n"); 
+                emit("  pop rbx\n"); 
+                
                 if (!is_main)        emit("  pop rbp\n");
                 emit("  ret\n");
                 if (!is_main)        emit("%s ENDP\n", func_name); 

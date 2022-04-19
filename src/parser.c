@@ -49,11 +49,11 @@ internal Expr *parse_assignment(Translation_Unit* tu) {
 }
 
 internal Expr *parse_logical(Translation_Unit* tu) {
-    Expr *expr = parse_bitwise(tu); 
+    Expr *expr = parse_equality(tu); 
     
     while (match(tu, TK_DOUBLE_AND, TK_DOUBLE_OR)) {
         Token operator = previous(tu); 
-        Expr *right = parse_bitwise(tu); 
+        Expr *right = parse_equality(tu); 
         expr = init_binary(expr, operator, right);
     }
     
