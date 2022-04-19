@@ -48,7 +48,6 @@ internal Expr *parse_assignment(Translation_Unit* tu) {
     return expr;
 }
 
-
 internal Expr *parse_logical(Translation_Unit* tu) {
     Expr *expr = parse_bitwise(tu); 
     
@@ -61,22 +60,22 @@ internal Expr *parse_logical(Translation_Unit* tu) {
     return expr;
 }
 
-internal Expr *parse_bitwise(Translation_Unit* tu) {
-    Expr *expr = parse_equality(tu); 
+internal Expr *parse_equality(Translation_Unit* tu) {
+    Expr *expr = parse_bitwise(tu); 
     
-    while (match(tu, TK_OR, TK_XOR, TK_AND)) {
+    while (match(tu, TK_BANG_EQUAL, TK_EQUAL_EQUAL)) {
         Token operator = previous(tu); 
-        Expr *right = parse_equality(tu); 
+        Expr *right = parse_bitwise(tu); 
         expr = init_binary(expr, operator, right);
     }
     
     return expr;
 }
 
-internal Expr *parse_equality(Translation_Unit* tu) {
+internal Expr *parse_bitwise(Translation_Unit* tu) {
     Expr *expr = parse_comparison(tu); 
     
-    while (match(tu, TK_BANG_EQUAL, TK_EQUAL_EQUAL)) {
+    while (match(tu, TK_OR, TK_XOR, TK_AND)) {
         Token operator = previous(tu); 
         Expr *right = parse_comparison(tu); 
         expr = init_binary(expr, operator, right);
@@ -124,11 +123,21 @@ internal Expr *parse_factor(Translation_Unit* tu) {
 
 internal Expr *parse_unary(Translation_Unit* tu) {
     
+    if (match(tu, TK_CAST)) {
+        Token operation = previous(tu);
+        consume(tu, TK_LPARAN, "Expected '(' at beginning of cast"); 
+        Type *ty = parse_type(tu); 
+        consume(tu, TK_RPARAN, "Expected ')' at end of cast"); 
+        Expr *right = parse_unary(tu); 
+        
+        return init_unary(operation, ty, right); 
+    }
+    
     if (match(tu, TK_BANG, TK_MINUS)) {
         Token operation = previous(tu);
         Expr *right = parse_unary(tu);
         
-        return init_unary(operation, right);
+        return init_unary(operation, NULL, right);
     }
     
     return parse_call(tu);
@@ -244,12 +253,13 @@ internal Expr *init_binary(Expr *left, Token operation, Expr *right) {
     return result_expr;
 }
 
-internal Expr *init_unary(Token operation, Expr *right) {
+internal Expr *init_unary(Token operation, Type *type, Expr *right) {
     Expr *result_expr = (Expr *)malloc(sizeof(Expr));
     result_expr->kind = EXPR_UNARY; 
     result_expr->type = NULL;
-    result_expr->unary.operation = operation; 
+    result_expr->unary.operation = operation;
     result_expr->unary.right = right; 
+    result_expr->unary.type = type; 
     return result_expr;
 }
 
@@ -264,8 +274,8 @@ internal Expr *init_literal(void *data, Type_Kind kind) {
 
 internal Expr *init_grouping(Expr *expr) {
     Expr *result_expr = (Expr *)malloc(sizeof(Expr));
-    result_expr->type = NULL;
     result_expr->kind = EXPR_GROUPING;  
+    result_expr->type = NULL;
     result_expr->grouping.expr = expr; 
     return result_expr;
 }

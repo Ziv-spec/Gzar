@@ -1,0 +1,16 @@
+
+
+main :: () -> int {
+
+	result: int = 0;
+	a: s32 = 10;	
+	b: u16 = 9;	
+	c: u32 = a * cast(s32)b;
+	
+	expr: bool = 98 > 2;
+	if expr { 
+		result = result+1;
+	} 
+
+	return cast(int)result + cast(int)c;
+}

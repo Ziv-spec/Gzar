@@ -1,13 +1,18 @@
 
+puts :: (val: string) -> void; 
+
 main :: () -> int {
-
-
 	
-
 	something: s8 = 1;
 	something_else: u32 = 3;
+	
+	result: s64 = something + cast(s32)something_else;
+	
 
-	result: s32 = something + something_else;
+	idk: *s8 = nil; 
+	s: *int = cast(*int)idk;
+ 
+	puts("something");
 
 	return result;
 }

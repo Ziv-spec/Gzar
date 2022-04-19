@@ -20,7 +20,6 @@
 // to be the most popular and well understood so I use it as the structure to represent 
 // my language in. 
 
-
 typedef enum Expr_Kind Expr_Kind; 
 enum Expr_Kind {
     EXPR_GROUPING, 
@@ -51,6 +50,7 @@ struct Expr {
         
         struct Unary {
             Token operation; 
+            Type *type;
             Expr *right; 
         } unary;
         
@@ -245,7 +245,7 @@ internal Symbol    *init_symbol(Token name, Type *type, Expr *initializer);
 
 /* initializers for the different types of expressions */ 
 internal Expr *init_binary(Expr *left, Token operation, Expr *right); 
-internal Expr *init_unary(Token operation, Expr *right); 
+internal Expr *init_unary(Token operation, Type *type, Expr *right); 
 internal Expr *init_literal(void *data, Type_Kind kind); 
 internal Expr *init_grouping(Expr *expr); 
 internal Expr *init_assignment(Expr *lvalue, Expr *rvalue);

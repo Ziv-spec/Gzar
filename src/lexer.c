@@ -21,6 +21,7 @@ internal Token lex_identifier(char *str) {
         "u8",
         "void",
         "while",
+        "cast"
     };
     
     // NOTE(ziv): this is a conversion from index to token table. 
@@ -46,7 +47,13 @@ internal Token lex_identifier(char *str) {
         [17] = TK_U8_TYPE, 
         [18] = TK_VOID_TYPE, 
         [19] = TK_WHILE, 
+        [20] = TK_CAST, 
     }; 
+    
+    
+    int something = ArrayLength(keywords) ;
+    something;
+    
     
     Token t = {0}; 
     int i = 0;

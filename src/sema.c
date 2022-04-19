@@ -311,15 +311,11 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
             Type *lhs = sema_expr(tu, expr->left);
             if (!lhs) return NULL; 
             
-            // TODO(ziv): REWORK THIS because this currently does not work 
-            
             result = implicit_cast(rhs, lhs);
             if (!result) {
                 if (!type_equal(rhs, lhs)) {
                     if (is_integer(rhs) && is_integer(lhs)) {
-                        fprintf(stderr, "Unable to implicitly cast between unsigned and signed integer types");
-                        __debugbreak();
-                        exit(-1);
+                        type_error(tu, expr->operation, lhs, rhs, "Unable to implicitly cast between unsigned and signed integer types %s != %s");
                     }
                     else
                         type_error(tu, expr->operation, lhs, rhs, "Unexpected incompatible types `%s` != `%s`");
@@ -413,20 +409,38 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
             switch (op) {
                 
                 case TK_MINUS: {
-                    if (is_integer(rhs) || is_unsigned_integer(rhs)) return expr->type = rhs;
+                    if (is_integer(rhs)) return expr->type = rhs;
                     type_error(tu, expr->unary.operation, NULL, NULL, "Incompatible type for '-' operation");
                 } break;
-                
-                case TK_STAR: {
-                    if (rhs->kind == TYPE_POINTER) return rhs; 
-                    type_error(tu, expr->unary.operation, rhs, NULL,  "Incompatible type, must be pointer for dereference operation");
-                    
-                } break; 
                 
                 case TK_BANG: {
                     if (rhs->kind == TYPE_BOOL) return rhs; 
                     type_error(tu, expr->unary.operation, rhs, NULL,  "Incompatible type, must be boolean for operation");
                 } break; 
+                
+                case TK_CAST: {
+                    
+                    // TODO(ziv): add support for structs and their complexities when it comes 
+                    // to this casting stuff which I don't know anything about :) 
+                    if (is_integer(rhs) || is_pointer(rhs) || is_boolean(rhs)) return expr->type = expr->unary.type; 
+                    type_error(tu, expr->unary.operation, rhs, expr->unary.type,  "Unable to cast between %s and %s");
+                } break; 
+                
+                default: {
+                    Assert(!"Not implemented");
+                }
+                
+                
+                
+                /* 
+                                case TK_STAR: {
+                                    if (rhs->kind == TYPE_POINTER) return rhs; 
+                                    type_error(tu, expr->unary.operation, rhs, NULL,  "Incompatible type, must be pointer for dereference operation");
+                                    
+                                } break; 
+                                 */
+                
+                
             } 
             
         } break;
@@ -488,7 +502,7 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
         
         
         case EXPR_GROUPING: {
-            return sema_expr(tu, expr->grouping.expr); 
+            return expr->type = sema_expr(tu, expr->grouping.expr); 
         } break;
         
         
@@ -532,7 +546,10 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
             for (int i = 0; i < args->index; i++) {
                 Symbol *symb = (Symbol *)args->data[i]; 
                 
-                Assert(symb->initializer == NULL); // TODO(ziv): Make sure that this yeild error
+                if (symb->initializer != NULL) {
+                    type_error(tu, symb->name, NULL, NULL, "Syntax error: function arguments can not have initializers");
+                }
+                
                 if (symb->type->kind == TYPE_VOID) {
                     type_error(tu, symb->name, NULL, NULL, "Illigal use of type `void`");
                     return false;
@@ -601,7 +618,13 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
             }
             
             if (rhs) {
+                
                 if (type_equal(lhs, rhs) || (rhs->kind == TYPE_UNKNOWN && lhs->kind == TYPE_POINTER)) {
+                    
+                    if (stmt->var_decl.initializer->kind == EXPR_LITERAL && stmt->var_decl.initializer->literal.kind == TYPE_UNKNOWN && lhs->kind == TYPE_POINTER) {
+                        stmt->var_decl.initializer->literal.kind = TYPE_POINTER;
+                    }
+                    
                     stmt->var_decl.initializer->type = lhs; 
                     stmt->var_decl.type = lhs;
                     
@@ -623,7 +646,7 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
                     return true;
                 }
                 
-                type_error(tu, stmt->var_decl.name, lhs, rhs, "Types do not match `%s` != `%s`");
+                type_error(tu, stmt->var_decl.name, lhs, rhs, "Error: type conflict `%s` != `%s`");
                 return false;
             }
             

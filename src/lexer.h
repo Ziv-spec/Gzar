@@ -51,6 +51,7 @@ enum Token_Kind {
     TK_TRUE,    // true
     TK_NIL,     // nil
     TK_RETURN,  // return
+    TK_CAST,    // cast 
     
     TK_TYPE_BEGIN, 
     TK_S8_TYPE, 

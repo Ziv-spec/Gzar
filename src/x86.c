@@ -15,12 +15,19 @@ static char *fastcall_regs[] = {
     "rcx", "rdx", "r8", "r9"
 }; 
 
-static char *scratch_names_tbl[][7] = { 
+static char *scratch_names_tbl[][7] = {
     { "bl",  "r10b", "r11b", "r12b", "r13b", "r14b", "r15b" },
     { "bx",  "r10w", "r11w", "r12w", "r13w", "r14w", "r15w" }, 
     { "ebx", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d" }, 
     { "rbx", "r10",  "r11",  "r12",  "r13",  "r14",  "r15"  } 
 };
+
+static char *rax_reg_names[] = {
+    [1] = "al",
+    [2] = "ax", 
+    [4] = "eax", 
+    [8] = "rax"
+}; 
 
 internal const char *scratch_name(Register r) {
     
@@ -43,18 +50,11 @@ internal const char *scratch_name(Register r) {
 static bool scratch_reg_tbl[7] = {0}; 
 
 internal Register scratch_alloc(int size) {
-    Register reg = {0};
-    
-    reg.size = size;
+    Register reg = { .size = size };
     
     while (scratch_reg_tbl[reg.r++]);
-    scratch_reg_tbl[reg.r-1] = true; 
-    
-    
-    //~ TODO(ziv): REDO THIS 
-    //Assert(reg.r-1 < ArrayLength(scratch_names_tbl)); 
-    
-    reg.r = reg.r-1;
+    scratch_reg_tbl[--reg.r] = true; 
+    Assert(reg.r < ArrayLength(scratch_names_tbl[0]) && reg.size <= 8); 
     
     return reg; 
 }
@@ -122,7 +122,6 @@ internal char *symbol_gen(Translation_Unit *tu, Token t) {
                     
                 }
                 
-                // @nocheckin
                 //local = [rbp - Y], Y = (local_variable_usage -= size, return local_variable_usage) 
                 snprintf(str, MAX(symb->name.str.size, MAX_LEN), "[rsp+%d]", (symbol_offset + block->offset) + 32);
                 return str;
@@ -172,10 +171,32 @@ int emit(const char *format, ...) {
 }
 
 
+internal Register cast_register_gen(Register reg_from, int size_to, int sign) {
+    
+    int size_from = reg_from.size;
+    if (size_to != size_from) {
+        Register reg_to = (Register){ reg_from.r, size_to }; 
+        
+        if ((size_to == 8 || size_from == 8) && 
+            (size_to == 4 || size_from == 4)) {
+            emit("  mov %s, %s\n", scratch_name(reg_from), scratch_name(reg_from));
+        }
+        else if (size_to == 8 && size_from == 4) {
+            // do nothing
+        }
+        else if (size_to > size_from){
+            emit("  %s  %s, %s\n", sign ? "movsx" : "movzx", scratch_name(reg_to), scratch_name(reg_from));
+        }
+        
+        return reg_to;
+    }
+    
+    return reg_from;
+}
+
 internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
     if (!expr) return; 
     
-    //~
 	int size = get_type_size(expr->type); 
     
     switch (expr->kind) {
@@ -190,26 +211,16 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                     emit("  mov %s, %s\n", scratch_name(expr->reg), str);
                 } break; 
                 
-                // TODO(ziv): add more literal types 
-                case TYPE_BOOL:
-                case TYPE_S64: { 
-                    emit("  mov %s, %lld\n", scratch_name(expr->reg), (long long)expr->literal.data); 
-                } break; 
-                
                 case TYPE_S8:
-                case TYPE_U8: {
-                    emit("  mov %s, %lld\n", scratch_name(expr->reg), (long long)expr->literal.data);
-                } break; 
-                
+                case TYPE_U8:
                 case TYPE_S16:
-                case TYPE_U16: {
-                    emit("  mov %s, %lld\n", scratch_name(expr->reg), (long long)expr->literal.data);
+                case TYPE_U16:
+                case TYPE_BOOL:
+                case TYPE_U64:
+                case TYPE_S64:
+                case TYPE_POINTER: {
+                    emit("  mov %s, %lld\n", scratch_name(expr->reg), (long long)expr->literal.data); 
                 } break;
-                
-                case TYPE_S32: 
-                case TYPE_U32: {
-                    emit("  mov %s, %lld\n", scratch_name(expr->reg), (long long)expr->literal.data);
-                } break; 
                 
                 default: {
                     Assert(!"Not implemented yet");
@@ -223,24 +234,17 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
             expr_gen(tu, func_ty, expr->left); 
             expr_gen(tu, func_ty, expr->right); 
             
-            int reg_size = get_type_size(expr->type); 
-            
+            // implicit cast          
+            int reg_size = get_type_size(expr->type);  // TODO(ziv): check whether I need this 
             if (reg_size != expr->left->reg.size) {
-                emit("  movsx %s, %s\n", 
-                     scratch_name((Register){ expr->left->reg.r, reg_size }), 
-                     scratch_name(expr->left->reg));
-                
-                expr->left->reg.size = reg_size; 
+                expr->left->reg = cast_register_gen(expr->left->reg, reg_size, is_signed_integer(expr->left->type));
             }
-            
             if (reg_size != expr->right->reg.size) {
-                emit("  movsx %s, %s\n", 
-                     scratch_name((Register){ expr->right->reg.r, reg_size  }), 
-                     scratch_name(expr->right->reg));
-                
-                expr->right->reg.size = reg_size; 
+                expr->right->reg = cast_register_gen(expr->right->reg, reg_size, is_signed_integer(expr->right->type)); 
             }
             
+            const char *left_reg_name = scratch_name(expr->left->reg);
+            const char *right_reg_name = scratch_name(expr->right->reg);
             
             Token operation = expr->operation;
             switch (operation.kind) {
@@ -249,7 +253,7 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 case TK_PLUS: 
                 {
                     emit("  %s %s, %s\n", operation.kind == TK_PLUS ? "add" : "sub",
-                         scratch_name(expr->left->reg), scratch_name(expr->right->reg)); 
+                         left_reg_name, right_reg_name); 
                     
                     expr->reg = expr->left->reg;
                     scratch_free(expr->right->reg);
@@ -258,13 +262,15 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 case TK_SLASH: 
                 case TK_STAR:
                 {
-                    
                     expr->reg = scratch_alloc(size); 
                     emit("  push rdx\n");
                     emit("  xor rdx, rdx\n");
-                    emit("  mov rax, %s\n", scratch_name(expr->left->reg));
-                    emit("  %s %s\n", (operation.kind == TK_STAR) ? "imul" : "idiv", scratch_name(expr->right->reg)); 
-                    emit("  mov %s, rax\n", scratch_name(expr->reg)); 
+                    emit("  mov %s, %s\n", rax_reg_names[expr->left->reg.size], left_reg_name);
+                    emit("  %s%s %s\n", 
+                         is_signed_integer(expr->left->type) ? "i" : "", 
+                         (operation.kind == TK_STAR) ? "mul" : "div", 
+                         right_reg_name);
+                    emit("  mov %s, %s\n", scratch_name(expr->reg), rax_reg_names[expr->left->reg.size]); 
                     emit("  pop rdx\n");
                     
                     scratch_free(expr->right->reg);
@@ -279,17 +285,17 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 case TK_BANG_EQUAL: 
                 {
                     expr->reg = scratch_alloc(size);
-                    emit("  cmp %s, %s\n", scratch_name(expr->left->reg), scratch_name(expr->right->reg)); 
+                    emit("  cmp %s, %s\n", left_reg_name, right_reg_name); 
                     
                     char *op = NULL;
-                    if (operation.kind == TK_LESS)             op = "setl";
-                    else if (operation.kind == TK_GREATER)     op = "setg";
-                    else if (operation.kind == TK_BANG_EQUAL)  op = "setne";
-                    else if (operation.kind == TK_EQUAL_EQUAL) op = "sete";
-                    else if (operation.kind == TK_LESS_EQUAL)  op = "setle";
-                    else if (operation.kind == TK_GREATER_EQUAL) op = "setge";
-                    else {
-                        Assert(!"Should not be getting here");
+                    switch (operation.kind) {
+                        case TK_LESS: op = "setl"; break;
+                        case TK_GREATER: op = "setg"; break;
+                        case TK_BANG_EQUAL:    op = "setne"; break;
+                        case TK_EQUAL_EQUAL:   op = "sete"; break;
+                        case TK_LESS_EQUAL:    op = "setle"; break;
+                        case TK_GREATER_EQUAL: op = "setge"; break;
+                        default: Assert(!"Should not be getting here"); break;
                     }
                     
                     emit("  %s al\n", op);
@@ -306,7 +312,7 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 case TK_OR: 
                 {
                     emit("  %s %s, %s\n", operation.kind == TK_AND ? "and" : operation.kind == TK_OR ? "or" : "xor" ,
-                         scratch_name(expr->left->reg), scratch_name(expr->right->reg)); 
+                         left_reg_name, right_reg_name); 
                     
                     expr->reg = expr->left->reg;
                     scratch_free(expr->right->reg);
@@ -317,7 +323,7 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 case TK_DOUBLE_OR: 
                 {
                     emit("  %s %s, %s\n", operation.kind == TK_DOUBLE_AND ? "and" : "or",
-                         scratch_name(expr->left->reg), scratch_name(expr->right->reg)); 
+                         left_reg_name, right_reg_name); 
                     
                     expr->reg = expr->left->reg;
                     scratch_free(expr->right->reg);
@@ -328,13 +334,10 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 }
                 
             };
-            
-            
         } break; 
         
         case EXPR_LVAR: {
             expr->reg = scratch_alloc(size); 
-            
             emit("  mov %s, %s\n", scratch_name(expr->reg), 
                  symbol_gen(tu, expr->lvar.name)); 
             
@@ -344,7 +347,6 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
             expr_gen(tu, func_ty, expr->assign.rvalue);
             emit("  mov %s, %s\n", symbol_gen(tu, expr->assign.lvar->lvar.name), scratch_name(expr->assign.rvalue->reg)); 
             expr->reg = expr->assign.rvalue->reg;
-            
         } break; 
         
         case EXPR_CALL: {
@@ -441,8 +443,13 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 case TK_BANG: {
                     emit("  not %s\n", scratch_name(expr->unary.right->reg));
                     emit("  and %s, 1\n", scratch_name(expr->unary.right->reg)); 
-                    
                     expr->reg = expr->unary.right->reg;
+                } break; 
+                
+                case TK_CAST: {
+                    // Explicit cast
+                    expr->reg = cast_register_gen(expr->unary.right->reg, size, is_signed_integer(expr->unary.right));
+                    
                 } break; 
                 
                 default: {
@@ -456,7 +463,6 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
     }
     
 }
-
 
 
 static bool is_main = true; 
@@ -563,7 +569,7 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
             //
             // caller
             //X = round_up(min(32, callee_usage * 8) + local_variable_usage, 16) + 8 
-            //       ^                                      ^                     ^
+            //       ^                                      ^                      ^
             //    stack alignment                      not much to say,   remembmer 'push rsp'
             
             push_scope(tu, stmt); 

@@ -74,7 +74,6 @@ struct Register {
 #include "sema.h"
 #include "parser.h"
 
-
 #include "lexer.c"
 #include "sema.c"
 #include "parser.c"
@@ -96,7 +95,7 @@ int main(int argc, char *argv[]) {
     // open the first file and read it's contents
     // 
     
-    FILE *file = fopen(filename, "rb"); // I wnat to read text but if I do then the fread would not read the correct amount of bytes as it should. To fix this I am using "rb" instead of "rt" 
+    FILE *file = fopen(filename, "rb");
     if (!file) {
         fprintf(stderr, "Error: failed to open file '%s'\n", filename);
     }
@@ -116,6 +115,8 @@ int main(int argc, char *argv[]) {
     // it instead lets the operating system free all of the resoruces of the process 
     // this is because I expect the compiler to be running for a short time and do only 
     // what it needs to do. 
+    // This shall change in the future once I implement my unified-memory-pool 
+    // implementation of a custom allocator. Which will allocate in pools of memory
     
     //
     // Setup for compilation

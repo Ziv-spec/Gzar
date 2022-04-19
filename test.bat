@@ -48,8 +48,8 @@ call:assert test16.gzr 4
 REM ======================================================
 
 
-
 popd
+
 goto:eof
 
 :assert
