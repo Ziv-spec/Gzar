@@ -232,6 +232,10 @@ internal Type *implicit_cast(Type *t1, Type *t2) {
         return (t1->kind > t2->kind) ? t1 : t2;
     }
     
+    if (is_boolean(t1) && is_boolean(t2)) {
+        return t1;
+    }
+    
     if ((t1->kind == TYPE_POINTER && t2->kind == TYPE_UNKNOWN) || 
         (t2->kind == TYPE_POINTER && t1->kind == TYPE_UNKNOWN)) {
         return t1->kind == TYPE_POINTER ? t1 : t2;
