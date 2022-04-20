@@ -120,6 +120,7 @@ internal bool lex_file(Token_Stream *s) {
             case '/': { t.kind = TK_SLASH;  } break; 
             case ',': { t.kind = TK_COMMA;  } break; 
             case '^': { t.kind = TK_XOR;  } break; 
+            case '%': { t.kind = TK_MODOLU; } break; 
             
             case '-': { t.kind = txt[0] == '>' ? TK_RETURN_TYPE : TK_MINUS; } break; 
             case ':': { t.kind = txt[0] == ':' ? TK_DOUBLE_COLON: TK_COLON; } break;

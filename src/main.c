@@ -153,6 +153,7 @@ int main(int argc, char *argv[]) {
     if (!success) {
         return 0;
     }
+    
     //begin = __rdtsc();
     x86gen_translation_unit(&tu, "test.asm"); 
     //printf("codegen: \t%lld\n", __rdtsc()-begin);

@@ -25,7 +25,7 @@ enum Token_Kind {
     TK_AND        = '&', 
     TK_OR         = '|', 
     TK_XOR        = '^', 
-    
+    TK_MODOLU     = '%', 
     TK_ASCII = 256,
     
     TK_GREATER_EQUAL = '>' + 320, // >=

@@ -260,18 +260,28 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                     scratch_free(expr->right->reg);
                 } break;
                 
+                case TK_MODOLU:
                 case TK_SLASH: 
                 case TK_STAR:
                 {
+                    static char *remainder_regs[] = {
+                        [1] = "ah",
+                        [2] = "dx",
+                        [4] = "edx",
+                        [8] = "rdx"
+                    }; 
+                    
                     expr->reg = scratch_alloc(size); 
                     emit("  push rdx\n");
                     emit("  xor rdx, rdx\n");
                     emit("  mov %s, %s\n", rax_reg_names[expr->left->reg.size], left_reg_name);
                     emit("  %s%s %s\n", 
                          is_signed_integer(expr->left->type) ? "i" : "", 
-                         (operation.kind == TK_STAR) ? "mul" : "div", 
+                         (operation.kind == TK_STAR) ? "mul" : "div",
                          right_reg_name);
-                    emit("  mov %s, %s\n", scratch_name(expr->reg), rax_reg_names[expr->left->reg.size]); 
+                    emit("  mov %s, %s\n", 
+                         scratch_name(expr->reg), 
+                         (operation.kind == TK_MODOLU) ? remainder_regs[expr->left->reg.size] : rax_reg_names[expr->left->reg.size]); 
                     emit("  pop rdx\n");
                     
                     scratch_free(expr->right->reg);
@@ -370,7 +380,7 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
             for (int i = 0; i < args->index; i++) {
                 Expr *e = (Expr *)args->data[i];
                 expr_gen(tu, func_ty, e); 
-                regs[reg_index++] = e->reg; // saving scratch registers holding the values to the function call
+                regs[reg_index++] = (Register){ e->reg.r, 8 }; // saving scratch registers holding the values to the function call
             }
             
             // 
@@ -390,29 +400,7 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
                 scratch_free(regs[i]);
             }
             
-            // NOTE(ziv): I am reusing the 'regs' buffer here for a different purpose
-            reg_index = 0;
-            for (int r = 0; r < ArrayLength(scratch_reg_tbl); r++) {
-                // saving voletile registers (aka scratch registers) that I might not want to be destroyed
-                if (scratch_reg_tbl[r])
-                    regs[reg_index++] = (Register){r, 8};
-            }
-            
-            
-            /*             
-                        for (int i = reg_index-1; i >= 0; i--) {
-                            emit("  push %s\n", scratch_name(regs[i])); 
-                        }
-                         */
-            
             emit("  call %s\n", str8_to_cstring(expr->call.name->lvar.name.str));
-            
-            /*             
-                        // restore voletile registers
-                        for (int i = 0; i < reg_index; i++) {
-                            emit("  pop %s\n", scratch_name(regs[i])); 
-                        }
-                         */
             
             
             Symbol *func = local_exist(tu, expr->call.name->lvar.name); 
@@ -754,6 +742,7 @@ internal void x86gen_translation_unit(Translation_Unit *tu, const char *filename
             switch (symb->type->kind) {
                 
                 case TYPE_STRING: {
+                    // TODO(ziv): ouput the bytes representing the string not a string idk
                     emit("%s db \"%s\", 0\n", 
                          str8_to_cstring(symb->name.str),
                          (char *)symb->initializer->literal.data);
@@ -795,7 +784,6 @@ internal void x86gen_translation_unit(Translation_Unit *tu, const char *filename
     
     emit("END\n");
     
-    
     // 
     // open the first file and read it's contents
     // 
@@ -808,7 +796,4 @@ internal void x86gen_translation_unit(Translation_Unit *tu, const char *filename
     fprintf(file, _buff);
     
     fclose(file);
-    
-    
-    
 }

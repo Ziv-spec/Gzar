@@ -1,0 +1,39 @@
+
+// I guess that this is the standard library? 
+
+puts :: (val: string) -> void; 
+putchar :: (val: u8) -> void; 
+
+main :: () -> int {
+	// here I will test the shit I implement and work out and shit
+	
+	//print_num_backwards(102);
+
+	print_digit(9); 
+	print_char(10); // printing the new line \n character
+	print_digit(9);
+	print_char(32); // printint space 
+	print_digit(5);
+
+	return 0;
+}
+
+print_char :: (ch: int) -> void { 
+	putchar(cast(u8)ch);
+}
+
+print_digit :: (digit: int) -> void {
+	putchar(cast(u8)(digit + 48)); 
+}
+
+// probably to have it be backwards I can use an array 
+// otherwise I don't think that I can do much here
+print_num_backwards :: (num: int) -> void {
+	zero: u8 = 48; // character zero
+	remainder: int = 0; 
+	while num > 0 {
+		remainder = num % 10;
+		putchar(zero + cast(u8)remainder);
+		num = num / 10; 
+	}
+}

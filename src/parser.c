@@ -111,7 +111,7 @@ internal Expr *parse_term(Translation_Unit* tu) {
 internal Expr *parse_factor(Translation_Unit* tu) {
     Expr *expr = parse_unary(tu); 
     
-    while (match(tu, TK_SLASH, TK_STAR)) {
+    while (match(tu, TK_SLASH, TK_STAR, TK_MODOLU)) {
         Token operation = previous(tu); 
         Expr *right = parse_factor(tu); 
         
@@ -749,7 +749,6 @@ internal void report(Translation_Unit *tu, int line, int ch, char *msg) {
     fprintf(stderr, err);
     fprintf(stderr, "\n");
     
-    
     // rewind to the line 
     char *start = tu->s->start; 
     for (int l = 0; *start && line-1 > l; start++) {
@@ -767,15 +766,6 @@ internal void report(Translation_Unit *tu, int line, int ch, char *msg) {
     fprintf(stderr, "%*c", ch,'^');
     fprintf(stderr, "\n");
     
-    // NOTE(ziv): for the time being, when 
-    // the parser is reporting a error for the use 
-    // it is not going to continue finding more erorrs. 
-    // This is done to simplify the amounts of things 
-    // that I need to think about. 
-    // I might change this when I have the will.. :)
-    
-    //__debugbreak(); // for the debugger  
-    //exit(-1);       // exit the application
 }
 
 internal bool check(Translation_Unit *tu, Token_Kind kind) { 

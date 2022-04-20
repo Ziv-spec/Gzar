@@ -353,6 +353,7 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
                 case TK_MINUS:
                 case TK_SLASH:
                 case TK_STAR: 
+                case TK_MODOLU: 
                 {
                     if ((op == TK_MINUS || op == TK_PLUS) && (rhs->kind == TYPE_POINTER && lhs->kind == TYPE_POINTER)) {
                         
