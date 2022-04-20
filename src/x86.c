@@ -1,7 +1,7 @@
 
 internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt);
 internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr);
-int emit(const char *format, ...);
+internal int  emit(const char *format, ...);
 internal char *scratch_string_alloc(Translation_Unit *tu, char *str); 
 internal Register scratch_alloc(int size); 
 internal void scratch_free(Register r);
@@ -157,16 +157,17 @@ internal const char *label_name(int l) {
     return str;
 }
 
-static FILE *output_file;
+static char _buff[16*1024];
 
 int emit(const char *format, ...) {
-    va_list arg;
     int done;
+    static size_t offset = 0; 
     
+    va_list arg;
     va_start(arg, format);
-    done = vfprintf(output_file, format, arg);
+    done = vsprintf(_buff+offset, format, arg);
     va_end(arg);
-    
+    offset += strlen(_buff+offset);
     return done;
 }
 
@@ -590,7 +591,6 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
                 emit("%s%s\n", func_name, is_main ? ":" : " PROC"); 
                 if (!is_main) emit("  push rbp\n");
                 emit("  mov rbp, rsp\n");
-                
                 emit("  push rbx\n"); 
                 emit("  push r10\n"); 
                 emit("  push r11\n"); 
@@ -626,7 +626,6 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
                 emit("  pop r11\n"); 
                 emit("  pop r10\n"); 
                 emit("  pop rbx\n"); 
-                
                 if (!is_main)        emit("  pop rbp\n");
                 emit("  ret\n");
                 if (!is_main)        emit("%s ENDP\n", func_name); 
@@ -682,17 +681,6 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
 internal void x86gen_translation_unit(Translation_Unit *tu, const char *filename) {
     if (!tu) return; 
     
-    
-    // 
-    // open the first file and read it's contents
-    // 
-    
-    FILE *file = fopen(filename,  "w+"); 
-    if (!file) {
-        fprintf(stderr, "Error: failed to open file '%s'\n", filename);
-    }
-    
-    output_file = file; // this is subject to change
     
     // 
     // Generate the globals inside the .data segment
@@ -807,6 +795,20 @@ internal void x86gen_translation_unit(Translation_Unit *tu, const char *filename
     
     emit("END\n");
     
+    
+    // 
+    // open the first file and read it's contents
+    // 
+    
+    FILE *file = fopen(filename,  "w+"); 
+    if (!file) {
+        fprintf(stderr, "Error: failed to open file '%s'\n", filename);
+    }
+    
+    fprintf(file, _buff);
+    
     fclose(file);
+    
+    
     
 }

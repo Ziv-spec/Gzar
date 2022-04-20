@@ -126,7 +126,6 @@ internal void type_error(Translation_Unit *tu, Token line, Type *t1, Type *t2, c
     fprintf(stderr, err);
     
     __debugbreak(); 
-    exit(-1);
 }
 
 internal bool type_equal(Type *t1, Type *t2) {
@@ -270,6 +269,7 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
                 char *name = str8_to_cstring(expr->lvar.name.str);
                 sprintf(buff, "Error: can not use '%s' it has never been declared", name);
                 parse_error(tu, expr->lvar.name, buff); 
+                return NULL;
             }
             
             return expr->type = symb->type; 
@@ -658,6 +658,7 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
         
         case STMT_IF: {
             Type *ty = sema_expr(tu, stmt->if_else.condition);
+            if (!ty) return false;
             
             if (ty->kind != TYPE_BOOL)
                 type_error(tu, stmt->if_else.position , get_atom(TYPE_BOOL), ty, "Expected boolean type `%s` != `%s`");
@@ -674,6 +675,7 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
         
         case STMT_WHILE: {
             Type *ty = sema_expr(tu, stmt->if_else.condition);
+            if (!ty) return false;
             
             if (ty->kind != TYPE_BOOL) {
                 type_error(tu, stmt->if_else.position , get_atom(TYPE_BOOL), ty, "Expected boolean type `%s` != `%s`");
@@ -695,12 +697,17 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
     return true;
 }
 
-internal void sema_translation_unit(Translation_Unit *tu) {
+internal bool sema_translation_unit(Translation_Unit *tu) {
     
+    bool success = true;
     for (int i = 0; i < tu->decls->index; i++) {
         Statement *stmt = (Statement *)tu->decls->data[i]; 
-        sema_statement(tu, stmt);
+        success = sema_statement(tu, stmt);
+        if (success == false) {
+            return false;
+        }
     }
     
     // NOTE(ziv): I don't pop the global scope as I will use it in later cases
+    return true;
 }

@@ -48,6 +48,7 @@
 #include <stdlib.h>
 #include <string.h> // probably I don't really need to use this and can have my own implementations for all the of the functions i use in here
 #include <stdarg.h> 
+#include <time.h>
 
 /* TODO(ziv):
     - Use a better algorithem for code generation (aka don't do the stupid things you are trying to do) 
@@ -68,6 +69,10 @@ struct Register {
     int r; // register index itself
     int size; // register size in bytes
 }; 
+
+// NOTE(ziv): This is only getting used
+#define STB_SPRINTF_IMPLEMENTATION
+#define STB_SPRINTF_NOFLOAT
 
 #include "base.h"
 #include "lexer.h"
@@ -130,23 +135,36 @@ int main(int argc, char *argv[]) {
     token_stream.start = source_buff;
     token_stream.current = 0;
     
+    //u64 begin = __rdtsc();
     bool success = lex_file(&token_stream);
     if (success == false) 
         return 0;
+    //printf("lexing: \t%lld\n", __rdtsc()-begin);
     
+    //begin = __rdtsc();
     Translation_Unit tu = {0}; 
     parse_translation_unit(&tu, &token_stream);
+    //printf("parsing: \t%lld\n", __rdtsc()-begin);
     
-    sema_translation_unit(&tu);
+    //begin = __rdtsc();
+    success = sema_translation_unit(&tu);
+    //printf("sema:     \t%lld\n", __rdtsc()-begin);
     
+    if (!success) {
+        return 0;
+    }
+    //begin = __rdtsc();
     x86gen_translation_unit(&tu, "test.asm"); 
+    //printf("codegen: \t%lld\n", __rdtsc()-begin);
+    
     
     // NOTE(ziv): calling the assembler and the linker for final assembly of the executable
     // This is very slow, and for the time being can not be avoided. One way to speed things 
     // up would be to not need assembler. This would require me to ouput x86-64 machine code
     // for the time being I am not doing that, if I see that it is worth it, I might try.
+    //begin = __rdtsc();
     system("ml64 -nologo /c test.asm >nul && cl /nologo test.obj /link kernel32.lib msvcrt.lib"); 
-    
+    //printf("final:    \t%lld\n", __rdtsc()-begin);
     free(source_buff); // I don't have to use this but whatever...
     return 0;
 }

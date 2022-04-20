@@ -372,7 +372,7 @@ internal bool map_next(Map_Iterator *it) {
 
 ////////////////////////////////
 /// Memory
-
+#if 0
 internal bool is_power_of_two(uintptr_t x) {
     return (x & (x-1)) == 0;
 }
@@ -393,7 +393,6 @@ internal uintptr_t align_forward(uintptr_t ptr, size_t align) {
     return p;
 }
 
-/*
 typedef struct M_Arena M_Arena; 
 struct M_Arena {
     unsigned char *buff; 
@@ -401,8 +400,6 @@ struct M_Arena {
     size_t prev_offset; 
     size_t curr_offset;
 }; 
-
-
 
 // Because C doesn't have default parameters
 internal void *arena_alloc(M_Arena *a, size_t size) {
@@ -521,7 +518,7 @@ internal void *arena_alloc_align(M_Arena *a, size_t size, size_t align) {
         return result;
     } 
     else {
-        M_Pool *p = malloc(sizeof(M_Pool) + DEFAULT_POOL_SIZE);
+        M_Pool *p = malloc(DEFAULT_POOL_SIZE);
         if (p) {
             p->buff = (unsigned char *)p + sizeof(M_Pool); // TODO(ziv): CHECK WHETHER THIS WORKS!!!!
             p->len = DEFAULT_POOL_SIZE;
@@ -539,5 +536,6 @@ internal void *arena_alloc_align(M_Arena *a, size_t size, size_t align) {
     }
     
 }
-*/
+#endif 
+
 #endif //BASE_H

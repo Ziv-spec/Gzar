@@ -226,18 +226,14 @@ internal Expr *parse_primary(Translation_Unit* tu) {
     if (not_literal.kind < TK_DOUBLE_ASCII) {
         sprintf(buff, "operation '%c' requires two operands", not_literal.kind);
         syntax_error(tu, not_literal, buff); 
-#if DEBUG
         return NULL;
-#endif 
     }
     temp = str8_to_cstring(not_literal.str); 
     
     sprintf(buff, "illigal use of '%s'", temp);
     syntax_error(tu, not_literal, buff); 
     
-#if DEBUG
     return NULL; 
-#endif 
 }
 
 //////////////////////////////////
@@ -405,23 +401,49 @@ internal Statement *parse_scope_stmt(Translation_Unit* tu) {
     }
     
     parse_error(tu, peek(tu), "Unexpected end of file");
-#if DEBUG
     return NULL;
-#endif 
+}
+
+internal void parse_syncronize(Translation_Unit *tu) {
+    advance(tu);
+    
+    while (!is_at_end(tu)) {
+        if (previous(tu).kind == TK_SEMI_COLON) return;
+        
+        switch (peek(tu).kind) {
+            case TK_IF:
+            case TK_ELSE:
+            case TK_WHILE:
+            case TK_RETURN:
+            return;
+        }
+        
+        advance(tu);
+    }
 }
 
 internal Statement *parse_decloration(Translation_Unit* tu) {
     
+    Statement *stmt = NULL;
     if (match(tu, TK_IDENTIFIER)) {
         Token name = previous(tu); 
-        if (match(tu, TK_COLON))        return parse_variable_decloration(tu, name); 
-        if (match(tu, TK_DOUBLE_COLON)) return parse_function_decloration(tu, name); 
+        if (match(tu, TK_COLON))             stmt = parse_variable_decloration(tu, name); 
+        else if (match(tu, TK_DOUBLE_COLON)) stmt = parse_function_decloration(tu, name);
         
-        // revert back to the identifier because match ate the identifer
+        if (stmt) {
+            return stmt; 
+        }
+        
         back_one(tu); 
     }
     
-    return parse_statement(tu);
+    if (stmt = parse_statement(tu)) {
+        return stmt; 
+    }
+    
+    parse_syncronize(tu); 
+    
+    return NULL;
 }
 
 internal Statement *parse_variable_decloration(Translation_Unit* tu, Token name) {
@@ -533,9 +555,7 @@ internal Type *parse_type(Translation_Unit *tu) {
     parse_error(tu, peek(tu), "Expected type after decloration"); 
     
     
-#ifdef DEBUG 
     return NULL;
-#endif 
 }
 
 internal Statement *parse_statement(Translation_Unit* tu) {
@@ -694,9 +714,7 @@ internal Token consume(Translation_Unit *tu, Token_Kind kind, char *msg) {
     if (check(tu, kind)) return advance(tu); 
     syntax_error(tu, peek(tu), msg);
     
-#ifdef DEBUG
     return (Token){0};
-#endif 
 }
 
 internal void parse_error(Translation_Unit *tu, Token token, char *msg) {
@@ -756,8 +774,8 @@ internal void report(Translation_Unit *tu, int line, int ch, char *msg) {
     // that I need to think about. 
     // I might change this when I have the will.. :)
     
-    __debugbreak(); // for the debugger  
-    exit(-1);       // exit the application
+    //__debugbreak(); // for the debugger  
+    //exit(-1);       // exit the application
 }
 
 internal bool check(Translation_Unit *tu, Token_Kind kind) { 

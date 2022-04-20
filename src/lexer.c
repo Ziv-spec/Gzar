@@ -172,7 +172,7 @@ internal bool lex_file(Token_Stream *s) {
                 }
                 else {
                     // I don't know what is this token. 
-                    fprintf(stderr, "Error: Unknown character at %d\n", get_line_number(s->start, (String8) { txt, 1 } ));
+                    fprintf(stderr, "Error: Unknown token at %d\n", get_line_number(s->start, (String8) { txt, 1 } ));
                     return false; 
                 }
                 

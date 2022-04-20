@@ -44,6 +44,7 @@ call:assert test13.gzr 5
 call:assert test14.gzr 100
 call:assert test15.gzr 10
 call:assert test16.gzr 4
+call:assert fib.gzr 1
 
 REM ======================================================
 

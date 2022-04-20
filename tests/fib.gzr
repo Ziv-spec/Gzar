@@ -39,5 +39,3 @@ fib_iterative :: (index: int) -> int {
 
 	return a;
 }
-
-
