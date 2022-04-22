@@ -207,10 +207,10 @@ internal Map *init_map(int elem_size) {
         return NULL; 
     }
     
-    map->buckets = calloc(sizeof(Bucket), DEFAULT_MAP_SIZE);
+    map->buckets = calloc(DEFAULT_MAP_SIZE, sizeof(Bucket));
     Assert(map->buckets); 
     
-    map->capacity  = DEFAULT_MAP_SIZE; 
+    map->capacity = DEFAULT_MAP_SIZE; 
     map->count = 0;
     map->elem_size = elem_size;
     
@@ -311,7 +311,7 @@ internal bool map_set(Map *map, String8 key, void *value) {
     if (map->count>= map->capacity/2) {
         int new_capacity = map->capacity * 2;
         Assert(map->capacity < new_capacity); // overflow could happen
-        Bucket *new_buckets = calloc(map->capacity, sizeof(void *));
+        Bucket *new_buckets = (Bucket *)calloc(new_capacity, sizeof(Bucket));
         if (!map->buckets) {
             return false; // failed to allocated memory 
         }
@@ -325,7 +325,7 @@ internal bool map_set(Map *map, String8 key, void *value) {
                 map_set_bucket(&nm, bucket.key, bucket.value); 
         }
         
-        free(map->buckets); // free old bucket array
+        free(map->buckets); 
         
         // copy info to the new array to given map
         map->buckets = new_buckets; 
@@ -372,6 +372,7 @@ internal bool map_next(Map_Iterator *it) {
 
 ////////////////////////////////
 /// Memory
+
 #if 0
 internal bool is_power_of_two(uintptr_t x) {
     return (x & (x-1)) == 0;
@@ -536,6 +537,58 @@ internal void *arena_alloc_align(M_Arena *a, size_t size, size_t align) {
     }
     
 }
-#endif 
+#endif // 0
+
+
+////////////////////////////////
+/// Perf counters and more
+
+enum {
+    C_LEXER, 
+    C_LEXER_IDENTIFIER, 
+    C_LEXER_ADD_TOKEN_TO_STREAM,
+    C_LEXER_DOUBLE_ASCII,
+    C_LEXER_ASCII,
+    C_PARSER, 
+    C_SEMA, 
+    C_CODEGEN, 
+    C_FINAL,
+    C_COUNT
+}; 
+
+char *clock_names[] = {
+    [C_LEXER] = "lexer", 
+    [C_LEXER_IDENTIFIER] = "lexer identifier", 
+    [C_LEXER_DOUBLE_ASCII] = "lexer double ascii", 
+    [C_LEXER_ADD_TOKEN_TO_STREAM] = "lexer add token", 
+    [C_LEXER_ASCII] = "lexer ascii", 
+    [C_PARSER] = "parser", 
+    [C_SEMA] = "sema", 
+    [C_CODEGEN] = "codegen", 
+    [C_FINAL] = "final"
+};
+
+static u64 clock_counters[C_COUNT]; 
+
+#define CLOCK_START(name) u64 CLOCK_##name = __rdtsc()
+#define CLOCK_END(name) clock_counters[C_##name] += __rdtsc() - CLOCK_##name
+
+/*c
+
+lexer            = 2200214
+lexer_identifier = 543660
+
+// how much time does it take:
+  lexer_identifier / lexer         // 0.247
+
+new_lexer = 403034
+new_lexer_identifier = 179266
+new_lexer_identifier / new_lexer // 0.444
+
+// wow ~5.5x improvement
+lexer / new_lexer                // 5.459
+
+*/
+
 
 #endif //BASE_H

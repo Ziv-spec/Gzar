@@ -168,6 +168,7 @@ int emit(const char *format, ...) {
     done = vsprintf(_buff+offset, format, arg);
     va_end(arg);
     offset += strlen(_buff+offset);
+    
     return done;
 }
 
@@ -668,7 +669,6 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
 
 internal void x86gen_translation_unit(Translation_Unit *tu, const char *filename) {
     if (!tu) return; 
-    
     
     // 
     // Generate the globals inside the .data segment

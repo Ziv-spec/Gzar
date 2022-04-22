@@ -130,32 +130,38 @@ int main(int argc, char *argv[]) {
     // TODO(ziv): Make this nicer
     
     Token_Stream token_stream;
-    token_stream.capacity = 1;
-    token_stream.s = realloc(NULL, sizeof(Token));
+    token_stream.capacity = 4*1024;
+    token_stream.s = realloc(NULL, token_stream.capacity*sizeof(Token));
     token_stream.start = source_buff;
     token_stream.current = 0;
     
-    //u64 begin = __rdtsc();
+    CLOCK_START(LEXER);
     bool success = lex_file(&token_stream);
     if (success == false) 
         return 0;
-    //printf("lexing: \t%lld\n", __rdtsc()-begin);
+    CLOCK_END(LEXER);
     
-    //begin = __rdtsc();
+    //printf("lexing: \t%lld\n", clock_counters[C_LEXER]);
+    
+    CLOCK_START(PARSER);
     Translation_Unit tu = {0}; 
     parse_translation_unit(&tu, &token_stream);
-    //printf("parsing: \t%lld\n", __rdtsc()-begin);
+    CLOCK_END(PARSER);
+    //printf("parsing: \t%lld\n", clock_counters[C_PARSER]);
     
-    //begin = __rdtsc();
+    CLOCK_START(SEMA);
     success = sema_translation_unit(&tu);
-    //printf("sema:     \t%lld\n", __rdtsc()-begin);
+    CLOCK_END(SEMA);
+    //printf("sema:     \t%lld\n", clock_counters[C_SEMA]);
     
     if (!success) {
         return 0;
     }
     
-    //begin = __rdtsc();
+    CLOCK_START(CODEGEN);
     x86gen_translation_unit(&tu, "test.asm"); 
+    CLOCK_END(CODEGEN);
+    
     //printf("codegen: \t%lld\n", __rdtsc()-begin);
     
     
@@ -163,9 +169,17 @@ int main(int argc, char *argv[]) {
     // This is very slow, and for the time being can not be avoided. One way to speed things 
     // up would be to not need assembler. This would require me to ouput x86-64 machine code
     // for the time being I am not doing that, if I see that it is worth it, I might try.
-    //begin = __rdtsc();
+    
+    CLOCK_START(FINAL);
     system("ml64 -nologo /c test.asm >nul && cl /nologo test.obj /link kernel32.lib msvcrt.lib"); 
+    CLOCK_END(FINAL);
     //printf("final:    \t%lld\n", __rdtsc()-begin);
+    
+    for (int i = 0; i < C_COUNT; i++) {
+        printf("%s:    \t%lld\n", clock_names[i] , clock_counters[i]);
+    }
+    
+    
     free(source_buff); // I don't have to use this but whatever...
     return 0;
 }

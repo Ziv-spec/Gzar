@@ -1,5 +1,7 @@
 
-internal Token lex_identifier(char *str) {
+
+internal inline Token lex_identifier(char *str) {
+    CLOCK_START(LEXER_IDENTIFIER); 
     
     const static char keywords[][16] = {
         "bool",
@@ -25,8 +27,6 @@ internal Token lex_identifier(char *str) {
     };
     
     // NOTE(ziv): this is a conversion from index to token table. 
-    // I could have done this in a much better way but you know.. 
-    // it's late and I don't care.. 
     const static int keywords_to_tk_kind_tbl[] = {
         [1]  = TK_BOOL_TYPE,
         [2]  = TK_ELSE, 
@@ -50,11 +50,6 @@ internal Token lex_identifier(char *str) {
         [20] = TK_CAST, 
     }; 
     
-    
-    int something = ArrayLength(keywords) ;
-    something;
-    
-    
     Token t = {0}; 
     int i = 0;
     for (; i < ArrayLength(keywords); i++) {
@@ -74,20 +69,26 @@ internal Token lex_identifier(char *str) {
         t.kind = TK_IDENTIFIER; 
         t.str = (String8) { start, str-start };
     }
+    
+    CLOCK_END(LEXER_IDENTIFIER); 
+    
     return t;
 }
 
 ////////////////////////////////
 /// main lexing function
 
-internal bool lex_file(Token_Stream *s) {
+internal bool lex_file(Token_Stream * restrict s) {
     
     char *txt = s->start;
     int current_token = 0;
     
     Token t = {0}; 
+    
     while (t.kind != TK_EOF) {
-        //t.str = (String8){0};
+        CLOCK_START(LEXER_ASCII);
+        CLOCK_START(LEXER_DOUBLE_ASCII);
+        memset(&t, 0, sizeof(Token));
         
         // 
         // skip whitespace and comments 
@@ -128,7 +129,6 @@ internal bool lex_file(Token_Stream *s) {
             case '>': { t.kind = txt[0] == '=' ? TK_GREATER_EQUAL : TK_GREATER; } break; 
             case '<': { t.kind = txt[0] == '=' ? TK_LESS_EQUAL : TK_LESS; } break; 
             case '!': { t.kind = txt[0] == '=' ? TK_BANG_EQUAL : TK_BANG; } break; 
-            
             case '&': { t.kind = txt[0] == '&' ? TK_DOUBLE_AND : TK_AND; } break; 
             case '|': { t.kind = txt[0] == '|' ? TK_DOUBLE_OR : TK_OR; } break; 
             
@@ -184,10 +184,12 @@ internal bool lex_file(Token_Stream *s) {
         // update the slice view for single and double character tokens
         if (t.kind < TK_ASCII) {
             t.str = (String8) { txt-1, 1 }; // token is a single character token
+            CLOCK_END(LEXER_ASCII);
         }
         else if (TK_ASCII < t.kind && t.kind < TK_DOUBLE_ASCII) {
             t.str = (String8) { txt-1, 2 }; // token is a double character token
             txt++; 
+            CLOCK_END(LEXER_DOUBLE_ASCII);
         }
         
         
@@ -206,7 +208,10 @@ internal bool lex_file(Token_Stream *s) {
             
         }
         
-        s->s[current_token++] = t; 
+        CLOCK_START(LEXER_ADD_TOKEN_TO_STREAM);
+        s->s[current_token++] = t;
+        CLOCK_END(LEXER_ADD_TOKEN_TO_STREAM);
+        
         
     }
     

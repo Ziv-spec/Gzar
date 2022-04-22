@@ -39,3 +39,119 @@ fib_iterative :: (index: int) -> int {
 
 	return a;
 }
+
+fib_iterative1 :: (index: int) -> int {
+	a: int = 0; 
+	b: int = 1; 
+	temp: int = 0;
+
+	i: int = 0; 
+	while i < index {
+		temp = a + b; 
+		a = b; 
+		b = temp; 
+		i = i + 1; 
+	}
+
+	return a;
+}
+
+fib_iterative1 :: (index: int) -> int {
+	a: int = 0; 
+	b: int = 1; 
+	temp: int = 0;
+
+	i: int = 0; 
+	while i < index {
+		temp = a + b; 
+		a = b; 
+		b = temp; 
+		i = i + 1; 
+	}
+
+	return a;
+}
+
+fib_iterative2 :: (index: int) -> int {
+	a: int = 0; 
+	b: int = 1; 
+	temp: int = 0;
+
+	i: int = 0; 
+	while i < index {
+		temp = a + b; 
+		a = b; 
+		b = temp; 
+		i = i + 1; 
+	}
+
+	return a;
+}
+
+
+fib_iterative3 :: (index: int) -> int {
+	a: int = 0; 
+	b: int = 1; 
+	temp: int = 0;
+
+	i: int = 0; 
+	while i < index {
+		temp = a + b; 
+		a = b; 
+		b = temp; 
+		i = i + 1; 
+	}
+
+	return a;
+}
+
+
+fib_iterative4 :: (index: int) -> int {
+	a: int = 0; 
+	b: int = 1; 
+	temp: int = 0;
+
+	i: int = 0; 
+	while i < index {
+		temp = a + b; 
+		a = b; 
+		b = temp; 
+		i = i + 1; 
+	}
+
+	return a;
+}
+
+
+fib_iterative5 :: (index: int) -> int {
+	a: int = 0; 
+	b: int = 1; 
+	temp: int = 0;
+
+	i: int = 0; 
+	while i < index {
+		temp = a + b; 
+		a = b; 
+		b = temp; 
+		i = i + 1; 
+	}
+
+	return a;
+}
+
+
+fib_iterative6 :: (index: int) -> int {
+	a: int = 0; 
+	b: int = 1; 
+	temp: int = 0;
+
+	i: int = 0; 
+	while i < index {
+		temp = a + b; 
+		a = b; 
+		b = temp; 
+		i = i + 1; 
+	}
+
+	return a;
+}

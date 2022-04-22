@@ -459,12 +459,6 @@ internal Statement *parse_variable_decloration(Translation_Unit* tu, Token name)
     
     Symbol *symb = init_symbol(name, type, expr);
     
-    // add symbol to scope
-    {
-        Statement *block = get_curr_scope(tu);
-        add_symbol(&block->block, symb);
-    }
-    
     return init_var_decl_stmt(symb);
 }
 
