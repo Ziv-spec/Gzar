@@ -648,7 +648,12 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
                 if (is_integer(lhs) && is_integer(rhs)) {
                     stmt->var_decl.type = lhs;
                     stmt->var_decl.initializer->type = lhs;
-                    return true;
+                    Statement *temp_stmt = get_curr_scope(tu);
+                    if (temp_stmt->kind != STMT_SCOPE) {
+                        Assert(!"I should not be getting here");
+                    }
+                    
+                    return add_symbol(&temp_stmt->block, &stmt->var_decl);
                 }
                 
                 type_error(tu, stmt->var_decl.name, lhs, rhs, "Error: type conflict `%s` != `%s`");

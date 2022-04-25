@@ -1,5 +1,13 @@
 //
-// Language spec (I might remake this in the BNF): 
+// Language spec
+// *  - at least one
+// ?  - 0 or more times
+// |  - expands the possible space
+// () - groups
+// "" - string which represents the 
+//      combination of charatcters 
+//      needed for a certain token 
+//      in the language
 //
 // program -> decloration*
 // 
@@ -14,20 +22,27 @@
 //     | if
 //     | block
 // 
-// expression -> literal 
+// expression -> expression
+//     | call
 //     | unary
-//     | binary 
+//     | binary
 //     | grouping
+//     | arguments
 //     | assignment
+//     | literal
 // 
-// literal -> NUMBER | STRING | "true" | "false" | "nil" 
+// literal -> number | string | "true" | "false" | "nil" 
+// cast -> "cast" "(" type ")" expression
+// call -> identifier "(" arguments ")"
+// unary -> ("-" | "!" | cast ) expression
 // grouping -> "(" expression ")"
-// unary -> ("-" | "!") expression
 // binary -> expression operator expression 
 // operator -> "==" | "!=" | ">=" | "<=" | "<" |
 //            ">" | "+" | "-" | "*" | "/" | "&" | 
-//            "|" | "^" | "&&" | "||"
+//            "|" | "^" | "&&" | "||" | "%"
 // 
+// number -> "0-9"*
+// string -> "
 // variable_decl -> identifier ":" type ( ("=" expression) | ";" )
 // function_decl -> identifier "::" grouping "->" return_type block
 // 
@@ -40,39 +55,27 @@
 // 
 // return_type type | "void"
 // 
-// if -> "if" expression block
+// if -> ("if" expression block ) | ("if" expression block "else" block )
 // while -> "while" expression block
+//
 
 #define _CRT_SECURE_NO_WARNINGS 1
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h> // probably I don't really need to use this and can have my own implementations for all the of the functions i use in here
-#include <stdarg.h> 
-#include <time.h>
+#include <stdarg.h>
 
-/* TODO(ziv):
-    - Use a better algorithem for code generation (aka don't do the stupid things you are trying to do) 
-    - Try to stay away from CRT stuff as much as possible or maybe even remove it alltogether (totaly possible but that would not be as convenient)
-    - Create a minimal standard libray (a super small one) for showcasing what the language is able to do (hopefully when it is working)
-- More features? This could be seperated into a couple of sections where I could talk about it for a long ass time. Because I don't want to do 
-      that, what I will do is specify a minimum feature set for the language where I know that if I implement those they would be enough for most 
-      problems that are sort of crucial in a language to have. That said, this is a toy-language in which I don't plat to have anything close to 
-      a fully featured or working compiler so I am not going to include advanced features like generics/macros/function pointers/
-      compilated operations that will make my compiler more complex than it absolutely needs to be.
-    - finish!!! This seems like an obvious one but I need to strees this out to myself that I want to at some point have a finished prodcut that 
-      could use as such this is a requirement to not go down the rabbit hole of implementing things to obivion. I don't want to work on this 
-      for a long time. It is not even supposed to be a show of skill just a project that I will do as a learning exercise. 
-*/
+// TODO(ziv): maybe don't store the register in the expression node? 
+// I think that I can just return the register itself and not have 
+// conflicts with nodes type and more, which will allow me to have 
+// a faster compiler and not need this bad decloration of the register 
+// which I don't like. 
 
 typedef struct Register Register; 
 struct Register {
     int r; // register index itself
     int size; // register size in bytes
 }; 
-
-// NOTE(ziv): This is only getting used
-#define STB_SPRINTF_IMPLEMENTATION
-#define STB_SPRINTF_NOFLOAT
 
 #include "base.h"
 #include "lexer.h"
@@ -94,10 +97,11 @@ int main(int argc, char *argv[]) {
         fprintf(stdout, "Usage: <source>.gzr\n");
         return 0; 
     }
+    
     char *filename = argv[1];
     
     // 
-    // open the first file and read it's contents
+    // open the file and read it's contents
     // 
     
     FILE *file = fopen(filename, "rb");
@@ -116,18 +120,9 @@ int main(int argc, char *argv[]) {
     fclose(file);
     
     
-    // NOTE(ziv): just as a note, this compiler does not free any of it's memory 
-    // it instead lets the operating system free all of the resoruces of the process 
-    // this is because I expect the compiler to be running for a short time and do only 
-    // what it needs to do. 
-    // This shall change in the future once I implement my unified-memory-pool 
-    // implementation of a custom allocator. Which will allocate in pools of memory
-    
     //
     // Setup for compilation
     //
-    
-    // TODO(ziv): Make this nicer
     
     Token_Stream token_stream;
     token_stream.capacity = 4*1024;
@@ -141,45 +136,74 @@ int main(int argc, char *argv[]) {
         return 0;
     CLOCK_END(LEXER);
     
-    //printf("lexing: \t%lld\n", clock_counters[C_LEXER]);
-    
     CLOCK_START(PARSER);
     Translation_Unit tu = {0}; 
     parse_translation_unit(&tu, &token_stream);
     CLOCK_END(PARSER);
-    //printf("parsing: \t%lld\n", clock_counters[C_PARSER]);
     
     CLOCK_START(SEMA);
     success = sema_translation_unit(&tu);
     CLOCK_END(SEMA);
-    //printf("sema:     \t%lld\n", clock_counters[C_SEMA]);
     
     if (!success) {
         return 0;
     }
     
+#if 0 
+    char assembly_file_name[100] = { 0 }; 
+    char *filename_start = filename; 
+    bool dot_exists = false; 
+    
+    while (*filename) {
+        if (filename[0] == '.' && filename[1]) {
+            dot_exists = true; 
+        }
+        filename++; 
+    }
+    
+    char *filename_end = filename; 
+    u64 extention_len = 0;
+    if (dot_exists) {
+        while (*--filename != '.');
+        extention_len = filename_end - filename;
+        while (*--filename != '/' && filename > filename_start);
+        if (*filename == '/')  filename++; 
+        u64 filename_len = filename_end - filename;
+        
+        strncpy(assembly_file_name, filename, filename_len - extention_len);
+        strcpy(assembly_file_name + filename_len-extention_len-1, ".asm");
+        printf("\n");
+        printf(assembly_file_name);
+        printf("\n");
+    }
+    else {
+        fprintf(stderr, "Error: invalid file extention please enter <source>.gzr\n");
+    }
+#endif 
+    
     CLOCK_START(CODEGEN);
     x86gen_translation_unit(&tu, "test.asm"); 
     CLOCK_END(CODEGEN);
-    
-    //printf("codegen: \t%lld\n", __rdtsc()-begin);
-    
     
     // NOTE(ziv): calling the assembler and the linker for final assembly of the executable
     // This is very slow, and for the time being can not be avoided. One way to speed things 
     // up would be to not need assembler. This would require me to ouput x86-64 machine code
     // for the time being I am not doing that, if I see that it is worth it, I might try.
     
-    CLOCK_START(FINAL);
-    system("ml64 -nologo /c test.asm >nul && cl /nologo test.obj /link kernel32.lib msvcrt.lib"); 
-    CLOCK_END(FINAL);
-    //printf("final:    \t%lld\n", __rdtsc()-begin);
+    char buff[255]; 
+    sprintf(buff, "ml64 -nologo /c %s >nul && cl /nologo %s /link kernel32.lib msvcrt.lib", "test.asm", "test.obj");
     
+    CLOCK_START(FINAL);
+    system(buff);
+    CLOCK_END(FINAL);
+    
+#if 1
     for (int i = 0; i < C_COUNT; i++) {
         printf("%s:    \t%lld\n", clock_names[i] , clock_counters[i]);
     }
-    
+#endif 
     
     free(source_buff); // I don't have to use this but whatever...
+    
     return 0;
 }

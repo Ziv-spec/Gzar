@@ -176,17 +176,17 @@ struct Program {
 
 
 /* helper functions */
-internal void  back_one(Translation_Unit *tu);
-internal int   is_at_end(Translation_Unit *tu); 
-internal Token peek(Translation_Unit *tu); 
-internal Token advance(Translation_Unit *tu); 
-internal Token previous(Translation_Unit *tu); 
-internal bool  check(Translation_Unit *tu, Token_Kind kind); 
+internal inline void  back_one(Translation_Unit *tu);
+internal inline int   is_at_end(Translation_Unit *tu); 
+internal inline Token peek(Translation_Unit *tu); 
+internal inline Token advance(Translation_Unit *tu); 
+internal inline Token previous(Translation_Unit *tu); 
+internal inline bool  check(Translation_Unit *tu, Token_Kind kind); 
+internal inline Token consume(Translation_Unit *tu, Token_Kind kind, char *msg);
 internal bool  internal_match(Translation_Unit *tu, int n, ...);
 internal void  report(Translation_Unit *tu, int line, int ch, char *msg); 
 internal void  parse_error(Translation_Unit *tu, Token token, char *msg); 
 internal void  syntax_error(Translation_Unit *tu,Token token, const char *err);
-internal Token consume(Translation_Unit *tu, Token_Kind kind, char *msg);
 
 #define match(l, ...) internal_match(l, COUNT_ARGS(__VA_ARGS__), ##__VA_ARGS__)
 

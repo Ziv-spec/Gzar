@@ -1,7 +1,6 @@
+/*
 
-
-internal inline Token lex_identifier(char *str) {
-    CLOCK_START(LEXER_IDENTIFIER); 
+internal inline Token lex_identifier(char * restrict str) {
     
     const static char keywords[][16] = {
         "bool",
@@ -70,7 +69,64 @@ internal inline Token lex_identifier(char *str) {
         t.str = (String8) { start, str-start };
     }
     
-    CLOCK_END(LEXER_IDENTIFIER); 
+    return t;
+}
+
+
+*/
+
+#pragma pack(push, 1)
+typedef struct Key_String_Bucket {
+    char key; 
+    char *value;
+    Token_Kind kind; 
+} Key_String_Bucket;
+#pragma pack(pop)
+
+#define ABS(a) (((a) < 0) ? -(a) : (a))
+
+internal inline Token lex_identifier(char *str) {
+    
+    static Key_String_Bucket keywords_hashes_tbl[32] = {
+        { 64, "true", TK_TRUE },  { 0, NULL, 0},  { 98, "return", TK_RETURN },  { 0, NULL, 0},  { 36, "s8", TK_S8_TYPE },  { 37, "nil", TK_NIL },  { 38, "u8", TK_U8_TYPE },  { 103, "string", TK_STRING_TYPE },  { 0, NULL, 0},  { 41, "else", TK_ELSE },  { 0, NULL, 0},  { 43, "cast", TK_CAST },  { 44, "bool", TK_BOOL_TYPE },  { 45, "int", TK_INT_TYPE },  { 78, "while", TK_WHILE },  { 0, NULL, 0},  { 48, "false", TK_FALSE },  { 81, "s16", TK_S16_TYPE },  { 0, NULL, 0},  { 83, "u16", TK_U16_TYPE },  { 20, "if", TK_IF },  { 0, NULL, 0},  { 0, NULL, 0},  { 0, NULL, 0},  { 0, NULL, 0},  { 57, "s64", TK_S64_TYPE },  { 0, NULL, 0},  { 59, "u64", TK_U64_TYPE },  { 60, "void", TK_VOID_TYPE },  { 61, "s32", TK_S32_TYPE },  { 0, NULL, 0},  { 63, "u32", TK_U32_TYPE }, 
+    };
+    
+    static char buff_tbl[26] = {
+        1, 2, 3, 15, 5, 11, 21, 8, 9, 10, 11, 12, 13, 16, 15, 17, 17, 18, 19, 20, 21, 21, 44, 24, 25, 
+    };
+    // hash the given string
+    char *temp = str; 
+    while (is_alphanumeric(*temp)) temp++; 
+    
+    u64 identifer_len = temp - str; 
+    Token t; 
+    t.str = (String8){ str, identifer_len }; 
+    t.kind = TK_IDENTIFIER;
+    
+    u64 hash = 0; 
+    for (u64 i = 0; i < identifer_len; i++) {
+        u64 index = ABS((str[i]-'a')) % 26;
+        hash += buff_tbl[index];
+    }
+    
+    // check in the keywords tbl whether my index is correct
+    u64 index = hash & (32-1);
+    Key_String_Bucket b = keywords_hashes_tbl[index];
+    if (b.key == hash) {
+        
+        // confirm the check
+        // TODO(ziv): make this sse 
+        int i = 0;
+        for (; i < identifer_len && b.value[i]; i++) {
+            if (str[i] != b.value[i]) {
+                break; 
+            }
+        }
+        
+        if (i == identifer_len) {
+            t.kind = b.kind;
+        }
+    }
     
     return t;
 }
@@ -80,20 +136,18 @@ internal inline Token lex_identifier(char *str) {
 
 internal bool lex_file(Token_Stream * restrict s) {
     
-    char *txt = s->start;
-    int current_token = 0;
+    char *restrict txt = s->start;
+    u64 current_token = 0;
     
     Token t = {0}; 
     
     while (t.kind != TK_EOF) {
-        CLOCK_START(LEXER_ASCII);
-        CLOCK_START(LEXER_DOUBLE_ASCII);
-        memset(&t, 0, sizeof(Token));
         
         // 
         // skip whitespace and comments 
         // 
         
+        //CLOCK_START(LEXER_TRASH);
         for (; *txt; txt++) {
             if (!(*txt == '\n' || *txt == ' ' || *txt == '\t' || *txt == '\0' || *txt == '\r')) {
                 if (txt[0] == '/' && txt[1] == '/') {
@@ -104,6 +158,15 @@ internal bool lex_file(Token_Stream * restrict s) {
                 }
             }
         }
+        //CLOCK_END(LEXER_TRASH);
+        
+        /*         
+                CLOCK_START(LEXER_ASCII);
+                CLOCK_START(LEXER_DOUBLE_ASCII);
+                CLOCK_START(LEXER_STRING);
+                CLOCK_START(LEXER_NUMBER);
+                CLOCK_START(LEXER_IDENTIFIER); 
+                 */
         
         // 
         // lex a token 
@@ -138,6 +201,7 @@ internal bool lex_file(Token_Stream * restrict s) {
                 while (*txt != '"' && *txt != '\n') txt++; 
                 t.str = (String8){ start, txt-start };
                 txt++; // eat '\"' character
+                //CLOCK_END(LEXER_STRING);
             } break;
             
             case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
@@ -158,7 +222,7 @@ internal bool lex_file(Token_Stream * restrict s) {
                 
                 t.kind = TK_NUMBER; 
                 t.str = (String8){ start, txt-start }; 
-                
+                //CLOCK_END(LEXER_NUMBER);
             } break;
             
             default: { 
@@ -176,6 +240,7 @@ internal bool lex_file(Token_Stream * restrict s) {
                     fprintf(stderr, "Error: Unknown token at %d\n", get_line_number(s->start, (String8) { txt, 1 } ));
                     return false; 
                 }
+                //CLOCK_END(LEXER_IDENTIFIER); 
                 
             } break;
             
@@ -184,14 +249,16 @@ internal bool lex_file(Token_Stream * restrict s) {
         // update the slice view for single and double character tokens
         if (t.kind < TK_ASCII) {
             t.str = (String8) { txt-1, 1 }; // token is a single character token
-            CLOCK_END(LEXER_ASCII);
+            //CLOCK_END(LEXER_ASCII);
         }
         else if (TK_ASCII < t.kind && t.kind < TK_DOUBLE_ASCII) {
             t.str = (String8) { txt-1, 2 }; // token is a double character token
             txt++; 
-            CLOCK_END(LEXER_DOUBLE_ASCII);
+            //CLOCK_END(LEXER_DOUBLE_ASCII);
         }
         
+        
+        //CLOCK_START(LEXER_TK_TO_STREAM);
         
         //
         // Adding token to token stream
@@ -205,13 +272,10 @@ internal bool lex_file(Token_Stream * restrict s) {
                 fprintf(stderr, "Error: failed to allocate memory\n");
                 return false; 
             }
-            
         }
         
-        CLOCK_START(LEXER_ADD_TOKEN_TO_STREAM);
         s->s[current_token++] = t;
-        CLOCK_END(LEXER_ADD_TOKEN_TO_STREAM);
-        
+        //CLOCK_END(LEXER_TK_TO_STREAM);
         
     }
     

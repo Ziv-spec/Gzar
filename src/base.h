@@ -470,7 +470,7 @@ typedef struct M_Arena M_Arena;
 struct M_Arena {
     M_Block *first;
     M_Block *last;
-}; 
+};
 
 typedef struct M_Pool M_Pool; 
 struct M_Pool {
@@ -543,12 +543,19 @@ internal void *arena_alloc_align(M_Arena *a, size_t size, size_t align) {
 ////////////////////////////////
 /// Perf counters and more
 
+#if 1
+
 enum {
     C_LEXER, 
+#if 0
     C_LEXER_IDENTIFIER, 
-    C_LEXER_ADD_TOKEN_TO_STREAM,
     C_LEXER_DOUBLE_ASCII,
+    C_LEXER_TK_TO_STREAM, 
     C_LEXER_ASCII,
+    C_LEXER_NUMBER,
+    C_LEXER_STRING,
+    C_LEXER_TRASH,
+#endif 
     C_PARSER, 
     C_SEMA, 
     C_CODEGEN, 
@@ -558,14 +565,19 @@ enum {
 
 char *clock_names[] = {
     [C_LEXER] = "lexer", 
-    [C_LEXER_IDENTIFIER] = "lexer identifier", 
+#if 0
+    [C_LEXER_IDENTIFIER]   = "lexer identifier", 
+    [C_LEXER_TK_TO_STREAM] = "lexer tk assign", 
     [C_LEXER_DOUBLE_ASCII] = "lexer double ascii", 
-    [C_LEXER_ADD_TOKEN_TO_STREAM] = "lexer add token", 
-    [C_LEXER_ASCII] = "lexer ascii", 
-    [C_PARSER] = "parser", 
-    [C_SEMA] = "sema", 
+    [C_LEXER_STRING]       = "lexer string",
+    [C_LEXER_TRASH]        = "lexer trash",
+    [C_LEXER_NUMBER]       = "lexer number", 
+    [C_LEXER_ASCII]        = "lexer ascii", 
+#endif 
+    [C_PARSER]  = "parser", 
+    [C_SEMA]    = "sema", 
     [C_CODEGEN] = "codegen", 
-    [C_FINAL] = "final"
+    [C_FINAL]   = "final"
 };
 
 static u64 clock_counters[C_COUNT]; 
@@ -573,22 +585,12 @@ static u64 clock_counters[C_COUNT];
 #define CLOCK_START(name) u64 CLOCK_##name = __rdtsc()
 #define CLOCK_END(name) clock_counters[C_##name] += __rdtsc() - CLOCK_##name
 
-/*c
+#else 
 
-lexer            = 2200214
-lexer_identifier = 543660
+#define CLOCK_START(name) 
+#define CLOCK_END(name)
 
-// how much time does it take:
-  lexer_identifier / lexer         // 0.247
-
-new_lexer = 403034
-new_lexer_identifier = 179266
-new_lexer_identifier / new_lexer // 0.444
-
-// wow ~5.5x improvement
-lexer / new_lexer                // 5.459
-
-*/
+#endif // 0
 
 
 #endif //BASE_H

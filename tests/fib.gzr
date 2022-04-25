@@ -1,22 +1,30 @@
 
-puts :: (val: string) -> void; 
+puts :: (val: string) -> void; // extrenal function puts
 
 main :: () -> int {
+
+	result: bool = false; 
 
 	answer1: int = fib_recursive(10);
 	answer2: int = fib_iterative(10); 
 
-	if answer1 == answer2 && answer1 == 55 {
-		puts("correct answer"); 
-		return 1; 
+	if !(answer1 == answer2 && answer1 == 55) {
+		return 0;
+	}
+	
+	answer1 = fib_recursive(5); 		
+	answer2 = fib_iterative(5); 
+
+	if !(answer1 == answer2 && answer1 == 5) {
+		return 0; 
 	}
 
-	puts("incorrect answer");
-	return 0;
+	puts("correct answer");
+
+	return 1;
 }
 
 fib_recursive :: (index: int) -> int {
-
 	if index < 2 {
 		return index;
 	}
@@ -39,119 +47,4 @@ fib_iterative :: (index: int) -> int {
 
 	return a;
 }
-
-fib_iterative1 :: (index: int) -> int {
-	a: int = 0; 
-	b: int = 1; 
-	temp: int = 0;
-
-	i: int = 0; 
-	while i < index {
-		temp = a + b; 
-		a = b; 
-		b = temp; 
-		i = i + 1; 
-	}
-
-	return a;
-}
-
-fib_iterative1 :: (index: int) -> int {
-	a: int = 0; 
-	b: int = 1; 
-	temp: int = 0;
-
-	i: int = 0; 
-	while i < index {
-		temp = a + b; 
-		a = b; 
-		b = temp; 
-		i = i + 1; 
-	}
-
-	return a;
-}
-
-fib_iterative2 :: (index: int) -> int {
-	a: int = 0; 
-	b: int = 1; 
-	temp: int = 0;
-
-	i: int = 0; 
-	while i < index {
-		temp = a + b; 
-		a = b; 
-		b = temp; 
-		i = i + 1; 
-	}
-
-	return a;
-}
-
-
-fib_iterative3 :: (index: int) -> int {
-	a: int = 0; 
-	b: int = 1; 
-	temp: int = 0;
-
-	i: int = 0; 
-	while i < index {
-		temp = a + b; 
-		a = b; 
-		b = temp; 
-		i = i + 1; 
-	}
-
-	return a;
-}
-
-
-fib_iterative4 :: (index: int) -> int {
-	a: int = 0; 
-	b: int = 1; 
-	temp: int = 0;
-
-	i: int = 0; 
-	while i < index {
-		temp = a + b; 
-		a = b; 
-		b = temp; 
-		i = i + 1; 
-	}
-
-	return a;
-}
-
-
-fib_iterative5 :: (index: int) -> int {
-	a: int = 0; 
-	b: int = 1; 
-	temp: int = 0;
-
-	i: int = 0; 
-	while i < index {
-		temp = a + b; 
-		a = b; 
-		b = temp; 
-		i = i + 1; 
-	}
-
-	return a;
-}
-
-
-fib_iterative6 :: (index: int) -> int {
-	a: int = 0; 
-	b: int = 1; 
-	temp: int = 0;
-
-	i: int = 0; 
-	while i < index {
-		temp = a + b; 
-		a = b; 
-		b = temp; 
-		i = i + 1; 
-	}
-
-	return a;
-}
+  

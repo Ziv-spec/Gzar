@@ -22,7 +22,7 @@ if "%1" equ "debug" (
   set CL=/MTd /FC /DDEBUG=1 /Od /Zi /Fdgzar.pdb /fsanitize=address
   set LINK=/DEBUG
 ) else (
-  set CL=/O2
+  set CL=/O2 /Zi /FC
   set LINK=/OPT:REF /OPT:ICF
 )
 
@@ -32,6 +32,6 @@ set WarningOptions=/W4 -wd4706 -wd4201
 IF NOT EXIST build mkdir build 
 pushd build 
 
-cl ../src/main.c -nologo /FC %CL% %WarningOptions% /link /INCREMENTAL:NO /OUT:gzar.exe %LINK%
+cl ../src/main.c -nologo %CL% %WarningOptions% /link /INCREMENTAL:NO /OUT:gzar.exe %LINK%
 
 popd

@@ -682,29 +682,29 @@ internal Type *init_type(Type_Kind kind, Type *subtype, Vector *symbols) {
 //////////////////////////////////
 /// General helper functions 
 
-internal void back_one(Translation_Unit *tu) {
+internal inline void back_one(Translation_Unit *tu) {
     tu->s->current--;
 }
 
-internal int is_at_end(Translation_Unit *tu) {
+internal inline int is_at_end(Translation_Unit *tu) {
     Assert(tu->s->current < tu->s->capacity); 
     return tu->s->s[tu->s->current].kind == TK_EOF;
 }
 
-internal Token peek(Translation_Unit *tu) {
+internal inline Token peek(Translation_Unit *tu) {
     return tu->s->s[tu->s->current];
 }
 
-internal Token advance(Translation_Unit *tu) {
+internal inline Token advance(Translation_Unit *tu) {
     if (!is_at_end(tu)) tu->s->current++; 
     return tu->s->s[tu->s->current-1];
 }
 
-internal Token previous(Translation_Unit *tu) {
+internal inline Token previous(Translation_Unit *tu) {
     return tu->s->s[tu->s->current-1];
 }
 
-internal Token consume(Translation_Unit *tu, Token_Kind kind, char *msg) {
+internal inline Token consume(Translation_Unit *tu, Token_Kind kind, char *msg) {
     if (check(tu, kind)) return advance(tu); 
     syntax_error(tu, peek(tu), msg);
     
@@ -762,7 +762,7 @@ internal void report(Translation_Unit *tu, int line, int ch, char *msg) {
     
 }
 
-internal bool check(Translation_Unit *tu, Token_Kind kind) { 
+internal inline bool check(Translation_Unit *tu, Token_Kind kind) { 
     if (is_at_end(tu)) return false; 
     return peek(tu).kind == kind; 
 }
