@@ -1,79 +1,3 @@
-/*
-
-internal inline Token lex_identifier(char * restrict str) {
-    
-    const static char keywords[][16] = {
-        "bool",
-        "else",
-        "false",
-        "if",
-        "int",
-        "nil",
-        "return",
-        "s16",
-        "s32",
-        "s64",
-        "s8",
-        "string",
-        "true",
-        "u16",
-        "u32",
-        "u64",
-        "u8",
-        "void",
-        "while",
-        "cast"
-    };
-    
-    // NOTE(ziv): this is a conversion from index to token table. 
-    const static int keywords_to_tk_kind_tbl[] = {
-        [1]  = TK_BOOL_TYPE,
-        [2]  = TK_ELSE, 
-        [3]  = TK_FALSE,
-        [4]  = TK_IF, 
-        [5]  = TK_INT_TYPE, 
-        [6]  = TK_NIL, 
-        [7]  = TK_RETURN, 
-        [8]  = TK_S16_TYPE, 
-        [9]  = TK_S32_TYPE, 
-        [10] = TK_S64_TYPE, 
-        [11] = TK_S8_TYPE, 
-        [12] = TK_STRING_TYPE, 
-        [13] = TK_TRUE, 
-        [14] = TK_U16_TYPE, 
-        [15] = TK_U32_TYPE, 
-        [16] = TK_U64_TYPE, 
-        [17] = TK_U8_TYPE, 
-        [18] = TK_VOID_TYPE, 
-        [19] = TK_WHILE, 
-        [20] = TK_CAST, 
-    }; 
-    
-    Token t = {0}; 
-    int i = 0;
-    for (; i < ArrayLength(keywords); i++) {
-        if (strncmp(keywords[i], str, strlen(keywords[i])) == 0) {
-            break;
-        }
-    }
-    
-    if (i < ArrayLength(keywords)) {
-        t.kind = keywords_to_tk_kind_tbl[i+1];
-        t.str = (String8){ str, strlen(keywords[i]) };
-    }
-    else {
-        // lex a identifier
-        char *start = str; 
-        for (; is_alphanumeric(*str); str++);
-        t.kind = TK_IDENTIFIER; 
-        t.str = (String8) { start, str-start };
-    }
-    
-    return t;
-}
-
-
-*/
 
 #pragma pack(push, 1)
 typedef struct Key_String_Bucket {
@@ -87,6 +11,11 @@ typedef struct Key_String_Bucket {
 
 internal inline Token lex_identifier(char *str) {
     
+    // hash the given string
+    char *temp = str; 
+    while (is_alphanumeric(*temp)) temp++; 
+    u64 len = temp - str; 
+    
     static Key_String_Bucket keywords_hashes_tbl[32] = {
         { 64, "true", TK_TRUE },  { 0, NULL, 0},  { 98, "return", TK_RETURN },  { 0, NULL, 0},  { 36, "s8", TK_S8_TYPE },  { 37, "nil", TK_NIL },  { 38, "u8", TK_U8_TYPE },  { 103, "string", TK_STRING_TYPE },  { 0, NULL, 0},  { 41, "else", TK_ELSE },  { 0, NULL, 0},  { 43, "cast", TK_CAST },  { 44, "bool", TK_BOOL_TYPE },  { 45, "int", TK_INT_TYPE },  { 78, "while", TK_WHILE },  { 0, NULL, 0},  { 48, "false", TK_FALSE },  { 81, "s16", TK_S16_TYPE },  { 0, NULL, 0},  { 83, "u16", TK_U16_TYPE },  { 20, "if", TK_IF },  { 0, NULL, 0},  { 0, NULL, 0},  { 0, NULL, 0},  { 0, NULL, 0},  { 57, "s64", TK_S64_TYPE },  { 0, NULL, 0},  { 59, "u64", TK_U64_TYPE },  { 60, "void", TK_VOID_TYPE },  { 61, "s32", TK_S32_TYPE },  { 0, NULL, 0},  { 63, "u32", TK_U32_TYPE }, 
     };
@@ -94,17 +23,15 @@ internal inline Token lex_identifier(char *str) {
     static char buff_tbl[26] = {
         1, 2, 3, 15, 5, 11, 21, 8, 9, 10, 11, 12, 13, 16, 15, 17, 17, 18, 19, 20, 21, 21, 44, 24, 25, 
     };
-    // hash the given string
-    char *temp = str; 
-    while (is_alphanumeric(*temp)) temp++; 
     
-    u64 identifer_len = temp - str; 
-    Token t; 
-    t.str = (String8){ str, identifer_len }; 
+    Token t;
+    t.str = (String8){ str, len }; 
     t.kind = TK_IDENTIFIER;
     
+    
+    // compute hash
     u64 hash = 0; 
-    for (u64 i = 0; i < identifer_len; i++) {
+    for (u64 i = 0; i < len; i++) {
         u64 index = ABS((str[i]-'a')) % 26;
         hash += buff_tbl[index];
     }
@@ -117,13 +44,13 @@ internal inline Token lex_identifier(char *str) {
         // confirm the check
         // TODO(ziv): make this sse 
         int i = 0;
-        for (; i < identifer_len && b.value[i]; i++) {
+        for (; i < len && b.value[i]; i++) {
             if (str[i] != b.value[i]) {
                 break; 
             }
         }
         
-        if (i == identifer_len) {
+        if (i == len) {
             t.kind = b.kind;
         }
     }
@@ -140,7 +67,6 @@ internal bool lex_file(Token_Stream * restrict s) {
     u64 current_token = 0;
     
     Token t = {0}; 
-    
     while (t.kind != TK_EOF) {
         
         // 

@@ -2,7 +2,7 @@
 puts :: (val: string) -> void; 
 
 main :: () -> int {
-	
+
 	something: s8 = 1;
 	something_else: u32 = 3;
 	

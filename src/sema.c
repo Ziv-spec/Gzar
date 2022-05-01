@@ -9,7 +9,7 @@
 #define is_signed_integer(t) ((t->kind) < TYPE_INTEGER_STUB)
 #define is_unsigned_integer(t) (TYPE_INTEGER_STUB < (t->kind) && (t->kind) < TYPE_UNSIGNED_INTEGER_STUB)
 
-inline s64 type_kind_to_atom(Type_Kind kind) {
+internal inline s64 type_kind_to_atom(Type_Kind kind) {
     
     // This is a hack for getting the log2 of a number
     // which results in the correct index for the atom
@@ -125,7 +125,7 @@ internal void type_error(Translation_Unit *tu, Token line, Type *t1, Type *t2, c
     strcat(err, "\n");
     fprintf(stderr, err);
     
-    __debugbreak(); 
+    //__debugbreak(); 
 }
 
 internal bool type_equal(Type *t1, Type *t2) {
@@ -506,12 +506,6 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
         
         
         
-        case EXPR_GROUPING: {
-            return expr->type = sema_expr(tu, expr->grouping.expr); 
-        } break;
-        
-        
-        
         default: {
             Assert(!"I should never be getting here"); 
         }
@@ -542,7 +536,10 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
                 add_symbol(&((Statement *)tu->scopes->data[0])->block, init_symbol(stmt->func.name, stmt->func.type, NULL));
             }
             else {
-                add_symbol(&stmt->func.sc->block, init_symbol(stmt->func.name, stmt->func.type, NULL));
+                if (stmt->func.sc)
+                    add_symbol(&stmt->func.sc->block, init_symbol(stmt->func.name, stmt->func.type, NULL));
+                else 
+                    return false;
             }
             
             push_scope(tu, stmt);

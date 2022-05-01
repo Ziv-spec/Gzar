@@ -75,4 +75,23 @@ enum Atom_Kind {
     
 }; 
 
+// Not really needed function declorations
+
+typedef struct Translation_Unit Translation_Unit; 
+typedef struct Expr Expr; 
+typedef struct Statement Statement; 
+
+internal inline s64 type_kind_to_atom(Type_Kind kind);
+internal Type *get_atom(Type_Kind kind);
+internal char *type_to_string(Type *ty); 
+internal char *format_types(char *msg, Type *t1, Type *t2);
+internal void type_error(Translation_Unit *tu, Token line, Type *t1, Type *t2, char *msg); 
+internal bool type_equal(Type *t1, Type *t2);
+internal int get_type_size(Type *type);
+internal Type *get_compatible_type(Type *dest, Type *src);
+internal Type *implicit_cast(Type *t1, Type *t2);
+internal Type *sema_expr(Translation_Unit *tu, Expr *expr);
+internal bool sema_statement(Translation_Unit *tu, Statement *stmt);
+internal bool sema_translation_unit(Translation_Unit *tu);
+
 #endif //SEMA_H

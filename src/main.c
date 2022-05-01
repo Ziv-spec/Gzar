@@ -21,6 +21,8 @@
 //     | while 
 //     | if
 //     | block
+//     | decloration
+//     | return
 // 
 // expression -> expression
 //     | call
@@ -42,7 +44,7 @@
 //            "|" | "^" | "&&" | "||" | "%"
 // 
 // number -> "0-9"*
-// string -> "
+// string -> """ any character between the " are accepted  """
 // variable_decl -> identifier ":" type ( ("=" expression) | ";" )
 // function_decl -> identifier "::" grouping "->" return_type block
 // 
@@ -83,8 +85,8 @@ struct Register {
 #include "parser.h"
 
 #include "lexer.c"
-#include "sema.c"
 #include "parser.c"
+#include "sema.c"
 #include "x86.c"
 
 int main(int argc, char *argv[]) {
@@ -197,7 +199,7 @@ int main(int argc, char *argv[]) {
     system(buff);
     CLOCK_END(FINAL);
     
-#if 1
+#if 0
     for (int i = 0; i < C_COUNT; i++) {
         printf("%s:    \t%lld\n", clock_names[i] , clock_counters[i]);
     }

@@ -1,4 +1,5 @@
 
+internal void x86gen_translation_unit(Translation_Unit *tu, const char *filename); 
 internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt);
 internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr);
 internal int  emit(const char *format, ...);
@@ -420,11 +421,6 @@ internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr) {
             
         } break; 
         
-        case EXPR_GROUPING: {
-            expr_gen(tu, func_ty, expr->grouping.expr); 
-            expr->reg = expr->grouping.expr->reg;
-        } break;
-        
         case EXPR_UNARY: {
             expr_gen(tu, func_ty, expr->unary.right);
             
@@ -566,7 +562,7 @@ internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt) {
             // caller
             //X = round_up(min(32, callee_usage * 8) + local_variable_usage, 16) + 8 
             //       ^                                      ^                      ^
-            //    stack alignment                      not much to say,   remembmer 'push rsp'
+            //    stack alignment                      not much to say,   remembmer 'push rbp'
             
             push_scope(tu, stmt); 
             

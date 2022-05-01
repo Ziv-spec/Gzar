@@ -272,7 +272,7 @@ internal void *map_peek(Map *map, String8 key) {
 internal bool map_set_bucket(Map *map, String8 key, void *value) {
     
     size_t hash = str8_hash(key); 
-    size_t index = hash & (map->capacity-1); 
+    size_t index = hash & (map->capacity-1);
     
     // loop until we find an empty bucket
     while (map->buckets[index].value != NULL) {
@@ -543,7 +543,7 @@ internal void *arena_alloc_align(M_Arena *a, size_t size, size_t align) {
 ////////////////////////////////
 /// Perf counters and more
 
-#if 1
+#if 0
 
 enum {
     C_LEXER, 

@@ -203,7 +203,7 @@ internal Expr *parse_primary(Translation_Unit* tu) {
     if (match(tu, TK_LPARAN, TK_RPARAN)) {
         Expr *expr = parse_expression(tu); 
         consume(tu, TK_RPARAN, "Expected ')' after expression"); 
-        return init_grouping(expr); 
+        return expr; 
     }
     
     char buff[100]; 
@@ -265,14 +265,6 @@ internal Expr *init_literal(void *data, Type_Kind kind) {
     result_expr->type = NULL;
     result_expr->literal.kind = kind; 
     result_expr->literal.data = data; 
-    return result_expr;
-}
-
-internal Expr *init_grouping(Expr *expr) {
-    Expr *result_expr = (Expr *)malloc(sizeof(Expr));
-    result_expr->kind = EXPR_GROUPING;  
-    result_expr->type = NULL;
-    result_expr->grouping.expr = expr; 
     return result_expr;
 }
 
@@ -366,7 +358,6 @@ internal Symbol *local_exist(Translation_Unit *tu, Token var_name) {
                     Symbol *symb = symbols->data[j]; 
                     if (str8_compare(symb->name.str, var_name.str) == 0)
                         return symb;
-                    
                 }
             }
             else {
@@ -573,15 +564,6 @@ internal Statement *parse_expr_stmt(Translation_Unit* tu) {
     return init_expr_stmt(expr);
 }
 
-internal Statement *init_if_stmt(Expr *condition, Statement *true_block,  Statement *false_block) {
-    Statement *stmt = (Statement *)malloc(sizeof(Statement));
-    stmt->kind = STMT_IF; 
-    stmt->if_else.condition = condition; 
-    stmt->if_else.true_block = true_block; 
-    stmt->if_else.false_block = false_block; 
-    return stmt;
-}
-
 internal Statement *init_while_stmt(Expr *condition, Statement *block) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement));
     stmt->kind = STMT_WHILE; 
@@ -591,6 +573,7 @@ internal Statement *init_while_stmt(Expr *condition, Statement *block) {
 }
 
 internal Statement *parse_if_stmt(Translation_Unit *tu) {
+    Token position = previous(tu);
     Expr *condition = parse_expression(tu); 
     
     consume(tu, TK_RBRACE, "Expected '{' for beginning of block"); 
@@ -602,7 +585,7 @@ internal Statement *parse_if_stmt(Translation_Unit *tu) {
         false_block = parse_scope_stmt(tu); 
     }
     
-    return init_if_stmt(condition, true_block, false_block); 
+    return init_if_stmt(condition, position, true_block, false_block); 
 }
 
 internal Statement *parse_while_stmt(Translation_Unit *tu) {
@@ -620,6 +603,16 @@ internal Statement *parse_while_stmt(Translation_Unit *tu) {
 
 //////////////////////////////////
 /// Initializations for statements
+
+internal Statement *init_if_stmt(Expr *condition, Token position, Statement *true_block,  Statement *false_block) {
+    Statement *stmt = (Statement *)malloc(sizeof(Statement));
+    stmt->kind = STMT_IF; 
+    stmt->if_else.position = position; 
+    stmt->if_else.condition = condition; 
+    stmt->if_else.true_block = true_block; 
+    stmt->if_else.false_block = false_block; 
+    return stmt;
+}
 
 internal Statement *init_expr_stmt(Expr *expr) {
     Statement *stmt = (Statement *)malloc(sizeof(Statement)); 
@@ -735,7 +728,7 @@ internal void report(Translation_Unit *tu, int line, int ch, char *msg) {
     char err[100] = {0};  // holding the error message
     char buff[100] = {0}; // holding the integer as a string
     
-    fprintf(stderr, "\n");
+    //fprintf(stderr, "\n");
     strcat(err, msg); 
     strcat(err, _itoa(line, buff, 10)); 
     //strcat(err, ":");
@@ -751,14 +744,17 @@ internal void report(Translation_Unit *tu, int line, int ch, char *msg) {
         }
     }
     
-    int count = 0; 
+    ch;
+    //int count = 0; 
     
-    char *temp = tu->s->start; 
-    for (; *temp && *temp != '\n'; temp++, count++);
-    fprintf(stderr, str8_to_cstring((String8){tu->s->start, count+1}));
-    
-    fprintf(stderr, "%*c", ch,'^');
-    fprintf(stderr, "\n");
+    /*     
+        char *temp = tu->s->start; 
+        for (; *temp && *temp != '\n'; temp++, count++);
+        fprintf(stderr, str8_to_cstring((String8){tu->s->start, count+1}));
+        
+        fprintf(stderr, "%*c", ch,'^');
+        fprintf(stderr, "\n");
+         */
     
 }
 

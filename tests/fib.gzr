@@ -1,12 +1,19 @@
 
+putchar :: (val: u8) -> void; 
 puts :: (val: string) -> void; // extrenal function puts
 
 main :: () -> int {
 
 	result: bool = false; 
-
+	
 	answer1: int = fib_recursive(10);
-	answer2: int = fib_iterative(10); 
+	answer2: int = fib_iterative(18); 
+
+	print_num_backwards(answer1); 
+	print_char(10); // printing the new line \n character
+
+	print_num_backwards(answer2); 
+	print_char(10); // printing the new line \n character
 
 	if !(answer1 == answer2 && answer1 == 55) {
 		return 0;
@@ -48,3 +55,18 @@ fib_iterative :: (index: int) -> int {
 	return a;
 }
   
+print_char :: (ch: int) -> void { 
+	putchar(cast(u8)ch);
+}
+
+// probably to have it be backwards I can use an array 
+// otherwise I don't think that I can do much here
+print_num_backwards :: (num: int) -> void {
+	zero: u8 = 48; // character zero
+	remainder: int = 0; 
+	while num > 0 {
+		remainder = num % 10;
+		putchar(zero + cast(u8)remainder);
+		num = num / 10; 
+	}
+}

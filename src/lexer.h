@@ -91,5 +91,6 @@ struct Token_Stream {
 
 ////////////////////////////////
 internal bool lex_file(Token_Stream *s); 
+internal inline Token lex_identifier(char *str);
 
 #endif //LEXER_H

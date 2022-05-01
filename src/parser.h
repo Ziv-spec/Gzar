@@ -36,12 +36,9 @@ typedef struct Expr Expr;
 struct Expr {
     Expr_Kind kind; 
     Type *type;
-    Register reg; 
+    Register reg;  // I should remove this
     
     union {
-        struct Grouping {
-            Expr *expr; 
-        } grouping;
         
         struct Literal {
             Type_Kind kind;
@@ -197,7 +194,6 @@ internal Statement *get_curr_scope(Translation_Unit *tu);
 internal void push_scope(Translation_Unit *tu, Statement *block);
 internal Statement *pop_scope(Translation_Unit *tu);
 internal bool add_symbol(Block *block, Symbol *decl); /* adds a symbol decloration to the block */ 
-// TODO(ziv): change the names? 
 internal Symbol *symbol_exist(Block *block, Token name); /* returns the symbol found inside a block */
 internal Symbol *local_exist(Translation_Unit *tu, Token var_name); /* returns the symbol found inside the translation unit */ 
 
@@ -215,7 +211,7 @@ internal Statement *parse_statement(Translation_Unit* tu);
 internal Statement *parse_expr_stmt(Translation_Unit* tu);
 internal Statement *parse_return_stmt(Translation_Unit* tu);
 
-internal Type   *parse_type(Translation_Unit *tu);
+internal Type      *parse_type(Translation_Unit *tu);
 
 /* resolving expressions */
 internal Expr *parse_expression(Translation_Unit* tu);
@@ -239,6 +235,8 @@ internal Statement *init_expr_stmt(Expr *expr);
 internal Statement *init_return_stmt(Expr *expr);
 internal Statement *init_var_decl_stmt(Symbol *symb);
 internal Statement *init_func_decl_stmt(Token name, Type *ty, Statement *sc);
+internal Statement *init_if_stmt(Expr *condition, Token position, Statement *true_block,  Statement *false_block);
+internal Statement *init_while_stmt(Expr *condition, Statement *block);
 
 internal Type      *init_type(Type_Kind kind, Type *subtype, Vector *symbols);
 internal Symbol    *init_symbol(Token name, Type *type, Expr *initializer);
