@@ -200,7 +200,7 @@ internal Expr *parse_primary(Translation_Unit* tu) {
         return init_lvar(var_name);
     }
     
-    if (match(tu, TK_LPARAN, TK_RPARAN)) {
+    if (match(tu, TK_LPARAN)) {
         Expr *expr = parse_expression(tu); 
         consume(tu, TK_RPARAN, "Expected ')' after expression"); 
         return expr; 
@@ -226,6 +226,7 @@ internal Expr *parse_primary(Translation_Unit* tu) {
     if (not_literal.kind < TK_DOUBLE_ASCII) {
         sprintf(buff, "operation '%c' requires two operands", not_literal.kind);
         syntax_error(tu, not_literal, buff); 
+        parse_syncronize(tu);
         return NULL;
     }
     temp = str8_to_cstring(not_literal.str); 

@@ -196,7 +196,7 @@ internal Statement *pop_scope(Translation_Unit *tu);
 internal bool add_symbol(Block *block, Symbol *decl); /* adds a symbol decloration to the block */ 
 internal Symbol *symbol_exist(Block *block, Token name); /* returns the symbol found inside a block */
 internal Symbol *local_exist(Translation_Unit *tu, Token var_name); /* returns the symbol found inside the translation unit */ 
-
+internal void parse_syncronize(Translation_Unit *tu);
 ////////////////////////////////
 
 /* resolving statements */

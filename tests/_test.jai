@@ -1,77 +1,45 @@
 
-puts :: (val: string) -> void; // extrenal function puts
+some_function :: (a: u8, b: u16, c: u32, d: int) -> int {
+	return cast(int)a + cast(int)b + cast(int)c + d;
+}
 
 main :: () -> int {
-    
-	result: bool = false; 
-    
-	answer1: int = fib_recursive(10);
-	answer2: int = fib_iterative(10); 
-    
-	if !(answer1 == answer2 && answer1 == 55) {
+
+
+	if 1 {
 		return 0;
 	}
+
+	while true {
+		return variable_which_does_not_exist;
+	} 
 	
-	answer1 = fib_recursive(5); 		
-	answer2 = fib_iterative(5); 
-    
-	if !(answer1 == answer2 && answer1 == 5) {
-		return 0; 
+	do_not_finish_statement_properly
+
+	s: int = 10;
+	if 6 > 0 == true {
+		i: int = 10;
+		s;	
 	}
-    
-	puts("correct answer");
-    
-	return 1;
-}
+		
+	i;
 
-fib_recursive :: (index: int) -> int {
-	if index < 2 {
-		return index;
-	}
-    
-	return fib_recursive(index-1) + fib_recursive(index-2);
-}
+	value: string = 9;
+	
+	other_value: u8 = "string" + 89;
 
-fib_iterative :: (index: int) -> int {
-	a: int = 0; 
-	b: int = 1; 
-	temp: int = 0;
-    
-	i: int = 0; 
-	while i < index {
-		temp = a + b; 
-		a = b; 
-		b = temp; 
-		i = i + 1; 
-	}
-    
-	return a;
-}
+	some_other_value: int = 8***;
+
+	8*8;
+
+	8+
+
+	yo: string = "yo";
 
 
+	yo = some_function(1, 2, 3, 4, 3);
+	
 
 
-
-
-// external function puts
-puts :: (str: string) -> int; 
-
-main :: () -> int {
-	i: int = 0; // there is also support for &, |, ^, +, -, *, /
-    
-	while (i < 5) {
-		puts("something");
-		i = i + 1; 
-	}
-    
-    {
-        something: int = 0; // recursive scopes
-    }
-    
-    var: bool = i > 5;
-    if var && true { // you can try to use the || operator insted 
-        return 0;
-    }
-    
-    return i;
+	return 0;
 }

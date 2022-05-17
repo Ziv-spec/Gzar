@@ -464,6 +464,7 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
             Vector *call_args = expr->call.args->args;
             Vector *func_args = function_type->symbols;
             
+            bool success = true; 
             
             int call_args_count = call_args->index;
             int func_args_count = func_args->index; 
@@ -473,6 +474,7 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
                 
                 sprintf(buff, msg, func_args_count, call_args_count); 
                 type_error(tu, expr->call.name->lvar.name, NULL, NULL, buff);
+                success = false; 
             }
             
             //
@@ -481,7 +483,7 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
             //
             
             Statement *block = get_curr_scope(tu);
-            int len = call_args_count;
+            int len = MIN(call_args_count, func_args_count);
             for (int i = 0; i < len; i++) { 
                 Symbol *symb = (Symbol *)func_args->data[i];
                 Expr *call_expr = (Expr *)call_args->data[i];
@@ -495,7 +497,12 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
                 
                 if (!type_equal(func_arg_type, call_arg_type)) {
                     type_error(tu, expr->call.name->lvar.name, func_arg_type, call_arg_type, "Unexpected incompatible types `%s` != `%s`");
+                    success = false; 
                 }
+            }
+            
+            if (!success) {
+                return NULL;
             }
             
             // NOTE(ziv): if the function subtype is NULL that means that I am returning a void 
