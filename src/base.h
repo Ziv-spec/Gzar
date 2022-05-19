@@ -530,6 +530,32 @@ internal void *pool_alloc_align(M_Pool *m, size_t size, size_t align) {
     return arena_alloc_align(a, size, align); 
 }
 
+internal void *pool_alloc(M_Pool *m, size_t size) {
+    return pool_alloc_align(m, size, DEFAULT_ALIGNMENT);
+}
+
+internal void *pool_resize_align(M_Pool *m, void *old_memory, size_t old_size, size_t new_size, size_t align) {
+    Assert(m != NULL);
+    
+    void *new_memory = arena_resize_align(m->last, old_memory, old_size, new_size, align);
+    if (new_memory) {
+        return new_memory;
+    } 
+    
+    M_Arena *a = (M_Arena *)malloc(m->pool_size);
+    Assert(a || !"Memory is out of bounds of the bufffer in this arena");
+    arena_init(a, (unsigned char *)a + sizeof(M_Arena), m->pool_size-sizeof(M_Arena));
+    
+    m->last->next = a;
+    m->last = a; 
+    
+    new_memory = arena_alloc_align(a, new_size, align);
+    memcpy(new_memory, old_memory, old_size); 
+    
+    return new_memory;
+    
+}
+
 internal void pool_free(M_Pool *m) {
     
     M_Arena *a = m->first;

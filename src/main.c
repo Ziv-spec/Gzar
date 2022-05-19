@@ -89,61 +89,11 @@ struct Register {
 #include "sema.c"
 #include "x86.c"
 
-
-//~ TODO(ziv): REMOVE THIS PLEASE!!! 
-#pragma warning( disable : 4702 )
-
 int main(int argc, char *argv[]) {
     
     // 
     // handle the compiler options
     // 
-    
-    M_Arena m = {0}; 
-    
-    size_t size = 1024; // 1kb
-    void *mbuff = malloc(size); 
-    arena_init(&m, mbuff, size); 
-    
-    void *resulting_mem1 = arena_alloc(&m, 8); 
-    void *resulting_mem2 = arena_alloc(&m, 8); 
-    void *resulting_mem3 = arena_alloc(&m, size); 
-    void *resulting_mem4 = arena_alloc(&m, 1); 
-    void *resulting_mem5 = arena_alloc(&m, 32); 
-    
-    void *resulting_mem6 = arena_resize(&m, resulting_mem5, 32, 64);
-    resulting_mem6 ;
-    resulting_mem4; resulting_mem5; 
-    resulting_mem1; resulting_mem2; 
-    
-    Assert(resulting_mem3 != NULL); // couldn't allocate or whatever 
-    
-    M_Pool p = {0};
-    pools_init(&p, 1024); 
-    
-    void *result1 = pool_alloc_align(&p, 8, 16);
-    void *result2 = pool_alloc_align(&p, 10, 16);
-    void *result3 = pool_alloc_align(&p, 1, 16);
-    
-    pool_alloc_align(&p, 900, 16);
-    pool_alloc_align(&p, 900, 16);
-    pool_alloc_align(&p, 900, 16);
-    pool_alloc_align(&p, 900, 16);
-    pool_alloc_align(&p, 900, 16);
-    pool_alloc_align(&p, 900, 16);
-    pool_alloc_align(&p, 900, 16);
-    
-    void *result4 = pool_alloc_align(&p, 900, 16);
-    void *result5 = pool_alloc_align(&p, 900, 16);
-    result1; result2; result3; result4; result5;
-    
-    
-    pool_free(&p);
-    
-    //void *reuslt = pool_alloc_align(&p, 8, 16); 
-    
-    return 0;
-    
     
     if (argc != 2) {
         fprintf(stdout, "Usage: <source>.gzr\n");
@@ -159,6 +109,7 @@ int main(int argc, char *argv[]) {
     FILE *file = fopen(filename, "rb");
     if (!file) {
         fprintf(stderr, "Error: failed to open file '%s'\n", filename);
+        return 0;
     }
     
     fseek(file, 0, SEEK_END);
@@ -195,11 +146,9 @@ int main(int argc, char *argv[]) {
     
     CLOCK_START(SEMA);
     success = sema_translation_unit(&tu);
-    CLOCK_END(SEMA);
-    
-    if (!success) {
+    if (success == false)
         return 0;
-    }
+    CLOCK_END(SEMA);
     
 #if 0 
     char assembly_file_name[100] = { 0 }; 
