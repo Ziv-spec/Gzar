@@ -150,8 +150,7 @@ struct Statement {
     };
 };
 
-typedef struct Translation_Unit 
-Translation_Unit; 
+typedef struct Translation_Unit Translation_Unit; 
 struct Translation_Unit {
     Token_Stream *restrict s; // Stream of tokens from the lexer
     Vector *unnamed_strings;  // constnat strings which don't have a name (used in the x86 gen)
@@ -160,6 +159,9 @@ struct Translation_Unit {
     // anything that defines a scope can be in here. e.g. functions/blocks
     Vector *scopes; 
     int offset; 
+    
+    // memory pool from which most allocation will happen on
+    M_Pool m; 
     
 };
 
@@ -230,25 +232,25 @@ internal Expr *parse_primary(Translation_Unit* tu);
 ////////////////////////////////
 
 /* initializers for the different statements */ 
-internal Statement *init_scope(); 
-internal Statement *init_expr_stmt(Expr *expr); 
-internal Statement *init_return_stmt(Expr *expr);
-internal Statement *init_var_decl_stmt(Symbol *symb);
-internal Statement *init_func_decl_stmt(Token name, Type *ty, Statement *sc);
-internal Statement *init_if_stmt(Expr *condition, Token position, Statement *true_block,  Statement *false_block);
-internal Statement *init_while_stmt(Expr *condition, Statement *block);
+internal Statement *init_scope(M_Pool *mem); 
+internal Statement *init_expr_stmt(M_Pool *mem, Expr *expr); 
+internal Statement *init_return_stmt(M_Pool *mem, Expr *expr);
+internal Statement *init_var_decl_stmt(M_Pool *mem, Symbol *symb);
+internal Statement *init_func_decl_stmt(M_Pool *mem, Token name, Type *ty, Statement *sc);
+internal Statement *init_if_stmt(M_Pool *mem, Expr *condition, Token position, Statement *true_block,  Statement *false_block);
+internal Statement *init_while_stmt(M_Pool *mem, Expr *condition, Statement *block);
 
-internal Type      *init_type(Type_Kind kind, Type *subtype, Vector *symbols);
-internal Symbol    *init_symbol(Token name, Type *type, Expr *initializer);
+internal Type      *init_type(M_Pool *mem, Type_Kind kind, Type *subtype, Vector *symbols);
+internal Symbol    *init_symbol(M_Pool *mem, Token name, Type *type, Expr *initializer);
 
 /* initializers for the different types of expressions */ 
-internal Expr *init_binary(Expr *left, Token operation, Expr *right); 
-internal Expr *init_unary(Token operation, Type *type, Expr *right); 
-internal Expr *init_literal(void *data, Type_Kind kind); 
-internal Expr *init_grouping(Expr *expr); 
-internal Expr *init_assignment(Expr *lvalue, Expr *rvalue);
-internal Expr *init_call(Expr *name, Expr *args); 
-internal Expr *init_arguments(Vector *args); 
-internal Expr *init_lvar(Token name);
+internal Expr *init_binary(M_Pool *mem, Expr *left, Token operation, Expr *right); 
+internal Expr *init_unary(M_Pool *mem, Token operation, Type *type, Expr *right); 
+internal Expr *init_literal(M_Pool *mem, void *data, Type_Kind kind); 
+internal Expr *init_grouping(M_Pool *mem, Expr *expr); 
+internal Expr *init_assignment(M_Pool *mem, Expr *lvalue, Expr *rvalue);
+internal Expr *init_call(M_Pool *mem, Expr *name, Expr *args); 
+internal Expr *init_arguments(M_Pool *mem, Vector *args); 
+internal Expr *init_lvar(M_Pool *mem, Token name);
 
 #endif //PARSER_H

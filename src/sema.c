@@ -435,16 +435,12 @@ internal Type *sema_expr(Translation_Unit *tu, Expr *expr) {
                     Assert(!"Not implemented");
                 }
                 
-                
-                
                 /* 
                                 case TK_STAR: {
                                     if (rhs->kind == TYPE_POINTER) return rhs; 
                                     type_error(tu, expr->unary.operation, rhs, NULL,  "Incompatible type, must be pointer for dereference operation");
-                                    
                                 } break; 
                                  */
-                
                 
             } 
             
@@ -532,22 +528,22 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
         case STMT_RETURN:
         case STMT_EXPR: {
             Type *ty = sema_expr(tu, stmt->expr); // expr is the same as ret in this case
-            return ty ? true : false; 
+            return ty ? true : false;
         } break; 
         
-        
+		
         
         case STMT_FUNCTION_DECL: {
             
             if (is_at_global_block(tu)) {
-                add_symbol(&((Statement *)tu->scopes->data[0])->block, init_symbol(stmt->func.name, stmt->func.type, NULL));
+                add_symbol(&((Statement *)tu->scopes->data[0])->block, init_symbol(&tu->m, stmt->func.name, stmt->func.type, NULL));
             }
-            else {
-                if (stmt->func.sc)
-                    add_symbol(&stmt->func.sc->block, init_symbol(stmt->func.name, stmt->func.type, NULL));
-                else 
-                    return false;
+            else if (stmt->func.sc) {
+                    add_symbol(&stmt->func.sc->block, init_symbol(&tu->m, stmt->func.name, stmt->func.type, NULL));
             }
+			else {
+				return false;
+			}
             
             push_scope(tu, stmt);
             
@@ -674,14 +670,16 @@ internal bool sema_statement(Translation_Unit *tu, Statement *stmt) {
             Type *ty = sema_expr(tu, stmt->if_else.condition);
             if (!ty) return false;
             
-            if (ty->kind != TYPE_BOOL)
-                type_error(tu, stmt->if_else.position , get_atom(TYPE_BOOL), ty, "Expected boolean type `%s` != `%s`");
-            
-            if (!sema_statement(tu, stmt->if_else.true_block)) 
+            if (ty->kind != TYPE_BOOL) {
+                type_error(tu, stmt->if_else.position, get_atom(TYPE_BOOL), ty, "Expected boolean type `%s` != `%s`");
+            }
+			
+            if (stmt->if_else.true_block && 
+				!sema_statement(tu, stmt->if_else.true_block) || 
+				stmt->if_else.false_block && 
+				!sema_statement(tu, stmt->if_else.false_block)) {
                 return false; 
-            
-            if (stmt->if_else.false_block && !sema_statement(tu, stmt->if_else.false_block))
-                return false; 
+			}
             
             return true; 
         } break;

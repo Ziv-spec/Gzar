@@ -7,7 +7,7 @@ main :: () -> int {
 	result: bool = false; 
 	
 	answer1: int = fib_recursive(10);
-	answer2: int = fib_iterative(18); 
+	answer2: int = fib_iterative(10); 
 
 	print_num_backwards(answer1); 
 	print_char(10); // printing the new line \n character

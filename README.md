@@ -20,6 +20,7 @@ The compiler will output unoptimized assembly masm syntax
 
 ```c
 // external function puts
+/*
 puts :: (str: string) -> int; 
 
 main :: () -> int {
@@ -43,3 +44,65 @@ main :: () -> int {
 }
 
 ```
+
+ Language spec
+ *  - at least one
+ ?  - 0 or more times
+ |  - expands the possible space
+ () - groups
+ "" - string which represents the
+      combination of charatcters
+      needed for a certain token
+      in the language
+
+ program -> decloration*
+
+ block -> "{" statement* "}"
+
+ decloration -> variable_decl
+     | function_decl
+     | statement
+
+ statement -> expression
+     | while
+     | if
+     | block
+     | decloration
+     | return
+
+ expression -> expression
+     | call
+     | unary
+     | binary
+     | grouping
+     | arguments
+     | assignment
+     | literal
+
+ literal -> number | string | "true" | "false" | "nil"
+ cast -> "cast" "(" type ")" expression
+ call -> identifier "(" arguments ")"
+ unary -> ("-" | "!" | cast ) expression
+ grouping -> "(" expression ")"
+ binary -> expression operator expression
+ operator -> "==" | "!=" | ">=" | "<=" | "<" |
+            ">" | "+" | "-" | "*" | "/" | "&" |
+            "|" | "^" | "&&" | "||" | "%"
+
+ number -> "0-9"*
+ string -> """ any character between the " are accepted  """
+ variable_decl -> identifier ":" type ( ("=" expression) | ";" )
+ function_decl -> identifier "::" grouping "->" return_type block
+
+ identifier -> "A-Z" | "a-z" | "_"
+
+ type -> "*"? ( "u64" | "u32" | "u8" |
+                "s64" | "s32" | "s8" |
+                "int" | "string" | "bool" |
+                "*void")
+
+ return_type type | "void"
+
+ if -> ("if" expression block ) | ("if" expression block "else" block )
+ while -> "while" expression block
+*/

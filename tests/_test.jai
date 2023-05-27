@@ -1,45 +1,72 @@
 
-some_function :: (a: u8, b: u16, c: u32, d: int) -> int {
-	return cast(int)a + cast(int)b + cast(int)c + d;
-}
+putchar :: (val: u8) -> void; 
+puts :: (val: string) -> void; // extrenal function puts
 
 main :: () -> int {
-
-
-	if 1 {
+    
+	result: bool = false; 
+	
+	answer1: int = fib_recursive(10);
+	answer2: int = fib_iterative(18); 
+    
+	print_num_backwards(answer1); 
+	print_char(10); // printing the new line \n character
+    
+	print_num_backwards(answer2); 
+	print_char(10); // printing the new line \n character
+    
+	if !(answer1 == answer2 && answer1 == 55) {
 		return 0;
 	}
-
-	while true {
-		return variable_which_does_not_exist;
-	} 
 	
-	do_not_finish_statement_properly
-
-	s: int = 10;
-	if 6 > 0 == true {
-		i: int = 10;
-		s;	
+	answer1 = fib_recursive(5);	
+	answer2 = fib_iterative(5); 
+    
+	if !(answer1 == answer2 && answer1 == 5) {
+		return 0; 
 	}
-		
-	i;
+    
+	puts("correct answer");
+    
+	return 1;
+}
 
-	value: string = 9;
-	
-	other_value: u8 = "string" + 89;
+fib_recursive :: (index: int) -> int {
+	if index < 2 {
+		return index;
+	}
+    
+	return fib_recursive(index-1) + fib_recursive(index-2);
+}
 
-	some_other_value: int = 8***;
+fib_iterative :: (index: int) -> int {
+	a: int = 0; 
+	b: int = 1; 
+	temp: int = 0;
+    
+	i: int = 0; 
+	while i < index {
+		temp = a + b; 
+		a = b; 
+		b = temp; 
+		i = i + 1; 
+	}
+    
+	return a;
+}
 
-	8*8;
+print_char :: (ch: int) -> void { 
+	putchar(cast(u8)ch);
+}
 
-	8+
-
-	yo: string = "yo";
-
-
-	yo = some_function(1, 2, 3, 4, 3);
-	
-
-
-	return 0;
+// probably to have it be backwards I can use an array 
+// otherwise I don't think that I can do much here
+print_num_backwards :: (num: int) -> void {
+	zero: u8 = 48; // character zero
+	remainder: int = 0; 
+	while num > 0 {
+		remainder = num % 10;
+		putchar(zero + cast(u8)remainder);
+		num = num / 10; 
+	}
 }
