@@ -3,8 +3,6 @@
 // PE Executable
 //
 
-#define MOVE(dest, src, size) do { memcpy(dest, src, size); dest += size; } while(0)
-
 internal inline int align(int x, int alignment) {
 	int remainder = x % alignment; 
 	return remainder ? (x - remainder + alignment) : x;
@@ -193,6 +191,7 @@ internal int write_pe_exe(const char *file,
 	//
 	
 	{
+#define MOVE(dest, src, size) do { memcpy(dest, src, size); dest += size; } while(0)
 		MOVE(pexe, image_stub_and_signiture, sizeof(image_stub_and_signiture)); 
 		MOVE(pexe, &nt_headers,    sizeof(nt_headers));
 		MOVE(pexe, &text_section,  sizeof(text_section));
