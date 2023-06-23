@@ -54,7 +54,7 @@ fib_iterative :: (index: int) -> int {
 
 	return a;
 }
-  
+ 
 print_char :: (ch: int) -> void { 
 	putchar(cast(u8)ch);
 }

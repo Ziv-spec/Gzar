@@ -571,9 +571,6 @@ internal bool map_next(Map_Iterator *it) {
 
 // NOTE(ziv): THIS WILL WORK ONLY IF YOU COMPILE WITH MSVC
 
-#include <Windows.h>
-
-
 #if TIMINGS
 
 enum {

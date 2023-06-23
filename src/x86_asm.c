@@ -1,4 +1,3 @@
-
 internal void gen_translation_unit(Translation_Unit *tu, const char *filename); 
 internal void stmt_gen(Translation_Unit *tu, Statement *func, Statement *stmt);
 internal void expr_gen(Translation_Unit *tu, Type *func_ty, Expr *expr);
