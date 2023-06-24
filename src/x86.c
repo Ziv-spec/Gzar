@@ -402,7 +402,7 @@ internal char *is_function_in_module(Builder *builder, const char *module, const
 	return NULL; 
 }
 
-internal Operand x86_c_function(Builder *builder, const char *module, const char *function) {
+internal Operand x86_function(Builder *builder, const char *module, const char *function) {
 	Operand result = { Val, .value = builder->jumpinstructions_count | (JUMPINSTRUCTIONS_TABLE_KIND << (32-4)) };
 	
 	Name_Location *v = &builder->jumpinstructions[builder->jumpinstructions_count++]; 
@@ -413,6 +413,9 @@ internal Operand x86_c_function(Builder *builder, const char *module, const char
 	return result; 
 }
 
+internal Operand x86_c_function() { 
+	
+}
 
 
 

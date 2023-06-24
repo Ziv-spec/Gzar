@@ -46,12 +46,6 @@ int main() {
 	
 	
 	
-	
-	
-	
-	
-	
-	
 	//~
 	// Generate Code
 	//
@@ -75,7 +69,6 @@ encode(builder, add, REG(RAX), IMM(0x10));
 	
 	
 	char program[0x60] = { 0 };
-
 	Name_Location labels[0x50] = {0}; 
 	Name_Location data_variables[0x50] = {0}; 
 	Name_Location jumpinstructions[0x50] = {0}; 
@@ -88,8 +81,7 @@ encode(builder, add, REG(RAX), IMM(0x10));
 		.labels = labels,
 		.data_variables = data_variables,
 		
-		.vs_sdk = find_visual_studio_and_windows_sdk()
-		
+		.vs_sdk = find_visual_studio_and_windows_sdk(),
 	};
 	
 	
@@ -180,7 +172,6 @@ encode(builder, add, REG(RAX), IMM(0x10));
 	unsigned int code_size = bytes_count;
  */
 
-/* 
 	// without image dos stub
 		char code[] = {
 			0x48, 0x83, 0xec, 0x28,
@@ -192,7 +183,6 @@ encode(builder, add, REG(RAX), IMM(0x10));
 			0xb9, 0, 0, 0, 0,
 			0xff, 0x14, 0x25, 0x78, 0x20, 0x40, 0, 
 		};
- */
 
 	// data section info
 	char hello_world[]   = "Hello World!";
@@ -204,22 +194,25 @@ encode(builder, add, REG(RAX), IMM(0x10));
 	
 	// idata section info, this defines functions you want to import & their respective dll's
 	Entry entries[] = {
-		{"kernel32.dll", (char *[]){ "ExitProcess", 0 }},
-		{"user32.dll",   (char *[]){ "MessageBoxA", 0 }},
+		{"kernel32.dll", (char *[]){ "\0\0ExitProcess", 0 }},
+		{"user32.dll",   (char *[]){ "\0\0MessageBoxA", 0 }},
 	};
 	
 	builder.data = data; 
 	builder.data_size = sizeof(data); 
-	//builder.code = code; 
-	//builder.code_size = sizeof(code); 
+	code; 
+/* 	
+	builder.code = code; 
+	builder.code_size = sizeof(code); 
+ */
+	
 	builder.code = program; 
 	builder.code_size = sizeof(program); 
-	//printf("%d\n", builder.code_size); 
 	
 	builder.entries = entries; 
 	builder.entries_count = ArrayLength(entries);
 		
-	write_pe_exe("test.exe", &builder); 
+	 write_pe_exe("test.exe", &builder); 
 	
 	return 0;
 }

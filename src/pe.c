@@ -11,7 +11,7 @@ internal inline int align(int x, int alignment) {
 internal int write_pe_exe(const char *file, 
 						  Builder *builder) {
 	
-	//
+//
 	// PE executable NT signiture, DOS stub, NT headers
 	//
 	
@@ -85,12 +85,12 @@ internal int write_pe_exe(const char *file,
 		Entry entry = builder->entries[i];
 		char **fnames = entry.function_names, **fnames_temp = fnames;
 		for (; *fnames_temp; fnames_temp++) 
-			function_names_size += (int)(strlen(*fnames_temp) + 1 + 2); // +2 for 'HINT'
+			function_names_size += (int)(strlen(*fnames_temp+2) + 1 + 2); // +2 for 'HINT'
 		int_tables_size += (int)(sizeof(size_t) * (fnames_temp-fnames+1));
 		module_names_size += (int)(strlen(entry.dll_name) + 1);
 	}
 	int idata_size = descriptors_size + int_tables_size*2 + function_names_size + module_names_size;
-	
+			
 	
 	IMAGE_SECTION_HEADER text_section = { 
 		.Name = ".text",
@@ -170,12 +170,12 @@ internal int write_pe_exe(const char *file,
 		// filling function names, int table and iat table
 		char **fnames = builder->entries[i].function_names, **fnames_start = fnames;
 		for (; *fnames; fnames++) {
-			int copy_size = (int)strlen(*fnames)+1;
+			int copy_size = (int)strlen(*fnames+2)+1+2;
 			// NOTE(ziv): first two bytes are used for 'HINT'
-			memcpy(function_names + function_names_offset + 2, *fnames, copy_size); 
+			memcpy(function_names + function_names_offset, *fnames, copy_size); 
 			// fill the function's addresses into the INT and IAT tables. 
 			*int_tables++ = *iat_tables++ = (size_t)function_names_base_address + function_names_offset;
-			function_names_offset += copy_size + 2; 
+			function_names_offset += copy_size; 
 		}
 		int_tables_offset += (int)(sizeof(size_t) * ((fnames-fnames_start)+1)); 
 		int_tables++; iat_tables++; // for NULL address

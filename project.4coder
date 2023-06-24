@@ -29,13 +29,6 @@ commands = {
 		.save_dirty_files = true,
 		.cursor_at_end = false,
 	},
-	.run = {
-		.win = "run.bat",
-        .out = "*run*",
-        .footer_panel = false,
-		.save_dirty_files = false,
-		.cursor_at_end = false, 
-	},
     .test = {
         .win = "%cd%/test.bat",
         .out = "*test*",
@@ -47,6 +40,5 @@ commands = {
 
 fkey_command = {
 	.F1 = "build",
-    .F2 = "run",
     .F3 = "test", 
 };
