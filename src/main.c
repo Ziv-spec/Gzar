@@ -120,9 +120,9 @@ encode(builder, add, REG(RAX), IMM(0x10));
 	Name_Location *name = x86_get_name_location_from_value(&builder, v);
 	*/
 	
-	encode(&builder, mov, REG(R8D), x86_lit(&builder, "some string"));
-	encode(&builder, mov, REG(R9),  x86_label(&builder, ".L1"));
-	encode(&builder, mov, REG(R8D), x86_lit(&builder, "some"));
+	x86_encode(&builder, mov, REG(R8D), x86_lit(&builder, "some string"));
+	x86_encode(&builder, mov, REG(R9),  x86_label(&builder, ".L1"));
+	x86_encode(&builder, mov, REG(R8D), x86_lit(&builder, "some"));
 
 /* 	
 	Operand op = x86_lit(&builder, "some string");

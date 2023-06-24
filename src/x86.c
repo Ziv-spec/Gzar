@@ -351,7 +351,6 @@ internal char *is_function_in_module(Builder *builder, const char *module, const
 	
 	
 	// search for function name inside the String Table
-	
 	unsigned int string_table_idx = 0; 
 	int function_length = (int)strlen(function); 
 	
@@ -366,7 +365,6 @@ internal char *is_function_in_module(Builder *builder, const char *module, const
 	unsigned short offsets_idx = indicies[string_table_idx];
 	unsigned long offset = offsets[offsets_idx-1];
 	//IMAGE_ARCHIVE_MEMBER_HEADER *function_member_header = (IMAGE_ARCHIVE_MEMBER_HEADER *)(buff + offset);
-	
 	
 	// https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#import-library-format
 	typedef struct {
@@ -383,7 +381,7 @@ internal char *is_function_in_module(Builder *builder, const char *module, const
 		WORD    Type; 
 	} OBJECT_HEADER;
 	
-	OBJECT_HEADER *obj_header = (OBJECT_HEADER *)(buff + offset +sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
+	OBJECT_HEADER *obj_header = (OBJECT_HEADER *)(buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
 	
 	/* 	
 		int function_member_size = atoi((const char *)function_member_header->Size);
@@ -429,7 +427,7 @@ internal Operand x86_c_function(Builder *builder, const char *module, const char
 #define LOCATION_DISP  (1 << 4)
 #define LOCATION_CONST (1 << 5)
 
-internal void encode(Builder *builder, Instruction *inst, Operand to, Operand from) {
+internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operand from) {
 	// don't allow for MEM->MEM, I->I, Any->I kinds of instructions
 	Assert(!(to.kind == from.kind && ((to.kind == M || to.kind == I) || to.kind == I))); 
 	
