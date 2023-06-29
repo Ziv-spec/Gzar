@@ -11,6 +11,23 @@ internal inline int align(int x, int alignment) {
 internal int write_pe_exe(const char *file, 
 						  Builder *builder) {
 	
+	// find out whether all external functions have their references in known locations
+	{
+		
+		for (int lib_idx = 0; lib_idx < builder->external_library_paths_count; lib_idx++) {
+			char *module = builder->external_library_paths[lib_idx];
+			char *dynamic_library = is_function_in_module(builder, module, ); 
+			
+			
+			
+		}
+		
+		
+		
+	}
+	
+	
+	
 //
 	// PE executable NT signiture, DOS stub, NT headers
 	//
@@ -185,6 +202,56 @@ internal int write_pe_exe(const char *file,
 		memcpy(module_names + module_names_offset, builder->entries[i].dll_name, copy_size);
 		module_names_offset += (int)copy_size;
 	}
+	
+	
+	//~
+	// Patch real addresses to code
+	//
+	
+	
+	
+	// Fill addresses to functions from dynamic libraries 
+	{
+		
+	}
+	
+	
+	
+	printf("Before: ");  
+	for (int i = 0; i < builder->bytes_count; i++) { printf("%02x", builder->code[i]&0xff); } printf("\n"); 
+	/* 	
+		 */
+	
+	// maybe I should just use relative locations for all of those things? 
+	// this is a good question to be asked of how to handle it.
+	int base = 0x4000;
+	for (int i = 0; i < builder->data_variables_count; i++) {
+		Name_Location nl = builder->data_variables[i];
+		int location = nl.location + base;
+		memcpy(&builder->code[nl.location_to_patch], &location, sizeof(nl.location));
+	}
+	
+	base = 0x1000;
+	for (int i = 0; i < builder->labels_count; i++) {
+		Name_Location nl = builder->labels[i];
+		int location = nl.location + base;
+		memcpy(&builder->code[nl.location_to_patch], &location, sizeof(nl.location));
+	}
+	
+	// this might be more specific? 
+	base = 0x9000;
+	for (int i = 0; i < builder->jumpinstructions_count; i++) {
+		Name_Location nl = builder->jumpinstructions[i];
+		int location = nl.location + base;
+		memcpy(&builder->code[nl.location_to_patch], &location, sizeof(nl.location));
+		printf("path location %d\n", nl.location_to_patch);
+	}
+	
+	printf("After: ");
+	for (int i = 0; i < builder->bytes_count; i++) { printf("%02x", builder->code[i]&0xff); } printf("\n"); 
+	/* 	 
+		 */
+	
 	
 	//~
 	// Creating final executable

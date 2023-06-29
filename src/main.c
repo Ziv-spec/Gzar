@@ -51,21 +51,22 @@ int main() {
 	//
 	
 	
+	
 	/* template for cool api for encoding instructions regardless of backend type
-Value lab = label(".L1"); 
-encode(builder, jmp, lab, NO_OPERAND); 
-
-Value func = function("Function");
-		encode(builder, call, func, NIL);
-		
-Value exit_process = c_function("kernel32.dll", "ExitProcess"); 
-		encode(builder, call, exit_process, NO_OPERAND);
-
-Value str = lit("some string");
-encode(builder, mov, lit("some string"), NO_OPERAND); 
-
-encode(builder, add, REG(RAX), IMM(0x10));
-		 */
+	Value lab = label(".L1"); 
+	encode(builder, jmp, lab, NO_OPERAND); 
+	
+	Value func = function("Function");
+			encode(builder, call, func, NIL);
+			
+	Value exit_process = c_function("kernel32.lib", "ExitProcess"); 
+			encode(builder, call, exit_process, NO_OPERAND);
+	
+	Value str = lit("some string");
+	encode(builder, mov, lit("some string"), NO_OPERAND); 
+	
+	encode(builder, add, REG(RAX), IMM(0x10));
+			 */
 	
 	
 	char program[0x60] = { 0 };
@@ -75,20 +76,21 @@ encode(builder, add, REG(RAX), IMM(0x10));
 
 	Builder builder = { 
 		.code = program, 
-		.current_instruction = program,
 		
-		.jumpinstructions = jumpinstructions,
 		.labels = labels,
 		.data_variables = data_variables,
+		.jumpinstructions = jumpinstructions,
 		
 		.vs_sdk = find_visual_studio_and_windows_sdk(),
 	};
 	
-	
+
+/* 	
 	char *dll_name = is_function_in_module(&builder, "kernel32.lib", "ExitProcess");
 	printf("dll name: %s\n", dll_name);
 	free(dll_name); 
-	
+	 */
+
 	
 /* 	
 	encode(&builder, sub,  REG(RSP), IMM(0x28));
@@ -112,10 +114,15 @@ encode(builder, add, REG(RAX), IMM(0x10));
 	Name_Location *name = x86_get_name_location_from_value(&builder, v);
 	*/
 	
+	// RELMEM will get used to get relative addresses to a function
+	// this means that labesl and so on will use it
+	 //x86_encode(&builder, call, RELMEM(&builder, 0x1111), NO_OPERAND);
+	
 	x86_encode(&builder, mov, REG(R8D), x86_lit(&builder, "some string"));
 	x86_encode(&builder, mov, REG(R9),  x86_label(&builder, ".L1"));
 	x86_encode(&builder, mov, REG(R8D), x86_lit(&builder, "some"));
-
+	x86_encode(&builder, mov, REG(RAX), x86_c_function(&builder, "ExitProcess")); 
+	
 /* 	
 	Operand op = x86_lit(&builder, "some string");
 	encode(&builder, mov, REG(R8D), op);
@@ -126,40 +133,6 @@ encode(builder, add, REG(RAX), IMM(0x10));
 	//int base = 0; // base address to be added to all relative locations? 
 	// or maybe I should just use relative locations for all of those things? 
 	// this is a good question to be asked of how to handle it.
-
-/* 	
-	printf("Before: ");  
-	for (int i = 0; i < bytes_count; i++) { printf("%02x", builder.code[i]&0xff); } printf("\n"); 
-	 */
-
-	// maybe I should just use relative locations for all of those things? 
-	// this is a good question to be asked of how to handle it.
-	int base = 0x4000;
-	for (int i = 0; i < builder.data_variables_count; i++) {
-		Name_Location nl = builder.data_variables[i];
-		int location = nl.location + base;
-		memcpy(&program[nl.location_to_patch], &location, sizeof(nl.location));
-	}
-	
-	 base = 0x1000;
-	for (int i = 0; i < builder.labels_count; i++) {
-		Name_Location nl = builder.labels[i];
-		int location = nl.location + base;
-		memcpy(&program[nl.location_to_patch], &location, sizeof(nl.location));
-	}
-	
-	// this might be more specific? 
-	base = 0x1000;
-	for (int i = 0; i < builder.jumpinstructions_count; i++) {
-		Name_Location nl = builder.jumpinstructions[i];
-		int location = nl.location + base;
-		memcpy(&program[nl.location_to_patch], &location, sizeof(nl.location));
-	}
-
-/* 	 
-	printf("After: ");
-	for (int i = 0; i < bytes_count; i++) { printf("%02x", builder.code[i]&0xff); } printf("\n"); 
-	 */
 
 	free_resources(&builder.vs_sdk);
 	
@@ -199,15 +172,16 @@ encode(builder, add, REG(RAX), IMM(0x10));
 	};
 	
 	builder.data = data; 
-	builder.data_size = sizeof(data); 
-	code; 
-/* 	
-	builder.code = code; 
-	builder.code_size = sizeof(code); 
- */
+		builder.data_size = sizeof(data); 
 	
-	builder.code = program; 
-	builder.code_size = sizeof(program); 
+	
+	/* 	
+				builder.code = code; 
+	builder.code_size = sizeof(code); 
+			 */
+builder.code = builder.code; 
+				builder.code_size = builder.bytes_count; 
+				code; 
 	
 	builder.entries = entries; 
 	builder.entries_count = ArrayLength(entries);

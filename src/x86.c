@@ -51,10 +51,11 @@ typedef struct Operand {
 #define NO_OPERAND ((Operand){0})
 
 typedef enum {
-	IK_OPCODE = 1,           // regular opcode
+	 IK_OPCODE = 1,           // regular opcode
 	IK_OPCODE_REG,           // opcode + in ModR/M byte the reg is specified here
-	IK_OPCODE_AL_AX_EAX_RAX, // opcode without ModR/M
-	IK_OPCODE_INST_REG,      // opcode without ModR/M
+	IK_OPCODE_AL_AX_EAX_RAX, // opcode without ModR/M ending in reg (3 bits)
+	IK_OPCODE_INST_REG,      // opcode without ModR/M instead, reg component inside opcode ending in reg (3 bits)
+	IK_OPCODE_CONTITION,     // conditional encoding ending in tttn (4 bits)
 } Instruction_Kind; 
 
 typedef enum {
@@ -68,13 +69,13 @@ typedef enum {
 	M = 1 << 6 | R, // memory/register
 	RelM = 1 << 7,  // relative memory
 	Val  = 1 << 8,  // constant of value e.g. 0x0
-	MVal = 1 << 9,  // memory of value e.g.  [0x0] 
+	ValM = 1 << 9,  // memory of value e.g.  [0x0] 
 } Instruction_Operand_Kind; 
 
 typedef struct {
 	Instruction_Kind kind;
 	u8 opcode; // TODO(ziv): don't assume opcode size = 1byte
-	u8 opcode_reg; // for IK_OPCODE_REG
+	u8 opcode_reg; // for IK_OPCODE_REG usually used for instructions with immediate values 
 	u8 operand_kind[2];
 } Instruction; 
 
@@ -153,6 +154,7 @@ static Instruction cmp[] = {
 
 static Instruction call[] = {
 	{ IK_OPCODE_REG, 0xff, 0x2, .operand_kind = { M |B16|B32|B64, 0x0 } },
+	{ IK_OPCODE_INST_REG, 0xe8, .operand_kind = { RelM |B16|B32, 0x0 } },
 	{0}
 };
 
@@ -170,39 +172,6 @@ static Instruction mov[] = {
 
 //~
 
-internal inline Operand REG(Register_Type reg_type) { return (Operand){R, .reg=reg_type }; }
-internal inline Operand IMM(int immediate) { return (Operand){I, .immediate=(immediate)}; }
-internal inline Operand MEM(Register_Type base, Register_Type index, char scale, int disp, int bitness) { 
-	return (Operand){M, .base=base, .index=index, .scale=scale, .disp=disp, .bitness=bitness }; 
-}
-
-static int bytes_count = 0; 
-
-/* 
-static u8 add_opcodes[] = {
-	0x0, 0x1, 0x2, 0x3, 0x80, 0x83, 0x81
-};
-
-static u8 add_operand_kinds[][2] = {
-	{ M  |B8,           R  |B8 },          // 0x0
-	{ M  |B16|B32|B64,  R  |B16|B32|B64 }, // 0x1
-	{ R  |B8,           M  |B8 },          // 0x2 
-	{ R  |B16|B32|B64,  M  |B16|B32|B64 }, // 0x3
-	{ M  |B8,           I  |B8 },          // 0x80
-	{ M  |B16|B32|B64,  I  |B8 },          // 0x83
-	{ M  |B16|B32|B64,  I  |B16|B32|B64 }, // 0x81
-};
-
-static u8 add_instruction_kinds[] = {
-	IK_OPCODE, IK_OPCODE, IK_OPCODE, IK_OPCODE, IK_OPCODE, IK_OPCODE, IK_OPCODE
-};
- */
-
-typedef struct { 
-	char *dll_name;
-	char **function_names;
-} Entry; 
-
 typedef enum {
 	LABELS_TABLE_KIND,
 	JUMPINSTRUCTIONS_TABLE_KIND,
@@ -216,9 +185,13 @@ typedef struct {
 	char *name;   // name of the thingy
 } Name_Location; 
 
+typedef struct { 
+	char *dll_name;
+	char **function_names;
+} Entry; 
+
 typedef struct {
 	char *code;
-	char *current_instruction;
 	int code_size; 
 	
 	const char *data; 
@@ -242,31 +215,46 @@ typedef struct {
 	
 	int current_data_variable_location; // used to keep track of location of `data_variables`
 	
-	// the maps will point to the memory initialized above?????
 	Map lables_map; 
-	Map jumpinstructions_map; 
-	Map variables_map; 
+	Map fixed_loc;
 	
+	// cursor which tells the bytes count aka the last count of the amount of bytes written
+	int bytes_count; 
 	
+	// list of external library paths e.g. kernel32.lib (in linux libc.so)
+	const char *external_library_paths;
+	int external_library_paths_count;
+	
+	// TODO(ziv): cache for the external library paths
+	
+	// result of visual studio sdk path on windows
 	Find_Result vs_sdk;
-	
 	} Builder; 
 
 
 
 
 
-internal Name_Location *x86_get_name_location_from_value(Builder *builder, Value v) {
-		Name_Location *nl_table[4] = { builder->labels , builder->jumpinstructions, builder->data_variables };
-	int idx  = v.idx & ((1<<28)-1);
-	int type = v.idx >> 28; 
-	return &nl_table[type][idx]; 
+internal inline Operand REG(Register_Type reg_type) { return (Operand){R, .reg=reg_type }; }
+internal inline Operand IMM(int immediate) { return (Operand){I, .immediate=(immediate)}; }
+internal inline Operand MEM(Register_Type base, Register_Type index, char scale, int disp, int bitness) { 
+	return (Operand){M, .base=base, .index=index, .scale=scale, .disp=disp, .bitness=bitness }; 
+}
+
+// TODO(ziv): replace this with label code 
+// have a global map which will substitude labels to the actual relative addresses 
+internal Operand RELMEM(Builder *builder, int relative_memory_address) {
+	Operand result = {  RelM, .value = builder->data_variables_count | (JUMPINSTRUCTIONS_TABLE_KIND << 28)}; 
+	Name_Location *v = &builder->jumpinstructions[builder->jumpinstructions_count++]; 
+	v->location = relative_memory_address ; 
+	v->name = NULL;
+	return result; 
 }
 
 internal Operand x86_label(Builder *builder, const char *label) {
 	Operand result = { Val, .value = builder->labels_count | (LABELS_TABLE_KIND << (32-4)) };
 	Name_Location *v = &builder->labels[builder->labels_count++]; 
-	v->location = (int)bytes_count;
+	v->location = builder->bytes_count;
 	v->name = (char *)label;
 	return result; 
 }
@@ -280,6 +268,15 @@ internal Operand x86_lit(Builder *builder, const char *literal) {
 	return result;
 }
 
+
+
+internal Name_Location *x86_get_name_location_from_value(Builder *builder, Value v) {
+	Name_Location *nl_table[4] = { builder->labels , builder->jumpinstructions, builder->data_variables };
+	int idx  = v.idx & ((1<<28)-1);
+	int type = v.idx >> 28; 
+	return &nl_table[type][idx]; 
+}
+ 
 internal char *is_function_in_module(Builder *builder, const char *module, const char *function) {
 	
 	if (!builder->vs_sdk.windows_sdk_version) {
@@ -288,20 +285,21 @@ internal char *is_function_in_module(Builder *builder, const char *module, const
 	
 	wchar_t *wchar_path = concat2(builder->vs_sdk.windows_sdk_um_library_path, L"\\"), *temp_wchar_path = wchar_path;
 	
+	// TODO(ziv): switch to using VirtualAlloc?
 	// convert wcahr to char 
 	char *path = (char *)malloc(wcslen(wchar_path)+strlen(module)+1), *temp_path = path; 
 	while ((char)*temp_wchar_path) *temp_path++ = (char)*temp_wchar_path++;
 	while (*module) *temp_path++ = *module++;
 	*temp_path = '\0';
 	
-	char *buff;
+	char *buff; // archive library buffer
 	{
 		
 		HANDLE handle = CreateFileA(path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 		Assert(handle != INVALID_HANDLE_VALUE && "Invalid handle");
 		
 		DWORD file_size = GetFileSize(handle, NULL), bytes_read;
-		buff = malloc(file_size);
+		buff = VirtualAlloc(NULL, file_size, MEM_COMMIT, PAGE_READWRITE); 
 		
 		BOOL success = ReadFile(handle, buff, file_size, &bytes_read, NULL);
 		CloseHandle(handle);
@@ -309,21 +307,24 @@ internal char *is_function_in_module(Builder *builder, const char *module, const
 		free(path);
 		
 		if (!success) {
+		VirtualFree(buff, 0, MEM_RELEASE);
 			return false;
 		}
 		
 	}
 	
-	//#define BIG_ENDIAN(x) ((x << 24) | ((x & 0xff00) << 8) | ((x & 0xff0000) >> 8) | (x >> 24))
-	
 	// start parsing the file
-	Assert(memcmp(buff, IMAGE_ARCHIVE_START, IMAGE_ARCHIVE_START_SIZE) == 0); 
+	if (memcmp(buff, IMAGE_ARCHIVE_START, IMAGE_ARCHIVE_START_SIZE) != 0) {
+		VirtualFree(buff, 0, MEM_RELEASE);
+		return false; 
+	}
 	IMAGE_ARCHIVE_MEMBER_HEADER *first_linker_member_header = (IMAGE_ARCHIVE_MEMBER_HEADER *)(buff + IMAGE_ARCHIVE_START_SIZE);
 	
 	// calculate size of first linker archive member
 	int member_size = 0;
 	{
 		
+		// TODO(ziv): make this be a atoi function
 		int exp_table[] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000 };
 		int size_str_length = 0; 
 		for (; '0' <= first_linker_member_header->Size[size_str_length] && first_linker_member_header->Size[size_str_length] <= '9'; size_str_length++);
@@ -339,21 +340,16 @@ internal char *is_function_in_module(Builder *builder, const char *module, const
 	
 	unsigned long n_offsets = *(unsigned long *)(second_linker_member);
 	int offsets_size = sizeof(unsigned long) + 4*n_offsets;
-	
 	unsigned long *offsets = (unsigned long *)(second_linker_member + sizeof(unsigned long));
-	
-	unsigned long n_symbols = *(unsigned long *)(second_linker_member + offsets_size);
 	int symbols_size = sizeof(unsigned long) + 2*n_symbols;
-	
+	unsigned long n_symbols = *(unsigned long *)(second_linker_member + offsets_size);
 	unsigned short *indicies = (unsigned short *)(second_linker_member + offsets_size + sizeof(unsigned long));
-	
 	char *string_table = (second_linker_member + offsets_size + symbols_size);
-	
 	
 	// search for function name inside the String Table
 	unsigned int string_table_idx = 0; 
 	int function_length = (int)strlen(function); 
-	
+	// TODO(ziv): optimize???
 	while (string_table_idx < n_symbols) {
 		int idx = 0;
 		for (; idx < function_length && string_table[idx] == function[idx]; idx++);
@@ -381,26 +377,40 @@ internal char *is_function_in_module(Builder *builder, const char *module, const
 		WORD    Type; 
 	} OBJECT_HEADER;
 	
-	OBJECT_HEADER *obj_header = (OBJECT_HEADER *)(buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
 	
-	/* 	
+	/* TODO(ziv): figure out whether I need this extra information for anything useful
+	OBJECT_HEADER *obj_header = (OBJECT_HEADER *)(buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
 		int function_member_size = atoi((const char *)function_member_header->Size);
 		int import_type      = obj_header->Type & 0x03;
 		int import_name_type = (obj_header->Type & 0x1c) >> 2;
 		 */
 	
-	char *function_and_dll_names = (char *)obj_header + sizeof(OBJECT_HEADER);
+	char *function_and_dll_names = buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER) + sizeof(OBJECT_HEADER);
 	
+	char *result = NULL; 
 	if (strcmp(function_and_dll_names, function) == 0) {
 		// duplicate string
 		char *dll_name = function_and_dll_names+function_length+1;
 		size_t dll_name_length = strlen(dll_name)+1;
 		char *copy_dll_name = malloc(dll_name_length);
 		memcpy(copy_dll_name, dll_name, dll_name_length);
-		return copy_dll_name;
+		result = copy_dll_name;
 	}
-	return NULL; 
+	
+	VirtualFree(buff, 0, MEM_RELEASE); 
+	return result;
 }
+
+
+internal Operand x86_c_function(Builder *builder, char *function) { 
+		Operand result = { Val, .value = builder->jumpinstructions_count | (JUMPINSTRUCTIONS_TABLE_KIND << 28)};
+		Name_Location *v = &builder->jumpinstructions[builder->jumpinstructions_count++];
+		v->location = 0; // NOTE(ziv): @Incomplete the location should get reset here at a later date 
+		v->name = function; 
+		return result;
+	
+}
+
 
 internal Operand x86_function(Builder *builder, const char *module, const char *function) {
 	Operand result = { Val, .value = builder->jumpinstructions_count | (JUMPINSTRUCTIONS_TABLE_KIND << (32-4)) };
@@ -412,11 +422,6 @@ internal Operand x86_function(Builder *builder, const char *module, const char *
 	module; function;
 	return result; 
 }
-
-internal Operand x86_c_function() { 
-	
-}
-
 
 
 
@@ -443,17 +448,21 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 	int require = MOD_RM, disp = 0; 
 	
 	Operand memory = {0}; 
-	
 	Name_Location *nl = 0;
+	
 	if (from.kind == Val) {
 		nl = x86_get_name_location_from_value(builder, from.value);
 		from = IMM(0x0);
 		require |= LOCATION_CONST;
 	}
-	else if (from.kind == MVal) {
+	else if (from.kind == ValM) {
 		nl = x86_get_name_location_from_value(builder, from.value);
 		from = MEM(0,0,0,0,0); 
 		require |= LOCATION_DISP; 
+	}
+	else {
+		// unary operation / operation with no operands
+		require |= 0;
 	}
 	
 	//
@@ -467,6 +476,13 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 	else if (to.kind == M) {
 		bitness_to = (char)to.bitness; memory = to; 
 		require |= SIB;
+	}
+	else if (to.kind == RelM) {
+		nl = x86_get_name_location_from_value(builder, to.value);
+		require |= LOCATION_CONST;
+		bitness_to = 4;
+		constant = nl->location;
+		require |= CONSTANT;
 	}
 	else {
 		Assert(false); // shouldn't be reaching this as of right now
@@ -497,10 +513,6 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 		}
 		
 		require |= CONSTANT;
-	}
-	else {
-		// unary operation / operation with no operands
-		require |= 0;
 	}
 	
 	
@@ -547,7 +559,7 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 		// check if correct instruction
 		int operands_kind = inst->operand_kind[0] << 8 | inst->operand_kind[1]; 
 		if (((operands_kind & (to.kind << 8 | from.kind)) == (to.kind << 8 | from.kind)) &&
-			((operands_kind & (bitness_to << 8 | bitness_from)) == (bitness_to << 8 | bitness_from))) {
+			((operands_kind & ((int)bitness_to << 8 | (int)bitness_from)) == ((int)bitness_to << 8 | (int)bitness_from))) {
 			
 			instruction_found = true; 
 			break;
@@ -626,8 +638,8 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 	// encode final instrution
 	//
 	
-#define MOVE_BYTE(buffer, x) do { buffer[bytes_count++] =(x); } while(0)
-	char *instruction_buffer = builder->current_instruction;
+#define MOVE_BYTE(buffer, x) do { buffer[builder->bytes_count++] =(x); } while(0)
+	char *instruction_buffer = builder->code;
 	
 	// prefix 
 	{
@@ -662,7 +674,7 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 	}
 	
 	// displace
-	if (require & LOCATION_DISP) { nl->location_to_patch = bytes_count; }
+	if (require & LOCATION_DISP) { nl->location_to_patch = builder->bytes_count; }
 	if (require & DISP) {
 		for (int i = 0; i < disp_bitness; i++) {
 			MOVE_BYTE(instruction_buffer, (char)((disp >> i*8) & 0xff));
@@ -670,13 +682,11 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 	}
 	
 	// constant
-	if (require & LOCATION_CONST) { nl->location_to_patch = bytes_count; }
+	if (require & LOCATION_CONST) { nl->location_to_patch = builder->bytes_count; }
 	if (require & CONSTANT) {
-		memcpy(&instruction_buffer[bytes_count], &constant, bitness_from); bytes_count+= bitness_from;
+		int copy_size = to.kind == RelM ? bitness_to : bitness_from;
+		memcpy(&instruction_buffer[builder->bytes_count], &constant, copy_size); builder->bytes_count+= copy_size;
 	}
 #undef MOVE_BYTE
 	
 }
-
-
-
