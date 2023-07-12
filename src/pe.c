@@ -12,21 +12,83 @@ internal int write_pe_exe(const char *file,
 						  Builder *builder) {
 	
 	// find out whether all external functions have their references in known locations
-	{
+	
+	
+	typedef struct {
+		char *dll_name;
+		char **function_names;
+	} Entry; 
+	
+	// TODO(ziv): @Incomplete currently I assume that the all archive file will have functions, which might not be the case. Find a way to remove unwanted entries before I forward them to the creation of the idate section
+	
+			// create array of function library pairs
+		Function_Library *function_library_array = malloc(builder->jumpinstructions_count * sizeof(Function_Library)); 
+		int function_library_array_size = 0; 
+		for (int ji_idx = 0; ji_idx < builder->jumpinstructions_count; ji_idx++) {
+			Name_Location *nl = &builder->jumpinstructions[ji_idx];
+			Function_Library *fl = &function_library_array[function_library_array_size++]; 
+			fl->function = nl->name; 
+			fl->library = NULL;
+		}
 		
-		for (int lib_idx = 0; lib_idx < builder->external_library_paths_count; lib_idx++) {
-			char *module = builder->external_library_paths[lib_idx];
-			char *dynamic_library = is_function_in_module(builder, module, ); 
-			
-			
+		// sort the names 
+		{
 			
 		}
 		
 		
-		
+	int *func_count_in_lib = (int *)malloc(builder->external_library_paths_count * sizeof(int)); 
+	memset(func_count_in_lib, 0, builder->external_library_paths_count*sizeof(int));
+	
+		// fill all the slots with dll names 
+		for (int lib_idx = 0; lib_idx < builder->external_library_paths_count; lib_idx++) {
+
+						char *module = builder->external_library_paths[lib_idx];
+			if (!fill_modules_for_function(builder, module, function_library_array, function_library_array_size, 
+											   &func_count_in_lib[lib_idx])) {
+				// error out of here since I am unable for some reason to fill the modules
+				return false; 
+			}
+			 
+		}
+	
+	
+	int entries_count = builder->external_library_paths_count;
+	Entry *entries = (Entry *)malloc(entries_count * sizeof(Entry)); 
+	
+	for (int i = 0; i < entries_count; i++) {
+		Entry *e = &entries[i]; 
+		e->function_names = (char **)malloc(func_count_in_lib[i]*sizeof(char *));
 	}
 	
 	
+	int x = entries_count; // dll name count next power of two (for table)
+	// round to next power of two 
+	x--;
+	x |= x >> 1;
+	x |= x >> 2;
+	x |= x >> 4;
+	x |= x >> 8;
+	x++; 
+	x = x << 1;
+	// check whether they are all actually filled & fill entries structure
+	for (int i = 0; i < function_library_array_size; i++) {
+		Function_Library *fl = &function_library_array[i];
+		if (!fl->library) {
+			// link error couldn't find reference for %s
+			return false; 
+		}
+		
+		
+		// TODO(ziv): Finish implementing this @Incomplete
+		int *dll_name_t = (int *)malloc(x * sizeof(int)); 
+		int index = ((size_t)(fl->library) >> 8) & (x-1);
+		dll_name_t[index] = 0;
+		
+		fl->function;
+		fl->library; 
+		
+	}
 	
 //
 	// PE executable NT signiture, DOS stub, NT headers
@@ -96,10 +158,10 @@ internal int write_pe_exe(const char *file,
 	// Module names - simple array of the module names
 	
 	// Compute sizes for all idata related structures
-	int descriptors_size = sizeof(IMAGE_IMPORT_DESCRIPTOR) * (builder->entries_count + 1);
+	int descriptors_size = sizeof(IMAGE_IMPORT_DESCRIPTOR) * (entries_count + 1);
 	int int_tables_size = 0, module_names_size = 0, function_names_size = 0; 
-	for (int i = 0; i < builder->entries_count; i++) {
-		Entry entry = builder->entries[i];
+	for (int i = 0; i < entries_count; i++) {
+		Entry entry = entries[i];
 		char **fnames = entry.function_names, **fnames_temp = fnames;
 		for (; *fnames_temp; fnames_temp++) 
 			function_names_size += (int)(strlen(*fnames_temp+2) + 1 + 2); // +2 for 'HINT'
@@ -165,7 +227,7 @@ internal int write_pe_exe(const char *file,
 	u8 *module_names   = (u8 *)iat_tables + int_tables_size;
 	
 	int int_tables_offset = 0, module_names_offset = 0, function_names_offset = 0; 
-	for (int i = 0; i < builder->entries_count; i++) {
+	for (int i = 0; i < entries_count; i++) {
 #if DEBUG > 1
 		printf(" -- Descriptor%d -- \n", i);
 		printf("int-table \t%x -> ", int_table_base_address + int_tables_offset);
@@ -185,7 +247,7 @@ internal int write_pe_exe(const char *file,
 		};
 		
 		// filling function names, int table and iat table
-		char **fnames = builder->entries[i].function_names, **fnames_start = fnames;
+		char **fnames = entries[i].function_names, **fnames_start = fnames;
 		for (; *fnames; fnames++) {
 			int copy_size = (int)strlen(*fnames+2)+1+2;
 			// NOTE(ziv): first two bytes are used for 'HINT'
@@ -198,8 +260,8 @@ internal int write_pe_exe(const char *file,
 		int_tables++; iat_tables++; // for NULL address
 		
 		// filling module names 
-		size_t copy_size = strlen(builder->entries[i].dll_name)+1; 
-		memcpy(module_names + module_names_offset, builder->entries[i].dll_name, copy_size);
+		size_t copy_size = strlen(entries[i].dll_name)+1; 
+		memcpy(module_names + module_names_offset, entries[i].dll_name, copy_size);
 		module_names_offset += (int)copy_size;
 	}
 	

@@ -117,11 +117,28 @@ int main() {
 	// RELMEM will get used to get relative addresses to a function
 	// this means that labesl and so on will use it
 	 //x86_encode(&builder, call, RELMEM(&builder, 0x1111), NO_OPERAND);
-	
+
+/* 	
 	x86_encode(&builder, mov, REG(R8D), x86_lit(&builder, "some string"));
 	x86_encode(&builder, mov, REG(R9),  x86_label(&builder, ".L1"));
 	x86_encode(&builder, mov, REG(R8D), x86_lit(&builder, "some"));
 	x86_encode(&builder, mov, REG(RAX), x86_c_function(&builder, "ExitProcess")); 
+	 */
+	
+	x86_c_function(&builder, "ExitProcess");
+	x86_c_function(&builder, "MessageBoxA");
+
+/* 	
+	Function_Library function_library_array[] = {
+		{ "CreateThread", 0 },
+		{ "ExitProcess", 0  }, 
+		{ "DEbuglskjdf", 0}
+	}; 
+	const int function_library_array_size = ArrayLength(function_library_array); 
+	fill_modules_for_function(&builder, "kernel32.lib", function_library_array, function_library_array_size); 
+	 */
+
+	
 	
 /* 	
 	Operand op = x86_lit(&builder, "some string");
@@ -134,8 +151,6 @@ int main() {
 	// or maybe I should just use relative locations for all of those things? 
 	// this is a good question to be asked of how to handle it.
 
-	free_resources(&builder.vs_sdk);
-	
 	
 	//~
 	
@@ -164,29 +179,41 @@ int main() {
 	char data[sizeof(hello_world) + sizeof(simple_pe_exe)], *pdata = data;
 	MOVE(pdata, simple_pe_exe, sizeof(simple_pe_exe)); 
 	MOVE(pdata, hello_world,   sizeof(hello_world)); 
-	
+	code; 
 	// idata section info, this defines functions you want to import & their respective dll's
+/* 
 	Entry entries[] = {
 		{"kernel32.dll", (char *[]){ "\0\0ExitProcess", 0 }},
 		{"user32.dll",   (char *[]){ "\0\0MessageBoxA", 0 }},
 	};
-	
+	 */
+
 	builder.data = data; 
 		builder.data_size = sizeof(data); 
 	
+builder.code = builder.code; 
+				builder.code_size = builder.bytes_count; 
+				code; 
 	
 	/* 	
 				builder.code = code; 
 	builder.code_size = sizeof(code); 
 			 */
-builder.code = builder.code; 
-				builder.code_size = builder.bytes_count; 
-				code; 
 	
+	/*
 	builder.entries = entries; 
 	builder.entries_count = ArrayLength(entries);
-		
+		 */
+	
+	char kernel32[] =  "kernel32.lib";
+	char user32[]   =  "user32.lib";
+	char *libs[] = { kernel32, user32 };
+	builder.external_library_paths = libs; 
+	builder.external_library_paths_count = 2;
+	
 	 write_pe_exe("test.exe", &builder); 
+	
+	free_resources(&builder.vs_sdk);
 	
 	return 0;
 }
