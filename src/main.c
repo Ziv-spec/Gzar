@@ -31,8 +31,10 @@ struct Register {
 #include "parser.c"
 #include "sema.c"
 
+#pragma warning(disable : 4431 4267 4456 4244 4189)
 #define MICROSOFT_CRAZINESS_IMPLEMENTATION
 #include "microsoft_crazyness.h"
+#pragma warning(default: 4431 4267 4456 4244 4189)
 
 #include "x86_asm.c"
 #include "x86.c"
@@ -43,7 +45,6 @@ struct Register {
 
 #if 1
 int main() {
-	
 	
 	
 	//~
