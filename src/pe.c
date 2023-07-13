@@ -22,8 +22,6 @@ internal int write_pe_exe(const char *file,
 			
 		}
 		
-		
-		
 	}
 	
 	
@@ -207,8 +205,6 @@ internal int write_pe_exe(const char *file,
 	//~
 	// Patch real addresses to code
 	//
-	
-	
 	
 	// Fill addresses to functions from dynamic libraries 
 	{

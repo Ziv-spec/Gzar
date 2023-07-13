@@ -9,7 +9,7 @@ patterns = {
     "*.bat",
     "*.sh",
     "*.4coder",
-    "*.jai", 
+    "*.jai",
 };
 blacklist_patterns = {
     ".*",
@@ -34,11 +34,11 @@ commands = {
         .out = "*test*",
         .footer_panel = false,
 		.save_dirty_files = false,
-		.cursor_at_end = false, 
+		.cursor_at_end = false,
     }
 };
 
 fkey_command = {
 	.F1 = "build",
-    .F3 = "test", 
+    .F3 = "test",
 };
