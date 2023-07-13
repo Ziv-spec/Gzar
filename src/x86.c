@@ -186,50 +186,32 @@ typedef struct {
 } Name_Location;
 
 typedef struct {
-	char *dll_name;
-	char **function_names;
-} Entry;
-
-typedef struct {
-	char *code;
-	int code_size;
-
-	const char *data;
-	int data_size;
-
-	// TODO(ziv): Remove this
-	Entry *entries;
-	int entries_count;
-
+	char *code, *data;
+	int code_size, data_size; 
+	
+	// TODO(ziv): Remove this as this will get replaced by the other thingy yeey
+	
 	//~
-	// trying to actually do this thingy
-
-	Name_Location *labels; // addresses to lables
-	int labels_count;
-
-	Name_Location *jumpinstructions; // jump instructions addresses that will get later computed (used both by jmp instruction variations and call instruction)
-	int jumpinstructions_count;
-
-	Name_Location *data_variables; // variables contained in the .data section
-	int data_variables_count;
-
+	// data_variables -  variables contained in the .data section
+	// jumpinstructions - for addresses of external functions
+	//
+	
+	Name_Location *labels, *jumpinstructions, *data_variables; 
+	int labels_count, jumpinstructions_count, data_variables_count;
 	int current_data_variable_location; // used to keep track of location of `data_variables`
-
-	Map lables_map;
-	Map fixed_loc;
-
-	// cursor which tells the bytes count aka the last count of the amount of bytes written
-	int bytes_count;
-
+	
+	int bytes_count; // to tell byte count of the program 
+	
+	//~
 	// list of external library paths e.g. kernel32.lib (in linux libc.so)
-	const char *external_library_paths;
+	char **external_library_paths;
 	int external_library_paths_count;
-
-	// TODO(ziv): cache for the external library paths
-
+	
 	// result of visual studio sdk path on windows
 	Find_Result vs_sdk;
-} Builder;
+	
+	M_Pool *m;
+	} Builder; 
 
 
 
@@ -276,11 +258,18 @@ internal Name_Location *x86_get_name_location_from_value(Builder *builder, Value
 	int type = v.idx >> 28;
 	return &nl_table[type][idx];
 }
+ 
 
-internal char *is_function_in_module(Builder *builder, const char *module, const char *function) {
+typedef struct {
+	char *function; // name
+	char *library;  // .dll HINT + name
+} Function_Library;
 
+internal bool fill_modules_for_function(Builder *builder, const char *module, Function_Library *function_library_array, 
+										int function_library_size, int *func_count_in_lib) {
+	// TODO(ziv): @Cleanup this function
 	if (!builder->vs_sdk.windows_sdk_version) {
-		return false;
+		return false; 
 	}
 
 	wchar_t *wchar_path = concat2(builder->vs_sdk.windows_sdk_um_library_path, L"\\"), *temp_wchar_path = wchar_path;
@@ -305,18 +294,14 @@ internal char *is_function_in_module(Builder *builder, const char *module, const
 		CloseHandle(handle);
 		free(wchar_path);
 		free(path);
-
-		if (!success) {
-			VirtualFree(buff, 0, MEM_RELEASE);
-			return false;
-		}
-
+		
+		if (!success) { goto fill_modules_cleanup; }
+		
 	}
 
 	// start parsing the file
 	if (memcmp(buff, IMAGE_ARCHIVE_START, IMAGE_ARCHIVE_START_SIZE) != 0) {
-		VirtualFree(buff, 0, MEM_RELEASE);
-		return false;
+		goto fill_modules_cleanup; 
 	}
 	IMAGE_ARCHIVE_MEMBER_HEADER *first_linker_member_header = (IMAGE_ARCHIVE_MEMBER_HEADER *)(buff + IMAGE_ARCHIVE_START_SIZE);
 
@@ -341,64 +326,98 @@ internal char *is_function_in_module(Builder *builder, const char *module, const
 	unsigned long n_offsets = *(unsigned long *)(second_linker_member);
 	int offsets_size = sizeof(unsigned long) + 4*n_offsets;
 	unsigned long *offsets = (unsigned long *)(second_linker_member + sizeof(unsigned long));
-	int symbols_size = sizeof(unsigned long) + 2*n_symbols;
 	unsigned long n_symbols = *(unsigned long *)(second_linker_member + offsets_size);
+	int symbols_size = sizeof(unsigned long) + 2*n_symbols;
 	unsigned short *indicies = (unsigned short *)(second_linker_member + offsets_size + sizeof(unsigned long));
 	char *string_table = (second_linker_member + offsets_size + symbols_size);
-
-	// search for function name inside the String Table
+	
+		//
+		// Do a full search inside the String Table for all function names given 
+		//
+	
+	char *function_to_check = string_table;
+	
 	unsigned int string_table_idx = 0;
-	int function_length = (int)strlen(function);
-	// TODO(ziv): optimize???
-	while (string_table_idx < n_symbols) {
-		int idx = 0;
-		for (; idx < function_length && string_table[idx] == function[idx]; idx++);
-		if (idx == function_length)  break;
-		while (*string_table++ != '\0');
-		string_table_idx++;
+	for (int function_library_idx = 0; function_library_idx < function_library_size; function_library_idx++) {
+		
+		// NOTE(ziv): I assume that the function names are sorted alphabetically 
+		Function_Library *fl = &function_library_array[function_library_idx];
+		if (fl->library)  continue;
+		
+		for (; string_table_idx < n_symbols; string_table_idx++) {
+			
+			// check specific function 
+		char *function = fl->function;
+			while (*function == *function_to_check && *function_to_check != '\0') {
+				function++, function_to_check++; 
+			}
+			
+			// this means there is no point to further look at this function
+			if ((*function | 0x60) > (*function_to_check | 0x60)) {
+				while (*function_to_check++ != '\0');
+				continue;
+			}
+			else if ((*function | 0x60) < (*function_to_check | 0x60)) {
+				if ('a' < (*function_to_check | 0x60) && (*function_to_check | 0x60) < 'z')
+					break; // @Incomplete check whether this is required or not 
+				
+				// I don't know what to do so... contineu? 
+				while (*function_to_check++ != '\0');
+				continue;
+				
+			}
+			
+			// check of member offset
+			unsigned short offsets_idx = indicies[string_table_idx];
+			unsigned long offset = offsets[offsets_idx-1];
+			
+			// https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#import-library-format
+			typedef struct {
+				WORD    Sig1;            // Must be IMAGE_FILE_MACHINE_UNKNOWN
+				WORD    Sig2;            // Must be 0xffff
+				WORD    Version;         // >= 1 (implies the CLSID field is present)
+				WORD    Machine;
+				DWORD   TimeDateStamp;
+				DWORD   SizeOfData;      // Size of data that follows the header
+				union {
+					WORD Hint;
+					WORD Ordinal;
+				};
+				WORD    Type; 
+			} OBJECT_HEADER;
+			OBJECT_HEADER *object_header_info = (OBJECT_HEADER *)(buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
+			char *function_and_dll_names = buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER) + sizeof(OBJECT_HEADER);
+			
+			if (strcmp(function_and_dll_names, fl->function) == 0) {
+				++*func_count_in_lib;
+				
+				// duplicate string
+				char *dll_name = function_and_dll_names+strlen(fl->function)+1;
+				size_t dll_name_length = strlen(dll_name)+1;
+				char *copy_dll_name = malloc(2 + dll_name_length);
+				memcpy(copy_dll_name, &object_header_info->Hint, sizeof(object_header_info->Hint));
+				memcpy(copy_dll_name + 2, dll_name, dll_name_length);
+				fl->library = copy_dll_name;
+				break;
+			}
+			
+			while (*function_to_check++ != '\0');
+		}
+		
 	}
-
-	unsigned short offsets_idx = indicies[string_table_idx];
-	unsigned long offset = offsets[offsets_idx-1];
+	
 	//IMAGE_ARCHIVE_MEMBER_HEADER *function_member_header = (IMAGE_ARCHIVE_MEMBER_HEADER *)(buff + offset);
-
-	// https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#import-library-format
-	typedef struct {
-		WORD    Sig1;            // Must be IMAGE_FILE_MACHINE_UNKNOWN
-		WORD    Sig2;            // Must be 0xffff
-		WORD    Version;         // >= 1 (implies the CLSID field is present)
-		WORD    Machine;
-		DWORD   TimeDateStamp;
-		DWORD   SizeOfData;      // Size of data that follows the header
-		union {
-			WORD Hint;
-			WORD Ordinal;
-		};
-		WORD    Type;
-	} OBJECT_HEADER;
-
-
+	
 	/* TODO(ziv): figure out whether I need this extra information for anything useful
 	OBJECT_HEADER *obj_header = (OBJECT_HEADER *)(buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
 		int function_member_size = atoi((const char *)function_member_header->Size);
 		int import_type      = obj_header->Type & 0x03;
 		int import_name_type = (obj_header->Type & 0x1c) >> 2;
 		 */
-
-	char *function_and_dll_names = buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER) + sizeof(OBJECT_HEADER);
-
-	char *result = NULL;
-	if (strcmp(function_and_dll_names, function) == 0) {
-		// duplicate string
-		char *dll_name = function_and_dll_names+function_length+1;
-		size_t dll_name_length = strlen(dll_name)+1;
-		char *copy_dll_name = malloc(dll_name_length);
-		memcpy(copy_dll_name, dll_name, dll_name_length);
-		result = copy_dll_name;
-	}
-
-	VirtualFree(buff, 0, MEM_RELEASE);
-	return result;
+	fill_modules_cleanup:
+	
+	VirtualFree(buff, 0, MEM_RELEASE); 
+	return true;
 }
 
 

@@ -30,8 +30,6 @@
 //   #include "microsoft_craziness.h"
 //
 
-#pragma warning(disable : 4431 4267 4456 4244 4189)
-
 
 #ifdef __cplusplus
 extern "C"
@@ -633,5 +631,3 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
-
-#pragma warning(default: 4431 4267 4456 4244 4189)
