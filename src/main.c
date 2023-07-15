@@ -20,7 +20,7 @@ struct Register {
 
 #define VC_EXTRALEAN
 #include <windows.h>
-#include <winnt.h>
+//#include <winnt.h>
 
 #include "base.h"
 #include "lexer.h"
@@ -45,30 +45,6 @@ struct Register {
 #if 1
 int main() {
 	
-	
-	//~
-	// Generate Code
-	//
-	
-	
-	
-	/* template for cool api for encoding instructions regardless of backend type
-	Value lab = label(".L1"); 
-	encode(builder, jmp, lab, NO_OPERAND); 
-	
-	Value func = function("Function");
-			encode(builder, call, func, NIL);
-			
-	Value exit_process = c_function("kernel32.lib", "ExitProcess"); 
-			encode(builder, call, exit_process, NO_OPERAND);
-	
-	Value str = lit("some string");
-	encode(builder, mov, lit("some string"), NO_OPERAND); 
-	
-	encode(builder, add, REG(RAX), IMM(0x10));
-			 */
-	
-	
 	char program[0x60] = { 0 };
 	Name_Location labels[0x50] = {0}; 
 	Name_Location data_variables[0x50] = {0}; 
@@ -77,15 +53,13 @@ int main() {
 	Builder builder = { 
 		.code = program, 
 		
+		// init tables
 		.labels = labels,
 		.data_variables = data_variables,
 		.jumpinstructions = jumpinstructions,
 		
 		.vs_sdk = find_visual_studio_and_windows_sdk(),
-		
-		.m = {
-			.pool_size = 0x1000
-		}
+		.m = { .pool_size = 0x1000 }
 	};
 	
 	pools_init(&builder.m);
@@ -126,36 +100,16 @@ int main() {
 	x86_encode(&builder, call, exit_process, NO_OPERAND);
 #endif
 	
-	/* 	
-		Operand hello_world_lit = x86_lit(&builder, "Hello World!");
-		Operand pe_exe_lit      = x86_lit(&builder, "This is a simple 64b pe executable");
-		hello_world_lit, pe_exe_lit;
-		
-		x86_c_function(&builder, "MessageBoxA");
-		x86_c_function(&builder, "ExitProcess");
-		 */
+	
+	// TODO(ziv): remove this
+	char kernel32[] =  "kernel32.lib";
+	char user32[]   =  "user32.lib";
+	char *libs[] = { kernel32, user32 };
+	builder.external_library_paths = libs; 
+	builder.external_library_paths_count = ArrayLength(libs);
 	
 	
-	
-	/* 
-		Function_Library function_library_array[] = {
-			{ "CreateThread", 0 },
-			{ "ExitProcess", 0  }, 
-			{ "DEbuglskjdf", 0}
-		}; 
-		const int function_library_array_size = ArrayLength(function_library_array); 
-		fill_modules_for_function(&builder, "kernel32.lib", function_library_array, function_library_array_size); 
-	 */
-	
-	
-	//~
-	// text section info
-	//
-	
-	/* 	
-		char *code = (char*)instructions; 
-		unsigned int code_size = bytes_count;
-	 */
+	write_pe_exe(&builder, "test.exe"); 
 	
 	/* 
 		// without image dos stub
@@ -170,28 +124,17 @@ int main() {
 				0xff, 0x14, 0x25, 0x78, 0x20, 0x40, 0, 
 			};
 	
+// NOTE(ziv): this is just a temporary thing
+Operand pe_exe_lit      = x86_lit(&builder, "a simple 64b PE executable");
+	Operand hello_world_lit = x86_lit(&builder, "Hello World!");
+	
 builder.code = code; 
 	builder.code_size = sizeof(code); 
 
-		// data section info
-		char hello_world[]   = "Hello World!";
-		char simple_pe_exe[] = "a simple 64b PE executable";
-		char data[sizeof(hello_world) + sizeof(simple_pe_exe)], *pdata = data;
-		MOVE(pdata, simple_pe_exe, sizeof(simple_pe_exe)); 
-		MOVE(pdata, hello_world,   sizeof(hello_world)); 
-		 
-builder.data = data; 
-		//builder.data_size = sizeof(data); 
-	*/
+write_pe_exe(&builder, "test.exe");
+*/
 	
-	// TODO(ziv): remove this
-	char kernel32[] =  "kernel32.lib";
-	char user32[]   =  "user32.lib";
-	char *libs[] = { kernel32, user32 };
-	builder.external_library_paths = libs; 
-	builder.external_library_paths_count = ArrayLength(libs);
 	
-	write_pe_exe(&builder, "test.exe"); 
 	
 	free_resources(&builder.vs_sdk);
 	
@@ -231,55 +174,6 @@ builder.data = data;
 	encode(builder, add, REG(EAX), IMM(0x10)); 
 	encode(builder, add, REG(RAX), IMM(0x10)); 
 */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

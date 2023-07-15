@@ -83,8 +83,7 @@ typedef struct {
 } Name_Location;
 
 typedef struct {
-	// TODO(ziv): Remove this as this will get replaced by the other thingy yeey
-	char *code, *data;
+	char *code;
 	int code_size; 
 	
 	//~
@@ -111,6 +110,7 @@ typedef struct {
 
 //~
 // @Incomplete General things you might want which are not specific to any architecture 
+// TODO(ziv): Move this into a linker.c file, which will contain all general linker thingy's
 //
 
 

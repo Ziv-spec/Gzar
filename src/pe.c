@@ -183,7 +183,7 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 	}
 	
 	
-	
+	// TODO(ziv): @Incomplete I should check whether I found for all functions their matching dll, also, lowercase/uppercase dll names to ignore duplicates
 	
 	
 	//~
@@ -236,7 +236,7 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 		nt_headers.FileHeader.SizeOfOptionalHeader = sizeof(nt_headers.OptionalHeader);
 		nt_headers.FileHeader.NumberOfSections = 3; 
 		
-		nt_headers.OptionalHeader.AddressOfEntryPoint = 0x1000; // TODO(ziv): figure out why I need the A 
+		nt_headers.OptionalHeader.AddressOfEntryPoint = 0x1000;
 		nt_headers.OptionalHeader.SizeOfImage   = 0x4000; // TODO(ziv): automate this
 		nt_headers.OptionalHeader.SizeOfHeaders = align(sizeof_headers_unaligned, file_alignment);
 	}
@@ -400,6 +400,8 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 		for (int i = 0; i < builder->bytes_count; i++) { printf("%02x", builder->code[i]&0xff); } printf("\n"); 
 		 */
 	
+	// the patching should be done by a "linker" 
+	
 #if 1
 	// patching data section
 	for (int i = 0; i < builder->data_variables_count; i++) {
@@ -415,7 +417,6 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 		memcpy(&builder->code[nl.location_to_patch], &location, sizeof(nl.location));
 	}
 	
-	// 
 	for (int i = 0; i < builder->jumpinstructions_count; i++) {
 		Name_Location nl = builder->jumpinstructions[i];
 		int location = text_section.VirtualAddress + nl.location;
@@ -440,12 +441,7 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 		MOVE(pexe, &nt_headers,    sizeof(nt_headers));
 		MOVE(pexe, &text_section,  sizeof(text_section));
 		MOVE(pexe, &idata_section, sizeof(idata_section));
-		MOVE(pexe, &data_section,  sizeof(data_section)); pexe += nt_headers.OptionalHeader.SizeOfHeaders - sizeof_headers_unaligned;
-		//MOVE(pexe, builder->code,  text_size);  pexe += text_section.SizeOfRawData  - text_size;
-		//MOVE(pexe, idata, idata_size);          pexe += idata_section.SizeOfRawData - idata_size;
-		pexe += text_section.SizeOfRawData;
-		pexe += idata_section.SizeOfRawData;
-		//MOVE(pexe, builder->data,  data_size);  pexe += data_section.SizeOfRawData  - data_size;
+		MOVE(pexe, &data_section,  sizeof(data_section));
 	}
 	
 	{
