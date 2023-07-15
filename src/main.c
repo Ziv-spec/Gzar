@@ -16,8 +16,7 @@ struct Register {
     int size; // register size in bytes
 };
 
-#define TIMINGS 1
-
+#define TIMINGS 0
 
 #define VC_EXTRALEAN
 #include <windows.h>
@@ -32,14 +31,13 @@ struct Register {
 #include "parser.c"
 #include "sema.c"
 
+#include "x86_asm.c"
+
 #pragma warning(disable : 4431 4267 4456 4244 4189)
 #define MICROSOFT_CRAZINESS_IMPLEMENTATION
 #include "microsoft_crazyness.h"
 #pragma warning(default: 4431 4267 4456 4244 4189)
-
-#include "x86_asm.c"
 #include "x86.c"
-
 #include "pe.c"
 
 
@@ -84,136 +82,116 @@ int main() {
 		.jumpinstructions = jumpinstructions,
 		
 		.vs_sdk = find_visual_studio_and_windows_sdk(),
+		
+		.m = {
+			.pool_size = 0x1000
+		}
 	};
 	
-
-/* 	
-	char *dll_name = is_function_in_module(&builder, "kernel32.lib", "ExitProcess");
-	printf("dll name: %s\n", dll_name);
-	free(dll_name); 
-	 */
-
+	pools_init(&builder.m);
 	
-/* 	
-	encode(&builder, sub,  REG(RSP), IMM(0x28));
-	encode(&builder, mov,  REG(R9D), IMM(0));
-	encode(&builder, mov,  REG(R8D), IMM(0x403000));
-	encode(&builder, mov,  REG(EDX), IMM(0x40301b));
-	encode(&builder, mov,  REG(ECX), IMM(0));
-	encode(&builder, call, MEM(0,0,0,0x402088,0), NO_OPERAND);
-	encode(&builder, mov,  REG(ECX), IMM(0));
-	encode(&builder, call, MEM(0,0,0,0x402078,0), NO_OPERAND);
-	 */
-
+	#if 0 
+	// NOTE(ziv): THIS WORKS!!! The only feature I need to do is finish up with patching locations (which is easy) 
+	Operand pe_exe_lit      = x86_lit(&builder, "a simple 64b PE executable");
+	Operand hello_world_lit = x86_lit(&builder, "Hello World!");
+	
+	Operand message_box_a = x86_c_function(&builder, "MessageBoxA");
+	Operand exit_process  = x86_c_function(&builder, "ExitProcess");
+	
+	x86_encode(&builder, sub,  REG(RSP), IMM(0x28));
+	x86_encode(&builder, mov,  REG(R9D), IMM(0));
+	x86_encode(&builder, mov,  REG(R8D), IMM(0x403000));
+	x86_encode(&builder, mov,  REG(EDX), IMM(0x40301b));
+	x86_encode(&builder, mov,  REG(ECX), IMM(0));
+	x86_encode(&builder, call, MEM(0,0,0,0x402088,0), NO_OPERAND);
+	x86_encode(&builder, mov,  REG(ECX), IMM(0));
+	x86_encode(&builder, call, MEM(0,0,0,0x402078,0), NO_OPERAND);
+	
+#else
+	
 	// I believe this works? 
-
-	/* 	
-		Value v = x86_label(&builder, ".L1");
-		v = x86_lit(&builder, "some data thingy that I might want to put there"); 
-		v = x86_lit(&builder, "one more string");
-		 
-	// this is a more internal thingy 
-	Name_Location *name = x86_get_name_location_from_value(&builder, v);
-	*/
+	Operand hello_world_lit = x86_lit(&builder, "Hello World!");
+	Operand pe_exe_lit      = x86_lit(&builder, "This is a simple 64b pe executable");
 	
-	// RELMEM will get used to get relative addresses to a function
-	// this means that labesl and so on will use it
-	 //x86_encode(&builder, call, RELMEM(&builder, 0x1111), NO_OPERAND);
-
+	Operand message_box_a = x86_c_function(&builder, "MessageBoxA");
+	Operand exit_process  = x86_c_function(&builder, "ExitProcess");
+	
+	x86_encode(&builder, sub,  REG(RSP), IMM(0x28));
+	x86_encode(&builder, mov,  REG(R9D), IMM(0));
+	x86_encode(&builder, mov,  REG(R8D), hello_world_lit);
+	x86_encode(&builder, mov,  REG(EDX), pe_exe_lit);
+	x86_encode(&builder, mov,  REG(ECX), IMM(0));
+	x86_encode(&builder, call, message_box_a, NO_OPERAND);
+	x86_encode(&builder, mov,  REG(ECX), IMM(0));
+	x86_encode(&builder, call, exit_process, NO_OPERAND);
+	#endif
+	
 /* 	
-	x86_encode(&builder, mov, REG(R8D), x86_lit(&builder, "some string"));
-	x86_encode(&builder, mov, REG(R9),  x86_label(&builder, ".L1"));
-	x86_encode(&builder, mov, REG(R8D), x86_lit(&builder, "some"));
-	x86_encode(&builder, mov, REG(RAX), x86_c_function(&builder, "ExitProcess")); 
-	 */
+	Operand hello_world_lit = x86_lit(&builder, "Hello World!");
+	Operand pe_exe_lit      = x86_lit(&builder, "This is a simple 64b pe executable");
+	hello_world_lit, pe_exe_lit;
 	
-	x86_c_function(&builder, "ExitProcess");
 	x86_c_function(&builder, "MessageBoxA");
-
-/* 	
-	Function_Library function_library_array[] = {
-		{ "CreateThread", 0 },
-		{ "ExitProcess", 0  }, 
-		{ "DEbuglskjdf", 0}
-	}; 
-	const int function_library_array_size = ArrayLength(function_library_array); 
-	fill_modules_for_function(&builder, "kernel32.lib", function_library_array, function_library_array_size); 
+	x86_c_function(&builder, "ExitProcess");
 	 */
 
 	
 	
-/* 	
-	Operand op = x86_lit(&builder, "some string");
-	encode(&builder, mov, REG(R8D), op);
+	/* 
+		Function_Library function_library_array[] = {
+			{ "CreateThread", 0 },
+			{ "ExitProcess", 0  }, 
+			{ "DEbuglskjdf", 0}
+		}; 
+		const int function_library_array_size = ArrayLength(function_library_array); 
+		fill_modules_for_function(&builder, "kernel32.lib", function_library_array, function_library_array_size); 
 	 */
-
 	
-	// patch all the paths inside the program using whatever is needed 
-	//int base = 0; // base address to be added to all relative locations? 
-	// or maybe I should just use relative locations for all of those things? 
-	// this is a good question to be asked of how to handle it.
-
 	
 	//~
-	
 	// text section info
-/* 
+	//
+
+/* 	
 	char *code = (char*)instructions; 
 	unsigned int code_size = bytes_count;
  */
 
-	// without image dos stub
-		char code[] = {
-			0x48, 0x83, 0xec, 0x28,
-			0x41, 0xb9, 0, 0, 0, 0,
-			0x41, 0xb8, 0, 0x30, 0x40, 0, 
-			0xba, 0x1b, 0x30, 0x40, 0,
-			0xb9, 0, 0, 0, 0,
-			0xff, 0x14, 0x25, 0x88, 0x20, 0x40, 0,
-			0xb9, 0, 0, 0, 0,
-			0xff, 0x14, 0x25, 0x78, 0x20, 0x40, 0, 
-		};
-
-	// data section info
-	char hello_world[]   = "Hello World!";
-	char simple_pe_exe[] = "a simple 64b PE executable";
+	/* 
+		// without image dos stub
+			char code[] = {
+				0x48, 0x83, 0xec, 0x28,
+				0x41, 0xb9, 0, 0, 0, 0,
+				0x41, 0xb8, 0, 0x30, 0x40, 0, 
+				0xba, 0x1b, 0x30, 0x40, 0,
+				0xb9, 0, 0, 0, 0,
+				0xff, 0x14, 0x25, 0x88, 0x20, 0x40, 0,
+				0xb9, 0, 0, 0, 0,
+				0xff, 0x14, 0x25, 0x78, 0x20, 0x40, 0, 
+			};
 	
-	char data[sizeof(hello_world) + sizeof(simple_pe_exe)], *pdata = data;
-	MOVE(pdata, simple_pe_exe, sizeof(simple_pe_exe)); 
-	MOVE(pdata, hello_world,   sizeof(hello_world)); 
-	code; 
-	// idata section info, this defines functions you want to import & their respective dll's
-/* 
-	Entry entries[] = {
-		{"kernel32.dll", (char *[]){ "\0\0ExitProcess", 0 }},
-		{"user32.dll",   (char *[]){ "\0\0MessageBoxA", 0 }},
-	};
-	 */
-
-	builder.data = data; 
-		builder.data_size = sizeof(data); 
-	
-builder.code = builder.code; 
-				builder.code_size = builder.bytes_count; 
-				code; 
-	
-	/* 	
-				builder.code = code; 
+builder.code = code; 
 	builder.code_size = sizeof(code); 
-			 */
+
+		// data section info
+		char hello_world[]   = "Hello World!";
+		char simple_pe_exe[] = "a simple 64b PE executable";
+		char data[sizeof(hello_world) + sizeof(simple_pe_exe)], *pdata = data;
+		MOVE(pdata, simple_pe_exe, sizeof(simple_pe_exe)); 
+		MOVE(pdata, hello_world,   sizeof(hello_world)); 
+		 
+builder.data = data; 
+		//builder.data_size = sizeof(data); 
+	*/
 	
-	/*
-	builder.entries = entries; 
-	builder.entries_count = ArrayLength(entries);
-		 */
-	
+	// TODO(ziv): remove this
 	char kernel32[] =  "kernel32.lib";
 	char user32[]   =  "user32.lib";
 	char *libs[] = { kernel32, user32 };
 	builder.external_library_paths = libs; 
-	builder.external_library_paths_count = 2;
+	builder.external_library_paths_count = ArrayLength(libs);
 	
-	 write_pe_exe("test.exe", &builder); 
+	write_pe_exe(&builder, "test.exe"); 
 	
 	free_resources(&builder.vs_sdk);
 	

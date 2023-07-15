@@ -165,15 +165,6 @@ struct Translation_Unit {
     
 };
 
-/* TODO(ziv): rethink this!!!! please!!!!
-typedef struct Program Program; 
-struct Program {
-    Vector *decls; 
-    Block block;
-};
-*/
-
-
 /* helper functions */
 internal inline void  back_one(Translation_Unit *tu);
 internal inline int   is_at_end(Translation_Unit *tu); 

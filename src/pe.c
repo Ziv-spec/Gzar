@@ -8,89 +8,185 @@ internal inline int align(int x, int alignment) {
 	return remainder ? (x - remainder + alignment) : x;
 }
 
-internal int write_pe_exe(const char *file, 
-						  Builder *builder) {
+internal int compare(const void *a, const void *b) {
+	return strcmp(a, b);
+}
+
+internal int write_pe_exe(Builder *builder, const char *file) {
+	M_Arena *m = pool_get_scratch(&builder->m);
 	
-	// find out whether all external functions have their references in known locations
+	//~
+	// get all external function names and sort them
+	//
+	if (!builder->vs_sdk.windows_sdk_version) {
+		// TODO(ziv): Put an error before exit
+		return false; 
+	}
 	
+	size_t extern_functions_len = builder->jumpinstructions_count;
+	char **extern_functions = arena_alloc(m, extern_functions_len*sizeof(char *)); 
+	for (int i = 0; i < extern_functions_len; i++) 
+		extern_functions[i] = builder->jumpinstructions[i].name;
+	qsort(extern_functions, extern_functions_len, sizeof(char *), compare);
 	
-	typedef struct {
-		char *dll_name;
-		char **function_names;
-	} Entry; 
+	u8  *flags = arena_alloc(m, (extern_functions_len/8 + 1)*sizeof(u8));
+	u16 *hints = arena_alloc(m, extern_functions_len*sizeof(u16));
 	
-	// TODO(ziv): @Incomplete currently I assume that the all archive file will have functions, which might not be the case. Find a way to remove unwanted entries before I forward them to the creation of the idate section
-	
-			// create array of function library pairs
-		Function_Library *function_library_array = malloc(builder->jumpinstructions_count * sizeof(Function_Library)); 
-		int function_library_array_size = 0; 
-		for (int ji_idx = 0; ji_idx < builder->jumpinstructions_count; ji_idx++) {
-			Name_Location *nl = &builder->jumpinstructions[ji_idx];
-			Function_Library *fl = &function_library_array[function_library_array_size++]; 
-			fl->function = nl->name; 
-			fl->library = NULL;
-		}
+	//
+	// For all .lib files, check what dll files contain the function names
+	//
+	Map *import_entries = init_map(sizeof(Vector *)); // dll name -> dll import functions
+	for (int lib_idx = 0; lib_idx < builder->external_library_paths_count; lib_idx++) {
+		char *module = builder->external_library_paths[lib_idx];
 		
-		// sort the names 
+		//~
+		// Open archive library file
+		//
+		char *buff; // archive library buffer
 		{
+			
+			wchar_t *library_path = builder->vs_sdk.windows_sdk_um_library_path;
+			char *path = arena_alloc(m, wcslen(library_path)+strlen(module)+2), *path_cursor = path; 
+			while (*library_path) *path_cursor++ = (char)*library_path++;
+			*path_cursor++ = '\\';
+			while (*module) *path_cursor++ = *module++;
+			*path_cursor = '\0';
+			
+			HANDLE handle = CreateFileA(path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+			Assert(handle != INVALID_HANDLE_VALUE && "Invalid handle");
+			
+			DWORD file_size = GetFileSize(handle, NULL), bytes_read;
+			buff = VirtualAlloc(NULL, file_size, MEM_COMMIT, PAGE_READWRITE);
+			
+			BOOL success = ReadFile(handle, buff, file_size, &bytes_read, NULL);
+			CloseHandle(handle);
+			
+			if (!success) { 
+				goto fill_modules_cleanup;
+			}
 			
 		}
 		
 		
-	int *func_count_in_lib = (int *)malloc(builder->external_library_paths_count * sizeof(int)); 
-	memset(func_count_in_lib, 0, builder->external_library_paths_count*sizeof(int));
-	
-		// fill all the slots with dll names 
-		for (int lib_idx = 0; lib_idx < builder->external_library_paths_count; lib_idx++) {
-
-						char *module = builder->external_library_paths[lib_idx];
-			if (!fill_modules_for_function(builder, module, function_library_array, function_library_array_size, 
-											   &func_count_in_lib[lib_idx])) {
-				// error out of here since I am unable for some reason to fill the modules
-				return false; 
+		//~
+		// Find String Table
+		//
+		if (memcmp(buff, IMAGE_ARCHIVE_START, IMAGE_ARCHIVE_START_SIZE) != 0) {
+			goto fill_modules_cleanup; 
+		}
+		
+		IMAGE_ARCHIVE_MEMBER_HEADER *first_linker_member_header = (IMAGE_ARCHIVE_MEMBER_HEADER *)(buff + IMAGE_ARCHIVE_START_SIZE);
+		int member_size = _atoi((char *)first_linker_member_header->Size);
+		
+		char *second_linker_member = (char *)first_linker_member_header + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER) + member_size + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER);
+		
+		u32 n_offsets = *(u32 *)(second_linker_member);
+		u32 *offsets = (u32 *)(second_linker_member + sizeof(n_offsets));
+		
+		s32 offsets_size = sizeof(n_offsets) + 4*n_offsets;
+		u32 n_symbols = *(u32 *)(second_linker_member + offsets_size);
+		u16 *indicies =  (u16 *)(second_linker_member + offsets_size + sizeof(n_symbols));
+		
+		s32 symbols_size   = sizeof(n_symbols) + 2*n_symbols;
+		char *string_table = second_linker_member + offsets_size + symbols_size;
+		
+		
+		//~
+		// Search String Table for function names
+		//
+		unsigned int string_table_idx = 0;
+		for (int function_idx = 0; function_idx < extern_functions_len; function_idx++) {
+			// NOTE(ziv): I assume that the function names are sorted alphabetically 
+			if (flags[function_idx/8] & (1 << (function_idx%8))) continue;
+			
+			// search
+			for (; string_table_idx < n_symbols; string_table_idx++) {
+				
+				//~
+				// check whether the string in the string table matches the target function
+				//
+				char *target = extern_functions[function_idx];
+				while (*target == *string_table && *string_table != '\0') {
+					target++, string_table++; 
+				}
+				
+				char l = *target | 0x60;
+				char r = *string_table | 0x60; 
+				if (l != r) {
+					if (l < r && ('a' < r && r < 'z'))  break;
+					while (*string_table++ != '\0');
+					continue;
+				}
+				
+				
+				
+				//~
+				// find the function and dll names inside 
+				//
+				unsigned short offsets_idx = indicies[string_table_idx];
+				unsigned long offset = offsets[offsets_idx-1];
+				
+				// https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#import-library-format
+				typedef struct {
+					WORD    Sig1;            // Must be IMAGE_FILE_MACHINE_UNKNOWN
+					WORD    Sig2;            // Must be 0xffff
+					WORD    Version;         // >= 1 (implies the CLSID field is present)
+					WORD    Machine;
+					DWORD   TimeDateStamp;
+					DWORD   SizeOfData;      // Size of data that follows the header
+					union {
+						WORD Hint;
+						WORD Ordinal;
+					};
+					WORD    Type; 
+				} OBJECT_HEADER;
+				
+				OBJECT_HEADER *object_header_info = (OBJECT_HEADER *)(buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
+				char *function_and_dll_names = buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER) + sizeof(OBJECT_HEADER);
+				
+				if (strcmp(function_and_dll_names, extern_functions[function_idx]) != 0) {
+					Assert(!"shouldn't really be in here I think. this would mean that there is a bug in my code"); 
+					while (*string_table++ != '\0');
+					continue;
+				}
+				
+				
+				
+				//~
+				// Copy data 
+				//
+				String8 dll_name = str8_lit(function_and_dll_names+strlen(extern_functions[function_idx])+1);
+				Vector *vec = map_peek(import_entries, dll_name);
+				if (!vec) {
+					vec = vec_init();
+					map_set(import_entries, str8_duplicate(m, dll_name), vec);
+				}
+				
+				vec_push(&builder->m, vec, extern_functions[function_idx]);
+				flags[function_idx/8] |= 1 << (function_idx%8);
+				hints[function_idx] = object_header_info->Hint;
+				break;
 			}
-			 
+			
 		}
-	
-	
-	int entries_count = builder->external_library_paths_count;
-	Entry *entries = (Entry *)malloc(entries_count * sizeof(Entry)); 
-	
-	for (int i = 0; i < entries_count; i++) {
-		Entry *e = &entries[i]; 
-		e->function_names = (char **)malloc(func_count_in_lib[i]*sizeof(char *));
+		
+		//IMAGE_ARCHIVE_MEMBER_HEADER *function_member_header = (IMAGE_ARCHIVE_MEMBER_HEADER *)(buff + offset);
+		/* TODO(ziv): figure out whether I need this extra information for anything useful
+		OBJECT_HEADER *obj_header = (OBJECT_HEADER *)(buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
+			int function_member_size = atoi((const char *)function_member_header->Size);
+			int import_type      = obj_header->Type & 0x03;
+			int import_name_type = (obj_header->Type & 0x1c) >> 2;
+			 */
+		
+		fill_modules_cleanup:
+		VirtualFree(buff, 0, MEM_RELEASE);
 	}
 	
 	
-	int x = entries_count; // dll name count next power of two (for table)
-	// round to next power of two 
-	x--;
-	x |= x >> 1;
-	x |= x >> 2;
-	x |= x >> 4;
-	x |= x >> 8;
-	x++; 
-	x = x << 1;
-	// check whether they are all actually filled & fill entries structure
-	for (int i = 0; i < function_library_array_size; i++) {
-		Function_Library *fl = &function_library_array[i];
-		if (!fl->library) {
-			// link error couldn't find reference for %s
-			return false; 
-		}
-		
-		
-		// TODO(ziv): Finish implementing this @Incomplete
-		int *dll_name_t = (int *)malloc(x * sizeof(int)); 
-		int index = ((size_t)(fl->library) >> 8) & (x-1);
-		dll_name_t[index] = 0;
-		
-		fl->function;
-		fl->library; 
-		
-	}
 	
-//
+	
+	
+//~
 	// PE executable NT signiture, DOS stub, NT headers
 	//
 	
@@ -140,15 +236,14 @@ internal int write_pe_exe(const char *file,
 		nt_headers.FileHeader.SizeOfOptionalHeader = sizeof(nt_headers.OptionalHeader);
 		nt_headers.FileHeader.NumberOfSections = 3; 
 		
-		nt_headers.OptionalHeader.AddressOfEntryPoint = 0x1000;
+		nt_headers.OptionalHeader.AddressOfEntryPoint = 0x1000; // TODO(ziv): figure out why I need the A 
 		nt_headers.OptionalHeader.SizeOfImage   = 0x4000; // TODO(ziv): automate this
 		nt_headers.OptionalHeader.SizeOfHeaders = align(sizeof_headers_unaligned, file_alignment);
 	}
 	
-	
 	//~
-	// .text .data .idata section headers
-	// 
+	// Compute .idata size
+	//
 	
 	// NOTE(ziv): idata section structure
 	// Import Directory Table - contains information about the following structures locations
@@ -158,24 +253,33 @@ internal int write_pe_exe(const char *file,
 	// Module names - simple array of the module names
 	
 	// Compute sizes for all idata related structures
-	int descriptors_size = sizeof(IMAGE_IMPORT_DESCRIPTOR) * (entries_count + 1);
+	int descriptors_size = sizeof(IMAGE_IMPORT_DESCRIPTOR) * (import_entries->count + 1);
 	int int_tables_size = 0, module_names_size = 0, function_names_size = 0; 
-	for (int i = 0; i < entries_count; i++) {
-		Entry entry = entries[i];
-		char **fnames = entry.function_names, **fnames_temp = fnames;
-		for (; *fnames_temp; fnames_temp++) 
-			function_names_size += (int)(strlen(*fnames_temp+2) + 1 + 2); // +2 for 'HINT'
-		int_tables_size += (int)(sizeof(size_t) * (fnames_temp-fnames+1));
-		module_names_size += (int)(strlen(entry.dll_name) + 1);
-	}
+	
+	Map_Iterator iter = map_iterator(import_entries); 
+	for (int i = 0; map_next(&iter); i++) {
+		String8 dll = iter.key;
+		Vector *function_names_vector = iter.value;
+		int fn_idx = 0;
+		for (; fn_idx < function_names_vector->index; fn_idx++) 
+			function_names_size += (int)(2 + strlen(function_names_vector->data[fn_idx]) + 1); // +2 for 'HINT'
+		int_tables_size += (int)(sizeof(size_t) * (function_names_vector->index+1));
+		module_names_size += (int)(dll.size + 1);
+		}
+	
 	int idata_size = descriptors_size + int_tables_size*2 + function_names_size + module_names_size;
-			
+	int data_size  = builder->current_data_variable_location; 
+	int text_size  = builder->bytes_count;
+	
+	//~
+	// .text .data .idata section headers
+	// 
 	
 	IMAGE_SECTION_HEADER text_section = { 
 		.Name = ".text",
-		.Misc.VirtualSize = 0x1000, // set actual size 
+		.Misc.VirtualSize = text_size,
 		.VirtualAddress   = section_alignment, 
-		.SizeOfRawData    = align(builder->code_size, file_alignment),
+		.SizeOfRawData    = align(text_size, file_alignment),
 		.PointerToRawData = nt_headers.OptionalHeader.SizeOfHeaders, // the sections begin right after all the NT headers
 		.Characteristics  = IMAGE_SCN_MEM_EXECUTE |IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_CODE
 	}; 
@@ -198,23 +302,31 @@ internal int write_pe_exe(const char *file,
 	
 	IMAGE_SECTION_HEADER data_section = { 
 		.Name = ".data",
-		.Misc.VirtualSize = builder->data_size, 
+		.Misc.VirtualSize = data_size, 
 		.VirtualAddress   = align(idata_section.VirtualAddress + idata_section.SizeOfRawData, section_alignment), 
-		.SizeOfRawData    = align(builder->data_size, file_alignment), 
+		.SizeOfRawData    = align(data_size, file_alignment), 
 		.PointerToRawData = idata_section.PointerToRawData + idata_section.SizeOfRawData, 
 		.Characteristics  = IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_INITIALIZED_DATA,
 	};
 	
 	//~
-	// Creating and filling .idata section
+	// Creating and filling sections
 	//
 	
 	size_t executable_size = nt_headers.OptionalHeader.SizeOfHeaders + 
 		text_section.SizeOfRawData + idata_section.SizeOfRawData + data_section.SizeOfRawData;
-	// Allocate once for both idata buffer and exe
-	u8 *buf = VirtualAlloc(NULL, idata_size + executable_size, MEM_COMMIT, PAGE_READWRITE); 
-	u8 *idata = buf, *executable = buf+idata_size, *pexe = executable;
+	// Allocate once for both for exe
+	u8 *buf = VirtualAlloc(NULL, executable_size, MEM_COMMIT, PAGE_READWRITE); 
+	u8 *executable = buf, *pexe = executable;
 	
+	u8 *text  = buf + nt_headers.OptionalHeader.SizeOfHeaders;
+		u8 *idata = text + text_section.SizeOfRawData;
+	u8 *data  = idata + idata_section.SizeOfRawData; 
+	
+	// filling .text section
+	memcpy(text, builder->code, text_size);
+	
+	// filling .idata section
 	int descriptors_base_address    = idata_section_address;
 	int int_table_base_address      = descriptors_base_address + descriptors_size;
 	int function_names_base_address = int_table_base_address + int_tables_size;
@@ -227,13 +339,19 @@ internal int write_pe_exe(const char *file,
 	u8 *module_names   = (u8 *)iat_tables + int_tables_size;
 	
 	int int_tables_offset = 0, module_names_offset = 0, function_names_offset = 0; 
-	for (int i = 0; i < entries_count; i++) {
-#if DEBUG > 1
+	
+	int hint_idx = 0;
+	iter = map_iterator(import_entries); 
+	for (int i = 0; map_next(&iter); i++) {
+		String8 dll = iter.key; dll.str[dll.size] = '\0';
+		Vector *function_names_vector = iter.value;
+		
+#if DEBUG > 0
 		printf(" -- Descriptor%d -- \n", i);
 		printf("int-table \t%x -> ", int_table_base_address + int_tables_offset);
 		printf("%x,", function_names_base_address + function_names_offset);
 		printf("0      \\ \n");
-		printf("module-name \t%x -> %s | -> function names\n", module_names_base_address + module_names_offset, entries[i].dll_name);
+		printf("module-name \t%x -> %s | -> function names\n", module_names_base_address + module_names_offset, dll.str);
 		printf("iat-table \t%x -> ", iat_table_base_address + int_tables_offset);
 		printf("%x,", function_names_base_address + function_names_offset);
 		printf("0      / \n");
@@ -247,70 +365,69 @@ internal int write_pe_exe(const char *file,
 		};
 		
 		// filling function names, int table and iat table
-		char **fnames = entries[i].function_names, **fnames_start = fnames;
-		for (; *fnames; fnames++) {
-			int copy_size = (int)strlen(*fnames+2)+1+2;
-			// NOTE(ziv): first two bytes are used for 'HINT'
-			memcpy(function_names + function_names_offset, *fnames, copy_size); 
-			// fill the function's addresses into the INT and IAT tables. 
-			*int_tables++ = *iat_tables++ = (size_t)function_names_base_address + function_names_offset;
-			function_names_offset += copy_size; 
-		}
-		int_tables_offset += (int)(sizeof(size_t) * ((fnames-fnames_start)+1)); 
-		int_tables++; iat_tables++; // for NULL address
 		
+		for (int fn_idx = 0; fn_idx < function_names_vector->index; fn_idx++) {
+			memcpy(&function_names[function_names_offset], &hints[hint_idx++], sizeof(u16));
+			int copy_size = (int)strlen(function_names_vector->data[fn_idx])+1;
+			memcpy(&function_names[function_names_offset+sizeof(u16)], function_names_vector->data[fn_idx], copy_size);
+			*int_tables++ = *iat_tables++ = (size_t)function_names_base_address + function_names_offset;
+			function_names_offset += copy_size+2;
+			
+		}
+		int_tables_offset += (int)(sizeof(size_t) * (function_names_vector->index+1)); 
+		int_tables++; iat_tables++; // for NULL address
+
 		// filling module names 
-		size_t copy_size = strlen(entries[i].dll_name)+1; 
-		memcpy(module_names + module_names_offset, entries[i].dll_name, copy_size);
+		size_t copy_size = dll.size+1; 
+		memcpy(&module_names[module_names_offset], dll.str, copy_size);
 		module_names_offset += (int)copy_size;
+	}
+
+	// filling .data section
+	for (int i = 0; i < builder->data_variables_count; i++) {
+		Name_Location nl = builder->data_variables[i];
+		size_t copy_size = strlen(nl.name)+1;
+		memcpy(data, nl.name, copy_size); data += copy_size;
 	}
 	
 	
 	//~
 	// Patch real addresses to code
 	//
-	
-	// Fill addresses to functions from dynamic libraries 
-	{
-		
-	}
-	
-	
-	
+
+/*
 	printf("Before: ");  
 	for (int i = 0; i < builder->bytes_count; i++) { printf("%02x", builder->code[i]&0xff); } printf("\n"); 
-	/* 	
-		 */
-	
-	// maybe I should just use relative locations for all of those things? 
-	// this is a good question to be asked of how to handle it.
-	int base = 0x4000;
+	 */
+
+	#if 1
+	// patching data section
 	for (int i = 0; i < builder->data_variables_count; i++) {
 		Name_Location nl = builder->data_variables[i];
-		int location = nl.location + base;
+		int location = data_section.VirtualAddress + nl.location;
 		memcpy(&builder->code[nl.location_to_patch], &location, sizeof(nl.location));
 	}
 	
-	base = 0x1000;
+	// patching text section
 	for (int i = 0; i < builder->labels_count; i++) {
 		Name_Location nl = builder->labels[i];
-		int location = nl.location + base;
+		int location = text_section.VirtualAddress + nl.location;
 		memcpy(&builder->code[nl.location_to_patch], &location, sizeof(nl.location));
 	}
 	
-	// this might be more specific? 
-	base = 0x9000;
+	// 
 	for (int i = 0; i < builder->jumpinstructions_count; i++) {
 		Name_Location nl = builder->jumpinstructions[i];
-		int location = nl.location + base;
+		int location = text_section.VirtualAddress + nl.location;
 		memcpy(&builder->code[nl.location_to_patch], &location, sizeof(nl.location));
 		printf("path location %d\n", nl.location_to_patch);
 	}
+#endif 
 	
+/* 	
 	printf("After: ");
 	for (int i = 0; i < builder->bytes_count; i++) { printf("%02x", builder->code[i]&0xff); } printf("\n"); 
-	/* 	 
-		 */
+	 */
 	
 	
 	//~
@@ -324,9 +441,11 @@ internal int write_pe_exe(const char *file,
 		MOVE(pexe, &text_section,  sizeof(text_section));
 		MOVE(pexe, &idata_section, sizeof(idata_section));
 		MOVE(pexe, &data_section,  sizeof(data_section)); pexe += nt_headers.OptionalHeader.SizeOfHeaders - sizeof_headers_unaligned;
-		MOVE(pexe, builder->code,  builder->code_size);  pexe += text_section.SizeOfRawData  - builder->code_size;
-		MOVE(pexe, idata, idata_size);          pexe += idata_section.SizeOfRawData - idata_size;
-		MOVE(pexe, builder->data,  builder->data_size);  pexe += data_section.SizeOfRawData  - builder->data_size;
+		//MOVE(pexe, builder->code,  text_size);  pexe += text_section.SizeOfRawData  - text_size;
+		//MOVE(pexe, idata, idata_size);          pexe += idata_section.SizeOfRawData - idata_size;
+		pexe += text_section.SizeOfRawData;
+		pexe += idata_section.SizeOfRawData;
+		//MOVE(pexe, builder->data,  data_size);  pexe += data_section.SizeOfRawData  - data_size;
 	}
 	
 	{

@@ -1,8 +1,4 @@
 
-//~
-// X86 code generation impel
-//
-
 typedef enum Register_Type {
 	UNKNOWN_REG=0,
 	// REX.r = 0 or REX.b = 0 or REX.x = 0
@@ -72,17 +68,106 @@ typedef enum {
 	ValM = 1 << 9,  // memory of value e.g.  [0x0]
 } Instruction_Operand_Kind;
 
+
+typedef enum {
+	LABELS_TABLE_KIND,
+	JUMPINSTRUCTIONS_TABLE_KIND,
+	DATA_VARIABLES_TABLE_KIND,
+	OPERAND_TABLE_KIND,
+} Builder_Table_Kind;
+
+typedef struct {
+	int location_to_patch; // relative
+	int location; // relative to starting position
+	char *name;   // name of the thingy
+} Name_Location;
+
+typedef struct {
+	// TODO(ziv): Remove this as this will get replaced by the other thingy yeey
+	char *code, *data;
+	int code_size; 
+	
+	//~
+	// data_variables -  variables contained in the .data section
+	// jumpinstructions - for addresses of external functions
+	//
+	
+	Name_Location *labels, *jumpinstructions, *data_variables; 
+	int labels_count, jumpinstructions_count, data_variables_count;
+	int current_data_variable_location; // used to keep track of location of `data_variables`
+	
+	int bytes_count; // to tell byte count of the program 
+	
+	//~
+	// list of external library paths e.g. kernel32.lib (in linux libc.so)
+	int external_library_paths_count;
+	char **external_library_paths;
+	
+	// result of visual studio sdk path on windows
+	Find_Result vs_sdk;
+	
+	M_Pool m; // temporary memory allocator
+} Builder; 
+
+//~
+// @Incomplete General things you might want which are not specific to any architecture 
+//
+
+
+internal Operand x86_c_function(Builder *builder, char *function) {
+	Operand result = { Val, .value = builder->jumpinstructions_count | (JUMPINSTRUCTIONS_TABLE_KIND << 28)};
+	Name_Location *v = &builder->jumpinstructions[builder->jumpinstructions_count++];
+	v->location = 0; // NOTE(ziv): @Incomplete the location should get reset here at a later date
+	v->name = function;
+	return result;
+}
+
+internal Operand x86_label(Builder *builder, const char *label) {
+	Operand result = { Val, .value = builder->labels_count | (LABELS_TABLE_KIND << (32-4)) };
+	Name_Location *v = &builder->labels[builder->labels_count++];
+	v->location = builder->bytes_count;
+	v->name = (char *)label;
+	return result;
+}
+
+internal Operand x86_lit(Builder *builder, const char *literal) {
+	Operand result = { Val, .value = builder->data_variables_count | (DATA_VARIABLES_TABLE_KIND << 28) };
+	Name_Location *v = &builder->data_variables[builder->data_variables_count++];
+	v->location = builder->current_data_variable_location;
+	builder->current_data_variable_location += (int)strlen(literal)+1;
+	v->name = (char *)literal;
+	return result;
+}
+
+internal Name_Location *x86_get_name_location_from_value(Builder *builder, Value v) {
+	Name_Location *nl_table[4] = { builder->labels , builder->jumpinstructions, builder->data_variables };
+	int idx  = v.idx & ((1<<28)-1);
+	int type = v.idx >> 28;
+	return &nl_table[type][idx];
+}
+
+internal Operand x86_function(Builder *builder, const char *module, const char *function) {
+	Operand result = { Val, .value = builder->jumpinstructions_count | (JUMPINSTRUCTIONS_TABLE_KIND << (32-4)) };
+	
+	Name_Location *v = &builder->jumpinstructions[builder->jumpinstructions_count++];
+	v->location = 0;
+	v->name = (char *)function;
+	
+	module; function;
+	return result;
+}
+
+
+//~
+// Instruction Tables
+//
+
 typedef struct {
 	Instruction_Kind kind;
 	u8 opcode; // TODO(ziv): don't assume opcode size = 1byte
 	u8 opcode_reg; // for IK_OPCODE_REG usually used for instructions with immediate values
 	u8 operand_kind[2];
 } Instruction;
-
-
-//~
-// Instruction Tables
-//
 
 static Instruction add[] = {
 	{ IK_OPCODE, .opcode = 0x00, .operand_kind = { M |B8,          R |B8 } },
@@ -172,51 +257,6 @@ static Instruction mov[] = {
 
 //~
 
-typedef enum {
-	LABELS_TABLE_KIND,
-	JUMPINSTRUCTIONS_TABLE_KIND,
-	DATA_VARIABLES_TABLE_KIND,
-	OPERAND_TABLE_KIND,
-} Builder_Table_Kind;
-
-typedef struct {
-	int location_to_patch; // relative
-	int location; // relative to starting position
-	char *name;   // name of the thingy
-} Name_Location;
-
-typedef struct {
-	char *code, *data;
-	int code_size, data_size; 
-	
-	// TODO(ziv): Remove this as this will get replaced by the other thingy yeey
-	
-	//~
-	// data_variables -  variables contained in the .data section
-	// jumpinstructions - for addresses of external functions
-	//
-	
-	Name_Location *labels, *jumpinstructions, *data_variables; 
-	int labels_count, jumpinstructions_count, data_variables_count;
-	int current_data_variable_location; // used to keep track of location of `data_variables`
-	
-	int bytes_count; // to tell byte count of the program 
-	
-	//~
-	// list of external library paths e.g. kernel32.lib (in linux libc.so)
-	char **external_library_paths;
-	int external_library_paths_count;
-	
-	// result of visual studio sdk path on windows
-	Find_Result vs_sdk;
-	
-	M_Pool *m;
-	} Builder; 
-
-
-
-
-
 internal inline Operand REG(Register_Type reg_type) { return (Operand){R, .reg=reg_type }; }
 internal inline Operand IMM(int immediate) { return (Operand){I, .immediate=(immediate)}; }
 internal inline Operand MEM(Register_Type base, Register_Type index, char scale, int disp, int bitness) {
@@ -232,220 +272,6 @@ internal Operand RELMEM(Builder *builder, int relative_memory_address) {
 	v->name = NULL;
 	return result;
 }
-
-internal Operand x86_label(Builder *builder, const char *label) {
-	Operand result = { Val, .value = builder->labels_count | (LABELS_TABLE_KIND << (32-4)) };
-	Name_Location *v = &builder->labels[builder->labels_count++];
-	v->location = builder->bytes_count;
-	v->name = (char *)label;
-	return result;
-}
-
-internal Operand x86_lit(Builder *builder, const char *literal) {
-	Operand result = { Val, .value = builder->data_variables_count | (DATA_VARIABLES_TABLE_KIND << 28) };
-	Name_Location *v = &builder->data_variables[builder->data_variables_count++];
-	v->location = builder->current_data_variable_location;
-	builder->current_data_variable_location += (int)strlen(literal)+1;
-	v->name = (char *)literal;
-	return result;
-}
-
-
-
-internal Name_Location *x86_get_name_location_from_value(Builder *builder, Value v) {
-	Name_Location *nl_table[4] = { builder->labels , builder->jumpinstructions, builder->data_variables };
-	int idx  = v.idx & ((1<<28)-1);
-	int type = v.idx >> 28;
-	return &nl_table[type][idx];
-}
- 
-
-typedef struct {
-	char *function; // name
-	char *library;  // .dll HINT + name
-} Function_Library;
-
-internal bool fill_modules_for_function(Builder *builder, const char *module, Function_Library *function_library_array, 
-										int function_library_size, int *func_count_in_lib) {
-	// TODO(ziv): @Cleanup this function
-	if (!builder->vs_sdk.windows_sdk_version) {
-		return false; 
-	}
-
-	wchar_t *wchar_path = concat2(builder->vs_sdk.windows_sdk_um_library_path, L"\\"), *temp_wchar_path = wchar_path;
-
-	// TODO(ziv): switch to using VirtualAlloc?
-	// convert wcahr to char
-	char *path = (char *)malloc(wcslen(wchar_path)+strlen(module)+1), *temp_path = path;
-	while ((char)*temp_wchar_path) *temp_path++ = (char)*temp_wchar_path++;
-	while (*module) *temp_path++ = *module++;
-	*temp_path = '\0';
-
-	char *buff; // archive library buffer
-	{
-
-		HANDLE handle = CreateFileA(path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-		Assert(handle != INVALID_HANDLE_VALUE && "Invalid handle");
-
-		DWORD file_size = GetFileSize(handle, NULL), bytes_read;
-		buff = VirtualAlloc(NULL, file_size, MEM_COMMIT, PAGE_READWRITE);
-
-		BOOL success = ReadFile(handle, buff, file_size, &bytes_read, NULL);
-		CloseHandle(handle);
-		free(wchar_path);
-		free(path);
-		
-		if (!success) { goto fill_modules_cleanup; }
-		
-	}
-
-	// start parsing the file
-	if (memcmp(buff, IMAGE_ARCHIVE_START, IMAGE_ARCHIVE_START_SIZE) != 0) {
-		goto fill_modules_cleanup; 
-	}
-	IMAGE_ARCHIVE_MEMBER_HEADER *first_linker_member_header = (IMAGE_ARCHIVE_MEMBER_HEADER *)(buff + IMAGE_ARCHIVE_START_SIZE);
-
-	// calculate size of first linker archive member
-	int member_size = 0;
-	{
-
-		// TODO(ziv): make this be a atoi function
-		int exp_table[] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000 };
-		int size_str_length = 0;
-		for (; '0' <= first_linker_member_header->Size[size_str_length] && first_linker_member_header->Size[size_str_length] <= '9'; size_str_length++);
-		for (int i = size_str_length-1; i >= 0; i--) {
-			member_size += exp_table[size_str_length-1 - i] * (first_linker_member_header->Size[i] - '0');
-		}
-
-	}
-
-	// Skip to First Linker Member
-	IMAGE_ARCHIVE_MEMBER_HEADER *second_linker_memeber_header = (IMAGE_ARCHIVE_MEMBER_HEADER *)((char *)first_linker_member_header + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER) + member_size);
-	char *second_linker_member = (char *)second_linker_memeber_header + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER);
-
-	unsigned long n_offsets = *(unsigned long *)(second_linker_member);
-	int offsets_size = sizeof(unsigned long) + 4*n_offsets;
-	unsigned long *offsets = (unsigned long *)(second_linker_member + sizeof(unsigned long));
-	unsigned long n_symbols = *(unsigned long *)(second_linker_member + offsets_size);
-	int symbols_size = sizeof(unsigned long) + 2*n_symbols;
-	unsigned short *indicies = (unsigned short *)(second_linker_member + offsets_size + sizeof(unsigned long));
-	char *string_table = (second_linker_member + offsets_size + symbols_size);
-	
-		//
-		// Do a full search inside the String Table for all function names given 
-		//
-	
-	char *function_to_check = string_table;
-	
-	unsigned int string_table_idx = 0;
-	for (int function_library_idx = 0; function_library_idx < function_library_size; function_library_idx++) {
-		
-		// NOTE(ziv): I assume that the function names are sorted alphabetically 
-		Function_Library *fl = &function_library_array[function_library_idx];
-		if (fl->library)  continue;
-		
-		for (; string_table_idx < n_symbols; string_table_idx++) {
-			
-			// check specific function 
-		char *function = fl->function;
-			while (*function == *function_to_check && *function_to_check != '\0') {
-				function++, function_to_check++; 
-			}
-			
-			// this means there is no point to further look at this function
-			if ((*function | 0x60) > (*function_to_check | 0x60)) {
-				while (*function_to_check++ != '\0');
-				continue;
-			}
-			else if ((*function | 0x60) < (*function_to_check | 0x60)) {
-				if ('a' < (*function_to_check | 0x60) && (*function_to_check | 0x60) < 'z')
-					break; // @Incomplete check whether this is required or not 
-				
-				// I don't know what to do so... contineu? 
-				while (*function_to_check++ != '\0');
-				continue;
-				
-			}
-			
-			// check of member offset
-			unsigned short offsets_idx = indicies[string_table_idx];
-			unsigned long offset = offsets[offsets_idx-1];
-			
-			// https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#import-library-format
-			typedef struct {
-				WORD    Sig1;            // Must be IMAGE_FILE_MACHINE_UNKNOWN
-				WORD    Sig2;            // Must be 0xffff
-				WORD    Version;         // >= 1 (implies the CLSID field is present)
-				WORD    Machine;
-				DWORD   TimeDateStamp;
-				DWORD   SizeOfData;      // Size of data that follows the header
-				union {
-					WORD Hint;
-					WORD Ordinal;
-				};
-				WORD    Type; 
-			} OBJECT_HEADER;
-			OBJECT_HEADER *object_header_info = (OBJECT_HEADER *)(buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
-			char *function_and_dll_names = buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER) + sizeof(OBJECT_HEADER);
-			
-			if (strcmp(function_and_dll_names, fl->function) == 0) {
-				++*func_count_in_lib;
-				
-				// duplicate string
-				char *dll_name = function_and_dll_names+strlen(fl->function)+1;
-				size_t dll_name_length = strlen(dll_name)+1;
-				char *copy_dll_name = malloc(2 + dll_name_length);
-				memcpy(copy_dll_name, &object_header_info->Hint, sizeof(object_header_info->Hint));
-				memcpy(copy_dll_name + 2, dll_name, dll_name_length);
-				fl->library = copy_dll_name;
-				break;
-			}
-			
-			while (*function_to_check++ != '\0');
-		}
-		
-	}
-	
-	//IMAGE_ARCHIVE_MEMBER_HEADER *function_member_header = (IMAGE_ARCHIVE_MEMBER_HEADER *)(buff + offset);
-	
-	/* TODO(ziv): figure out whether I need this extra information for anything useful
-	OBJECT_HEADER *obj_header = (OBJECT_HEADER *)(buff + offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
-		int function_member_size = atoi((const char *)function_member_header->Size);
-		int import_type      = obj_header->Type & 0x03;
-		int import_name_type = (obj_header->Type & 0x1c) >> 2;
-		 */
-	fill_modules_cleanup:
-	
-	VirtualFree(buff, 0, MEM_RELEASE); 
-	return true;
-}
-
-
-internal Operand x86_c_function(Builder *builder, char *function) {
-	Operand result = { Val, .value = builder->jumpinstructions_count | (JUMPINSTRUCTIONS_TABLE_KIND << 28)};
-	Name_Location *v = &builder->jumpinstructions[builder->jumpinstructions_count++];
-	v->location = 0; // NOTE(ziv): @Incomplete the location should get reset here at a later date
-	v->name = function;
-	return result;
-
-}
-
-
-internal Operand x86_function(Builder *builder, const char *module, const char *function) {
-	Operand result = { Val, .value = builder->jumpinstructions_count | (JUMPINSTRUCTIONS_TABLE_KIND << (32-4)) };
-
-	Name_Location *v = &builder->jumpinstructions[builder->jumpinstructions_count++];
-	v->location = 0;
-	v->name = (char *)function;
-
-	module; function;
-	return result;
-}
-
-
-
-
-
 
 #define MOD_RM   (1 << 0)
 #define SIB      (1 << 1)
@@ -483,7 +309,9 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 		// unary operation / operation with no operands
 		require |= 0;
 	}
-
+	
+	
+	
 	//
 	// Extract info from operands
 	//

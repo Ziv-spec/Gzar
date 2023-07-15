@@ -51,7 +51,237 @@ typedef unsigned char bool;
 #define ArrayLength(arr) (sizeof(arr)/sizeof(arr[0]))
 
 ////////////////////////////////
+/// Memory
+
+#define DEFAULT_POOL_SIZE 4*1024 // a page size on windows
+
+#ifndef DEFAULT_ALIGNMENT
+#define DEFAULT_ALIGNMENT (2*sizeof(void *))
+#endif
+
+internal bool is_power_of_two(uintptr_t x) {
+    return (x & (x-1)) == 0;
+}
+
+internal uintptr_t align_forward(uintptr_t ptr, size_t align) {
+    uintptr_t p, a, modulo;
+	
+    Assert(is_power_of_two(align));
+	
+    p = ptr;
+    a = (uintptr_t)align;
+    modulo = p & (a-1); // same as (p % a) buf faster because 'a' is a power of two
+	
+    if (modulo != 0) {
+        p += a - modulo;
+    }
+	
+    return p;
+}
+
+typedef struct M_Arena M_Arena;
+struct M_Arena {
+    unsigned char *buff;
+    size_t len;
+    size_t prev_offset;
+    size_t curr_offset;
+	
+    M_Arena *next;
+};
+
+internal void *arena_alloc_align(M_Arena *a, size_t size, size_t align) {
+    // Align 'curr_offset' forward to the specified alignment
+	uintptr_t curr_ptr = (uintptr_t)a->buff + (uintptr_t)a->curr_offset;
+	uintptr_t offset = align_forward(curr_ptr, align);
+	offset -= (uintptr_t)a->buff; // Change to relative offset
+	
+	// Check to see if the backing memory has space left
+	if (offset+size <= a->len) {
+		void *ptr = &a->buff[offset];
+		a->prev_offset = offset;
+		a->curr_offset = offset+size;
+		
+		// Zero new memory by default
+		memset(ptr, 0, size);
+		return ptr;
+	}
+	// Return NULL if the arena is out of memory (or handle differently)
+	return NULL;
+}
+
+// Because C doesn't have default parameters
+internal void *arena_alloc(M_Arena *a, size_t size) {
+	return arena_alloc_align(a, size, DEFAULT_ALIGNMENT);
+}
+
+internal void arena_init(M_Arena *a, void *backing_bufffer, size_t backing_bufffer_length) {
+	a->buff = (unsigned char *)backing_bufffer;
+	a->len = backing_bufffer_length;
+	a->curr_offset = 0;
+	a->prev_offset = 0;
+    a->next = NULL;
+}
+
+void arena_free(M_Arena *a, void *ptr) {
+    a, ptr;
+	// Do nothing
+}
+
+void *arena_resize_align(M_Arena *a, void *old_memory, size_t old_size, size_t new_size, size_t align) {
+	unsigned char *old_mem = (unsigned char *)old_memory;
+	
+	Assert(is_power_of_two(align));
+	
+	if (old_mem == NULL || old_size == 0) {
+		return arena_alloc_align(a, new_size, align);
+	}
+    else if (a->buff <= old_mem && old_mem < a->buff+a->len) {
+		if (a->buff+a->prev_offset == old_mem) {
+			a->curr_offset = a->prev_offset + new_size;
+			if (new_size > old_size) {
+				// Zero the new memory by default
+				memset(&a->buff[a->curr_offset], 0, new_size-old_size);
+			}
+			return old_memory;
+		}
+        else {
+			void *new_memory = arena_alloc_align(a, new_size, align);
+			size_t copy_size = old_size < new_size ? old_size : new_size;
+			// Copy across old memory to the new memory
+			memmove(new_memory, old_memory, copy_size);
+			return new_memory;
+		}
+		
+	}
+    else {
+		Assert(!"Memory is out of bounds of the bufffer in this arena");
+		return NULL;
+	}
+}
+
+// Because C doesn't have default parameters
+void *arena_resize(M_Arena *a, void *old_memory, size_t old_size, size_t new_size) {
+	return arena_resize_align(a, old_memory, old_size, new_size, DEFAULT_ALIGNMENT);
+}
+
+// TODO(ziv) Check whether this is needed
+void arena_free_all(M_Arena *a) {
+	a->curr_offset = 0;
+	a->prev_offset = 0;
+}
+
+typedef struct M_Pool M_Pool;
+struct M_Pool {
+    M_Arena *first;
+    M_Arena *last;
+	
+	M_Arena *scratch;
+	
+    size_t pool_size;
+};
+
+internal void pools_init(M_Pool *p) {
+    Assert(p != NULL && p->pool_size > 0);
+    Assert(p->last == NULL || p->first == NULL); // Expecting a empty m_pool to initialize
+	
+    M_Arena *a = (M_Arena *)realloc(NULL, p->pool_size);
+    arena_init(a, (unsigned char *)a + sizeof(M_Arena), p->pool_size-sizeof(M_Arena));
+	
+    p->last  = a;
+    p->first = a;
+	
+	p->scratch = NULL;
+	
+}
+
+internal void *pool_alloc_align(M_Pool *m, size_t size, size_t align) {
+    Assert(m != NULL && size > 0);
+	
+    void *result = arena_alloc_align(m->last, size, align);
+    if (result) {
+        return result;
+    }
+	
+    M_Arena *a = (M_Arena *)realloc(NULL, m->pool_size);
+    Assert(a || !"Memory is out of bounds of the bufffer in this arena");
+    arena_init(a, (unsigned char *)a + sizeof(M_Arena), m->pool_size-sizeof(M_Arena));
+	
+    m->last->next = a;
+    m->last = a;
+	
+    return arena_alloc_align(a, size, align);
+}
+
+internal void *pool_alloc(M_Pool *m, size_t size) {
+    return pool_alloc_align(m, size, DEFAULT_ALIGNMENT);
+}
+
+internal void *pool_resize_align(M_Pool *m, void *old_memory, size_t old_size, size_t new_size, size_t align) {
+    Assert(m != NULL);
+	
+    void *new_memory = arena_resize_align(m->last, old_memory, old_size, new_size, align);
+    if (new_memory) {
+        return new_memory;
+    }
+	
+    M_Arena *a = (M_Arena *)realloc(NULL, m->pool_size);
+    Assert(a || !"Memory is out of bounds of the bufffer in this arena");
+    arena_init(a, (unsigned char *)a + sizeof(M_Arena), m->pool_size-sizeof(M_Arena));
+	
+    m->last->next = a;
+    m->last = a;
+	
+    new_memory = arena_alloc_align(a, new_size, align);
+    memcpy(new_memory, old_memory, old_size);
+	
+    return new_memory;
+	
+}
+
+internal void *pool_resize(M_Pool *m, void *old_memory, size_t old_size, size_t new_size) {
+    return pool_resize_align(m, old_memory, old_size, new_size, DEFAULT_ALIGNMENT);
+}
+
+internal M_Arena *pool_get_scratch(M_Pool *m) {
+	if (m->scratch) {
+		return m->scratch;
+	}
+	
+	M_Arena *a = (M_Arena *)realloc(NULL, 0x2000 + sizeof(M_Arena));
+    Assert(a || !"Memory is out of bounds of the bufffer in this arena");
+    arena_init(a, (unsigned char *)a + sizeof(M_Arena), m->pool_size-sizeof(M_Arena));
+	
+	m->scratch = a; 
+	return m->scratch;
+}
+
+internal void pool_free(M_Pool *m) {
+	
+    M_Arena *a = m->first;
+    M_Arena *temp;
+	
+    while (a) {
+        temp = a->next;
+        free(a);
+        a = temp;
+    }
+	
+}
+
+////////////////////////////////
 /// Strings
+
+internal int _atoi(char *value) {
+	int exp_table[] = { 
+		1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000 
+	};
+	int size = 0, final_size = 0;
+	for (; '0' <= value[size] && value[size] <= '9'; size++);
+	for (int i = size-1; i >= 0; i--) {
+		final_size += exp_table[size-1-i] * (value[i] - '0');
+	}
+	return final_size;
+}
 
 typedef struct String8 String8;
 struct String8 {
@@ -73,10 +303,17 @@ internal int str8_compare(String8 s1, String8 s2) {
 }
 
 internal String8 str8_lit(const char *s) {
-    String8 lit;
-    lit.str = (char *)s;
-    lit.size = strlen(s);
+    String8 lit = { 
+		.str = (char *)s,
+		.size = strlen(s)
+	};
     return lit;
+}
+
+internal String8 str8_duplicate(M_Arena *m, String8 s) {
+	char *dup = arena_alloc(m, s.size); 
+	memcpy(dup, s.str, s.size); 
+	return (String8){ dup, s.size };
 }
 
 internal int get_line_number(char *start, String8 str) {
@@ -106,207 +343,6 @@ internal int get_character_number(char *start, String8 str) {
 }
 
 ////////////////////////////////
-/// Memory
-
-#define DEFAULT_POOL_SIZE 4*1024 // a page size on windows
-
-#ifndef DEFAULT_ALIGNMENT
-#define DEFAULT_ALIGNMENT (2*sizeof(void *))
-#endif
-
-internal bool is_power_of_two(uintptr_t x) {
-    return (x & (x-1)) == 0;
-}
-
-internal uintptr_t align_forward(uintptr_t ptr, size_t align) {
-    uintptr_t p, a, modulo;
-
-    Assert(is_power_of_two(align));
-
-    p = ptr;
-    a = (uintptr_t)align;
-    modulo = p & (a-1); // same as (p % a) buf faster because 'a' is a power of two
-
-    if (modulo != 0) {
-        p += a - modulo;
-    }
-
-    return p;
-}
-
-typedef struct M_Arena M_Arena;
-struct M_Arena {
-    unsigned char *buff;
-    size_t len;
-    size_t prev_offset;
-    size_t curr_offset;
-
-    M_Arena *next;
-};
-
-internal void *arena_alloc_align(M_Arena *a, size_t size, size_t align) {
-    // Align 'curr_offset' forward to the specified alignment
-	uintptr_t curr_ptr = (uintptr_t)a->buff + (uintptr_t)a->curr_offset;
-	uintptr_t offset = align_forward(curr_ptr, align);
-	offset -= (uintptr_t)a->buff; // Change to relative offset
-
-	// Check to see if the backing memory has space left
-	if (offset+size <= a->len) {
-		void *ptr = &a->buff[offset];
-		a->prev_offset = offset;
-		a->curr_offset = offset+size;
-
-		// Zero new memory by default
-		memset(ptr, 0, size);
-		return ptr;
-	}
-	// Return NULL if the arena is out of memory (or handle differently)
-	return NULL;
-}
-
-// Because C doesn't have default parameters
-internal void *arena_alloc(M_Arena *a, size_t size) {
-	return arena_alloc_align(a, size, DEFAULT_ALIGNMENT);
-}
-
-internal void arena_init(M_Arena *a, void *backing_bufffer, size_t backing_bufffer_length) {
-	a->buff = (unsigned char *)backing_bufffer;
-	a->len = backing_bufffer_length;
-	a->curr_offset = 0;
-	a->prev_offset = 0;
-    a->next = NULL;
-}
-
-void arena_free(M_Arena *a, void *ptr) {
-    a, ptr;
-	// Do nothing
-}
-
-void *arena_resize_align(M_Arena *a, void *old_memory, size_t old_size, size_t new_size, size_t align) {
-	unsigned char *old_mem = (unsigned char *)old_memory;
-
-	Assert(is_power_of_two(align));
-
-	if (old_mem == NULL || old_size == 0) {
-		return arena_alloc_align(a, new_size, align);
-	}
-    else if (a->buff <= old_mem && old_mem < a->buff+a->len) {
-		if (a->buff+a->prev_offset == old_mem) {
-			a->curr_offset = a->prev_offset + new_size;
-			if (new_size > old_size) {
-				// Zero the new memory by default
-				memset(&a->buff[a->curr_offset], 0, new_size-old_size);
-			}
-			return old_memory;
-		}
-        else {
-			void *new_memory = arena_alloc_align(a, new_size, align);
-			size_t copy_size = old_size < new_size ? old_size : new_size;
-			// Copy across old memory to the new memory
-			memmove(new_memory, old_memory, copy_size);
-			return new_memory;
-		}
-
-	}
-    else {
-		Assert(!"Memory is out of bounds of the bufffer in this arena");
-		return NULL;
-	}
-}
-
-// Because C doesn't have default parameters
-void *arena_resize(M_Arena *a, void *old_memory, size_t old_size, size_t new_size) {
-	return arena_resize_align(a, old_memory, old_size, new_size, DEFAULT_ALIGNMENT);
-}
-
-// TODO(ziv) Check whether this is needed
-void arena_free_all(M_Arena *a) {
-	a->curr_offset = 0;
-	a->prev_offset = 0;
-}
-
-typedef struct M_Pool M_Pool;
-struct M_Pool {
-    M_Arena *first;
-    M_Arena *last;
-
-    size_t pool_size;
-};
-
-internal void pools_init(M_Pool *p) {
-    Assert(p != NULL && p->pool_size > 0);
-    Assert(p->last == NULL || p->first == NULL); // Expecting a empty m_pool to initialize
-
-    M_Arena *a = (M_Arena *)realloc(NULL, p->pool_size);
-    arena_init(a, (unsigned char *)a + sizeof(M_Arena), p->pool_size-sizeof(M_Arena));
-
-    p->last  = a;
-    p->first = a;
-
-}
-
-internal void *pool_alloc_align(M_Pool *m, size_t size, size_t align) {
-    Assert(m != NULL && size > 0);
-
-    void *result = arena_alloc_align(m->last, size, align);
-    if (result) {
-        return result;
-    }
-
-    M_Arena *a = (M_Arena *)realloc(NULL, m->pool_size);
-    Assert(a || !"Memory is out of bounds of the bufffer in this arena");
-    arena_init(a, (unsigned char *)a + sizeof(M_Arena), m->pool_size-sizeof(M_Arena));
-
-    m->last->next = a;
-    m->last = a;
-
-    return arena_alloc_align(a, size, align);
-}
-
-internal void *pool_alloc(M_Pool *m, size_t size) {
-    return pool_alloc_align(m, size, DEFAULT_ALIGNMENT);
-}
-
-internal void *pool_resize_align(M_Pool *m, void *old_memory, size_t old_size, size_t new_size, size_t align) {
-    Assert(m != NULL);
-
-    void *new_memory = arena_resize_align(m->last, old_memory, old_size, new_size, align);
-    if (new_memory) {
-        return new_memory;
-    }
-
-    M_Arena *a = (M_Arena *)realloc(NULL, m->pool_size);
-    Assert(a || !"Memory is out of bounds of the bufffer in this arena");
-    arena_init(a, (unsigned char *)a + sizeof(M_Arena), m->pool_size-sizeof(M_Arena));
-
-    m->last->next = a;
-    m->last = a;
-
-    new_memory = arena_alloc_align(a, new_size, align);
-    memcpy(new_memory, old_memory, old_size);
-
-    return new_memory;
-
-}
-
-internal void *pool_resize(M_Pool *m, void *old_memory, size_t old_size, size_t new_size) {
-    return pool_resize_align(m, old_memory, old_size, new_size, DEFAULT_ALIGNMENT);
-}
-
-internal void pool_free(M_Pool *m) {
-
-    M_Arena *a = m->first;
-    M_Arena *temp;
-
-    while (a) {
-        temp = a->next;
-        free(a);
-        a = temp;
-    }
-
-}
-
-////////////////////////////////
 /// Vectors
 
 // this is going to be somewhat of a generic way of doing dynamic arrays in C
@@ -321,9 +357,9 @@ struct Vector {
 #define DEFAULT_VEC_SIZE 16
 
 internal Vector *vec_init() {
-    Vector *vec = (Vector *)malloc(sizeof(Vector));
+    Vector *vec = (Vector *)malloc(sizeof(Vector) + sizeof(void *)*DEFAULT_VEC_SIZE);
     vec->capacity = DEFAULT_VEC_SIZE; vec->index = 0;
-    vec->data = malloc(sizeof(void *) * DEFAULT_VEC_SIZE);
+    vec->data = (void **)(((char *)vec) + sizeof(Vector));
     return vec;
 }
 
@@ -362,6 +398,10 @@ internal bool vec_equal(Vector *src1, Vector *src2) {
     return true;
 }
 
+internal void vec_free(Vector *v) {
+	free(v);
+}
+
 ////////////////////////////////
 /// Hashtables
 
@@ -396,12 +436,11 @@ static u64 str8_hash(String8 str) {
 
 
 #define DEFAULT_MAP_SIZE 16
+
 internal Map *init_map(int elem_size) {
 
     Map *map = malloc(sizeof(Map));
-    if (!map) {
-        return NULL;
-    }
+    if (!map) { return NULL; }
 
     map->buckets = calloc(DEFAULT_MAP_SIZE, sizeof(Bucket));
     Assert(map->buckets);
@@ -442,27 +481,33 @@ internal void *map_get(Map *map, String8 key) {
     return NULL;
 }
 
-// NOTE(ziv): this function does not remove the element from the map
-// it only returns it's value
-internal void *map_peek(Map *map, String8 key) {
-
+internal Bucket *map_peek_bucket(Map *map, String8 key) {
+	
     u64 hash = str8_hash(key);
     size_t index = hash & (map->capacity-1);
     while (map->buckets[index].key.str != NULL) {
-
+		
         if (str8_compare(map->buckets[index].key, key) == 0) {
-            return map->buckets[index].value;
+			return &map->buckets[index];
         }
-
+		
         // linear probing
         index++;
         if (index >= map->capacity) {
             index = 0;
         }
-
+		
     }
-
+	
     return NULL;
+}
+
+// NOTE(ziv): this function does not remove the element from the map
+// it only returns it's value
+internal void *map_peek(Map *map, String8 key) {
+	Bucket *b = map_peek_bucket(map, key); 
+	if (b) return b->value;
+	return b;
 }
 
 internal bool map_set_bucket(Map *map, String8 key, void *value) {
