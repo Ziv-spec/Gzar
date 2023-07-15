@@ -31,7 +31,7 @@ typedef struct {
 
 typedef struct Operand {
 	int kind;
-
+	
 	union {
 		int reg;
 		unsigned long long immediate;
@@ -59,7 +59,7 @@ typedef enum {
 	B16 = 1 << 1,
 	B32 = 1 << 2,
 	B64 = 1 << 3,
-
+	
 	R = 1 << 4,     // register
 	I = 1 << 5,     // immediate
 	M = 1 << 6 | R, // memory/register
@@ -283,18 +283,18 @@ internal Operand RELMEM(Builder *builder, int relative_memory_address) {
 internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operand from) {
 	// don't allow for MEM->MEM, I->I, Any->I kinds of instructions
 	Assert(!(to.kind == from.kind && ((to.kind == M || to.kind == I) || to.kind == I)));
-
+	
 	char bitness_to = 0, bitness_from = 0, address_bitness = 0, disp_bitness = 0;
 	char rex_b = 0 , rex_r = 0, rex_x = 0, is_inst_64bit = 0;
 	char mod = 0, reg = 0, r_m = 0;
-
+	
 	int instruction_found = false;
 	unsigned long long constant = 0;
 	int require = MOD_RM, disp = 0;
-
+	
 	Operand memory = {0};
 	Name_Location *nl = 0;
-
+	
 	if (from.kind == Val) {
 		nl = x86_get_name_location_from_value(builder, from.value);
 		from = IMM(0x0);
@@ -315,7 +315,7 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 	//
 	// Extract info from operands
 	//
-
+	
 	// handling operand TO
 	if (to.kind == R) {
 		r_m = GET_REG(to.reg); bitness_to = GET_BITNESS(to.reg); rex_b = GET_REX(to.reg);
@@ -334,7 +334,7 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 	else {
 		Assert(false); // shouldn't be reaching this as of right now
 	}
-
+	
 	// handling operand FROM
 	if (from.kind == R) {
 		reg = GET_REG(from.reg); bitness_from = GET_BITNESS(from.reg); rex_r = GET_REX(from.reg);
@@ -346,37 +346,37 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 		Assert((bitness_from || bitness_to) && "Please provide a size for a FROM memory");
 		bitness_to = bitness_from = (bitness_to > bitness_from ? bitness_to : bitness_from);
 		require |= SIB;
-
+		
 	}
 	else if (from.kind == I) {
 		constant = from.immediate;
-
+		
 		int i = 0;
 		while (i < ArrayLength(constants_t) && ((constants_t[i] & constant) != constant)) i++;
 		bitness_from = (1 << i);
-
+		
 		if (!bitness_to) { // TODO(ziv): move this outside
 			bitness_to = bitness_from;
 		}
-
+		
 		require |= CONSTANT;
 	}
-
-
-
+	
+	
+	
 	//
 	// find correct instruction to encode
 	//
-
+	
 	char temp = bitness_from;
 	for (; inst->operand_kind[0] != 0; inst++) {
-
+		
 		// TODO(ziv): @refactor Find a way to do this in a better way
-
+		
 		if (inst->kind == IK_OPCODE_INST_REG && rex_b) {
 			continue; // this type of instruction doesn't work well with r8, r9... registers
 		}
-
+		
 		// handle special kinds of instructions
 		if (inst->kind == IK_OPCODE_AL_AX_EAX_RAX) {
 			bitness_from = bitness_to;
@@ -387,7 +387,7 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 		else {
 			bitness_from = temp;
 		}
-
+		
 		// make sure bitness of operands make senese
 		if (bitness_to != bitness_from) {
 			int bitness = inst->operand_kind[1] & 0x0f;
@@ -402,12 +402,12 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 			// this will be the largest valid bitness value for this operand
 			bitness_from = (1 << i);
 		}
-
+		
 		// check if correct instruction
 		int operands_kind = inst->operand_kind[0] << 8 | inst->operand_kind[1];
 		if (((operands_kind & (to.kind << 8 | from.kind)) == (to.kind << 8 | from.kind)) &&
 			((operands_kind & ((int)bitness_to << 8 | (int)bitness_from)) == ((int)bitness_to << 8 | (int)bitness_from))) {
-
+			
 			instruction_found = true;
 			break;
 		}
@@ -416,13 +416,13 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 		Assert(!"Couldn't find the right instruction!");
 		return;
 	}
-
-
-
+	
+	
+	
 	//
 	// Beginning to encode the instruction that was found
 	//
-
+	
 	if (inst->kind == IK_OPCODE_REG) {
 		Assert(!reg);  // make sure there is no conflict?
 		reg = inst->opcode_reg;
@@ -431,13 +431,13 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 			 inst->kind == IK_OPCODE_INST_REG) {
 		require &= ~MOD_RM;
 	}
-
-
-
+	
+	
+	
 	// special handling if you have memory as a operand
 	char base = memory.base, index = memory.index, scale=memory.scale; disp = memory.disp;
 	if (require & SIB) {
-
+		
 		// mod
 		// 00 - [eax]          ; r->m/m->r
 		// 00 - [disp32]       ; special case
@@ -448,10 +448,10 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 		else if (disp == 0)           { mod = 0b00; disp_bitness = 0; require &= ~DISP; }
 		else if (disp > 0xff)         { mod = 0b10; disp_bitness = 4; }
 		else if ((disp&0xff) == disp) { mod = 0b01; disp_bitness = 1; }
-
+		
 		if (base) {
 			r_m = GET_REG(base); address_bitness = GET_BITNESS(memory.base);
-
+			
 			if (rex_b) {
 				rex_r = rex_b;
 			}
@@ -459,7 +459,7 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 				rex_b = GET_REX(base);
 			}
 		}
-
+		
 		if (index || base == ESP || (!base && !index)) {
 			r_m = 0b100; // use the sib byte
 			if (index) rex_x = GET_REX(index);
@@ -469,31 +469,31 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 		else {
 			require &= ~SIB; // remove when not needed
 		}
-
+		
 	}
 	else {
 		mod = 0b11; // regular register addressing e.g. add rax, rax
 	}
-
+	
 	is_inst_64bit = bitness_to == 8;
-
-
-
-
-
+	
+	
+	
+	
+	
 	//
 	// encode final instrution
 	//
-
+	
 #define MOVE_BYTE(buffer, x) do { buffer[builder->bytes_count++] =(x); } while(0)
 	char *instruction_buffer = builder->code;
-
+	
 	// prefix
 	{
 		if (bitness_to == 2)      MOVE_BYTE(instruction_buffer, 0x66); // AX, BX, CX...
 		if (address_bitness == 4) MOVE_BYTE(instruction_buffer, 0x67); // [EAX], [EBX], [ECX]...
 	}
-
+	
 	// rex
 	if (is_inst_64bit | rex_b | rex_r | rex_x) {
 		char rex = ((1 << 6) | // Must have for it to be recognized as rex byte
@@ -503,23 +503,23 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 					(1 << 3)*is_inst_64bit); // rex_w
 		MOVE_BYTE(instruction_buffer, rex);
 	}
-
+	
 	// opcode
 	{
 		char inst_reg = (inst->kind == IK_OPCODE_INST_REG) ? r_m : 0;
 		MOVE_BYTE(instruction_buffer, inst->opcode + inst_reg);
 	}
-
+	
 	// mod R/m
 	if (require & MOD_RM) {
 		MOVE_BYTE(instruction_buffer,  mod << 6 | reg << 3 | r_m << 0);
 	}
-
+	
 	// sib
 	if (require & SIB) {
 		MOVE_BYTE(instruction_buffer, scale << 6 | index << 3 | base << 0);
 	}
-
+	
 	// displace
 	if (require & LOCATION_DISP) { nl->location_to_patch = builder->bytes_count; }
 	if (require & DISP) {
@@ -527,7 +527,7 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 			MOVE_BYTE(instruction_buffer, (char)((disp >> i*8) & 0xff));
 		}
 	}
-
+	
 	// constant
 	if (require & LOCATION_CONST) { nl->location_to_patch = builder->bytes_count; }
 	if (require & CONSTANT) {
@@ -535,5 +535,5 @@ internal void x86_encode(Builder *builder, Instruction *inst, Operand to, Operan
 		memcpy(&instruction_buffer[builder->bytes_count], &constant, copy_size); builder->bytes_count+= copy_size;
 	}
 #undef MOVE_BYTE
-
+	
 }

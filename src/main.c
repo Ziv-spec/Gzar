@@ -73,7 +73,7 @@ int main() {
 	Name_Location labels[0x50] = {0}; 
 	Name_Location data_variables[0x50] = {0}; 
 	Name_Location jumpinstructions[0x50] = {0}; 
-
+	
 	Builder builder = { 
 		.code = program, 
 		
@@ -90,7 +90,7 @@ int main() {
 	
 	pools_init(&builder.m);
 	
-	#if 0 
+#if 0 
 	// NOTE(ziv): THIS WORKS!!! The only feature I need to do is finish up with patching locations (which is easy) 
 	Operand pe_exe_lit      = x86_lit(&builder, "a simple 64b PE executable");
 	Operand hello_world_lit = x86_lit(&builder, "Hello World!");
@@ -124,17 +124,17 @@ int main() {
 	x86_encode(&builder, call, message_box_a, NO_OPERAND);
 	x86_encode(&builder, mov,  REG(ECX), IMM(0));
 	x86_encode(&builder, call, exit_process, NO_OPERAND);
-	#endif
+#endif
 	
-/* 	
-	Operand hello_world_lit = x86_lit(&builder, "Hello World!");
-	Operand pe_exe_lit      = x86_lit(&builder, "This is a simple 64b pe executable");
-	hello_world_lit, pe_exe_lit;
+	/* 	
+		Operand hello_world_lit = x86_lit(&builder, "Hello World!");
+		Operand pe_exe_lit      = x86_lit(&builder, "This is a simple 64b pe executable");
+		hello_world_lit, pe_exe_lit;
+		
+		x86_c_function(&builder, "MessageBoxA");
+		x86_c_function(&builder, "ExitProcess");
+		 */
 	
-	x86_c_function(&builder, "MessageBoxA");
-	x86_c_function(&builder, "ExitProcess");
-	 */
-
 	
 	
 	/* 
@@ -151,12 +151,12 @@ int main() {
 	//~
 	// text section info
 	//
-
-/* 	
-	char *code = (char*)instructions; 
-	unsigned int code_size = bytes_count;
- */
-
+	
+	/* 	
+		char *code = (char*)instructions; 
+		unsigned int code_size = bytes_count;
+	 */
+	
 	/* 
 		// without image dos stub
 			char code[] = {
@@ -417,4 +417,4 @@ int main(int argc, char *argv[]) {
 	
 	return 0;
 }
-	#endif 
+#endif 

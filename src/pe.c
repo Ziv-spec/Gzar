@@ -186,7 +186,7 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 	
 	
 	
-//~
+	//~
 	// PE executable NT signiture, DOS stub, NT headers
 	//
 	
@@ -265,7 +265,7 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 			function_names_size += (int)(2 + strlen(function_names_vector->data[fn_idx]) + 1); // +2 for 'HINT'
 		int_tables_size += (int)(sizeof(size_t) * (function_names_vector->index+1));
 		module_names_size += (int)(dll.size + 1);
-		}
+	}
 	
 	int idata_size = descriptors_size + int_tables_size*2 + function_names_size + module_names_size;
 	int data_size  = builder->current_data_variable_location; 
@@ -320,7 +320,7 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 	u8 *executable = buf, *pexe = executable;
 	
 	u8 *text  = buf + nt_headers.OptionalHeader.SizeOfHeaders;
-		u8 *idata = text + text_section.SizeOfRawData;
+	u8 *idata = text + text_section.SizeOfRawData;
 	u8 *data  = idata + idata_section.SizeOfRawData; 
 	
 	// filling .text section
@@ -376,13 +376,13 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 		}
 		int_tables_offset += (int)(sizeof(size_t) * (function_names_vector->index+1)); 
 		int_tables++; iat_tables++; // for NULL address
-
+		
 		// filling module names 
 		size_t copy_size = dll.size+1; 
 		memcpy(&module_names[module_names_offset], dll.str, copy_size);
 		module_names_offset += (int)copy_size;
 	}
-
+	
 	// filling .data section
 	for (int i = 0; i < builder->data_variables_count; i++) {
 		Name_Location nl = builder->data_variables[i];
@@ -394,13 +394,13 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 	//~
 	// Patch real addresses to code
 	//
-
-/*
-	printf("Before: ");  
-	for (int i = 0; i < builder->bytes_count; i++) { printf("%02x", builder->code[i]&0xff); } printf("\n"); 
-	 */
-
-	#if 1
+	
+	/*
+		printf("Before: ");  
+		for (int i = 0; i < builder->bytes_count; i++) { printf("%02x", builder->code[i]&0xff); } printf("\n"); 
+		 */
+	
+#if 1
 	// patching data section
 	for (int i = 0; i < builder->data_variables_count; i++) {
 		Name_Location nl = builder->data_variables[i];
@@ -424,10 +424,10 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 	}
 #endif 
 	
-/* 	
-	printf("After: ");
-	for (int i = 0; i < builder->bytes_count; i++) { printf("%02x", builder->code[i]&0xff); } printf("\n"); 
-	 */
+	/* 	
+		printf("After: ");
+		for (int i = 0; i < builder->bytes_count; i++) { printf("%02x", builder->code[i]&0xff); } printf("\n"); 
+		 */
 	
 	
 	//~

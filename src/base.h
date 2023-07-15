@@ -286,7 +286,7 @@ internal int _atoi(char *value) {
 typedef struct String8 String8;
 struct String8 {
     char *str;
-     size_t size;
+	size_t size;
 };
 
 internal char *str8_to_cstring(String8 str) {
@@ -317,28 +317,28 @@ internal String8 str8_duplicate(M_Arena *m, String8 s) {
 }
 
 internal int get_line_number(char *start, String8 str) {
-
+	
     int line = 1;
     char *end = str.str;
     for (; start < end; start++) {
         if (*start == '\n') line++;
     }
-
+	
     return line;
 }
 
 internal int get_character_number(char *start, String8 str) {
-
+	
     char *end = str.str;
     char *line_beginning = NULL;
     for (; start < end; start++) {
         if (*start == '\n')
             line_beginning = start;
     }
-
+	
     int ch = 1;
     for (; line_beginning < end; line_beginning++, ch++);
-
+	
     return ch;
 }
 
@@ -365,12 +365,12 @@ internal Vector *vec_init() {
 
 internal Vector *vec_push(M_Pool *m, Vector *vec, void *elem) {
     Assert(vec);
-
+	
     if (vec->capacity <= vec->index) {
         int old_capacity = vec->capacity;
         int new_capacity = vec->capacity*2;
         vec->data = pool_resize(m, vec->data, sizeof(void *) * old_capacity, sizeof(void *) * new_capacity);
-
+		
         vec->capacity = new_capacity;
     }
     vec->data[vec->index++] = elem;
@@ -386,7 +386,7 @@ internal bool vec_equal(Vector *src1, Vector *src2) {
     Assert(src1 && src2);
     if (src1->index != src2->index)
         return false;
-
+	
     // NOTE(ziv): maybe I should think of using memcpy
     int len = src1->index;
     for (int i = 0; i < len; i++) {
@@ -394,7 +394,7 @@ internal bool vec_equal(Vector *src1, Vector *src2) {
             return false;
         }
     }
-
+	
     return true;
 }
 
@@ -438,17 +438,17 @@ static u64 str8_hash(String8 str) {
 #define DEFAULT_MAP_SIZE 16
 
 internal Map *init_map(int elem_size) {
-
+	
     Map *map = malloc(sizeof(Map));
     if (!map) { return NULL; }
-
+	
     map->buckets = calloc(DEFAULT_MAP_SIZE, sizeof(Bucket));
     Assert(map->buckets);
-
+	
     map->capacity = DEFAULT_MAP_SIZE;
     map->count = 0;
     map->elem_size = elem_size;
-
+	
     return map;
 }
 
@@ -458,25 +458,25 @@ internal void map_destroy(Map *map) {
 }
 
 internal void *map_get(Map *map, String8 key) {
-
+	
     u64 hash = str8_hash(key);
     size_t index = hash & (map->capacity-1);
     while (map->buckets[index].key.str != NULL) {
-
+		
         if (str8_compare(map->buckets[index].key, key) == 0) {
             void *v = map->buckets[index].value;
             map->buckets[index].value = NULL; // mark as empty space
             return v;
         }
-
+		
         // linear probing
         index++;
         if (index >= map->capacity) {
             index = 0;
         }
-
+		
     }
-
+	
     map->count--;
     return NULL;
 }
@@ -511,30 +511,30 @@ internal void *map_peek(Map *map, String8 key) {
 }
 
 internal bool map_set_bucket(Map *map, String8 key, void *value) {
-
+	
     size_t hash = str8_hash(key);
     size_t index = hash & (map->capacity-1);
-
+	
     // loop until we find an empty bucket
     while (map->buckets[index].value != NULL) {
-
+		
         if (str8_compare(key, map->buckets[index].key) == 0) {
             // update value in bucket
             map->buckets[index].value = value;
             return true;
         }
-
+		
         // linear probing
         index++;
         if (index >= map->capacity) {
             index = 0;
         }
     }
-
+	
     if (!key.str) {
         return false;
     }
-
+	
     map->count++;
     map->buckets[index].value = value;
     map->buckets[index].key = key;
@@ -543,11 +543,11 @@ internal bool map_set_bucket(Map *map, String8 key, void *value) {
 
 internal bool map_set(Map *map, String8 key, void *value) {
     Assert(value != NULL);
-
+	
     if (value == NULL) {
         return false;
     }
-
+	
     // if more than half of the map is used, expand it
     if (map->count>= map->capacity/2) {
         int new_capacity = map->capacity * 2;
@@ -556,7 +556,7 @@ internal bool map_set(Map *map, String8 key, void *value) {
         if (!map->buckets) {
             return false; // failed to allocated memory
         }
-
+		
         // new map to resize to
         Map nm = { new_buckets, new_capacity, 0, map->elem_size };
         // copy info from old map to new map
@@ -565,14 +565,14 @@ internal bool map_set(Map *map, String8 key, void *value) {
             if (bucket.key.str)
                 map_set_bucket(&nm, bucket.key, bucket.value);
         }
-
+		
         free(map->buckets);
-
+		
         // copy info to the new array to given map
         map->buckets = new_buckets;
         map->capacity = new_capacity;
     }
-
+	
     return map_set_bucket(map, key, value);
 }
 
@@ -580,7 +580,7 @@ typedef struct Map_Iterator Map_Iterator;
 struct Map_Iterator {
     Map *map;
     s64 index;
-
+	
     String8 key;
     void *value;
 };
@@ -593,14 +593,14 @@ internal Map_Iterator map_iterator(Map *m) {
 }
 
 internal bool map_next(Map_Iterator *it) {
-
+	
     // Loop till we've hit end of entries array.
     Map *map = it->map;
     while (it->index < map->capacity) {
         size_t i = it->index;
         it->index++;
         if (map->buckets[i].value != NULL) {
-
+			
             // Found next non-empty item, update iterator key and value.
             Bucket bucket = map->buckets[i];
             it->key = bucket.key;
