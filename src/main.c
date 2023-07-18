@@ -38,6 +38,9 @@ struct Register {
 #include "microsoft_crazyness.h"
 #pragma warning(default: 4431 4267 4456 4244 4189)
 #include "x86.c"
+#include "x64.c"
+
+#include "linker.c"
 #include "pe.c"
 
 
@@ -63,6 +66,47 @@ int main() {
 	};
 	
 	pools_init(&builder.m);
+	
+	// I might have to assume layout, then do the rest. 
+	// assuming layout is easier in some sense since, 
+	// you are no longer required to assume it yourself 
+	// which shaves quite a bit of coplexity
+
+/* 	
+	Value_Operand v1 = { .kind = LAYOUT_R, .reg = R9 };
+	Value_Operand v2 = { .kind = LAYOUT_R, .reg = R9 };
+	Inst inst = { ADD };
+	 */
+
+/* 	
+	
+	x86_encode(&builder, add,  REG(R9), MEM(R9, R9, 2, 0x1000, 0));
+	 */
+	Inst inst;
+	
+
+/* 	
+	inst = (Inst){RET};
+	inst0(&builder, &inst); 
+	 */
+
+	inst = (Inst){NOT};
+	Value_Operand v = { .kind = LAYOUT_R, .reg = R8 }; 
+	inst1(&builder, &inst, &v, 8);
+
+/* 	
+	Value_Operand v1 = { .kind = LAYOUT_R, .reg = R9 };
+	Value_Operand v2 = { .kind = LAYOUT_M, .reg = R9, .index = R9, .scale = 2, .imm=0x1000 };
+	inst = (Inst){ ADD };
+	inst2(&builder, &inst, &v1, &v2, DT_QWORD); 
+	 */
+
+	for (int i = 0; i < builder.bytes_count; i++) { printf("%02x", builder.code[i]&0xff); } printf("\n"); 
+	
+	
+	return 0; 
+	
+	
 	
 #if 0 
 	// NOTE(ziv): THIS WORKS!!! The only feature I need to do is finish up with patching locations (which is easy) 
@@ -101,7 +145,7 @@ int main() {
 #endif
 	
 	
-	// TODO(ziv): remove this
+	// TODO(ziv): remove this 
 	char kernel32[] =  "kernel32.lib";
 	char user32[]   =  "user32.lib";
 	char *libs[] = { kernel32, user32 };

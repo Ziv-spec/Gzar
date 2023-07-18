@@ -24,7 +24,7 @@ static char bitness_t[] = {
 static unsigned long long constants_t[] = {
 	UINT8_MAX, UINT16_MAX, UINT32_MAX, UINT64_MAX
 };
-
+ 
 typedef struct {
 	int idx; // last 4 bits are saved for table kind
 } Value;
@@ -108,11 +108,7 @@ typedef struct {
 	M_Pool m; // temporary memory allocator
 } Builder; 
 
-//~
-// @Incomplete General things you might want which are not specific to any architecture 
-// TODO(ziv): Move this into a linker.c file, which will contain all general linker thingy's
-//
-
+//~ 
 
 internal Operand x86_c_function(Builder *builder, char *function) {
 	Operand result = { Val, .value = builder->jumpinstructions_count | (JUMPINSTRUCTIONS_TABLE_KIND << 28)};
