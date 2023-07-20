@@ -1,3 +1,10 @@
+
+
+//#pragma comment(lib, "user32.lib")
+#pragma comment(lib, "Advapi32.lib")
+#pragma comment(lib, "Ole32.lib")
+#pragma comment(lib, "OleAut32.lib")
+
 #define _CRT_SECURE_NO_WARNINGS 1
 #include <stdio.h>  // sprintf, fopen, fclose
 #include <stdlib.h> // malloc realloc and free
@@ -30,17 +37,15 @@ struct Register {
 #include "lexer.c"
 #include "parser.c"
 #include "sema.c"
-
-#include "x86_asm.c"
+#include "x86_asm.c"// super old yet working x64 assmebly backend
 
 #pragma warning(disable : 4431 4267 4456 4244 4189)
 #define MICROSOFT_CRAZINESS_IMPLEMENTATION
 #include "microsoft_crazyness.h"
 #pragma warning(default: 4431 4267 4456 4244 4189)
-#include "x86.c"
-#include "x64.c"
 
-#include "linker.c"
+#include "x86.c"    // last version of the x64 backend (which will eventually get phased out)
+#include "x64.c"    // new backend 
 #include "pe.c"
 
 
@@ -104,8 +109,8 @@ int main() {
 	for (int i = 0; i < builder.bytes_count; i++) { printf("%02x", builder.code[i]&0xff); } printf("\n"); 
 	
 	
-	return 0; 
 	
+	#if 0 
 	
 	
 #if 0 
@@ -179,7 +184,7 @@ write_pe_exe(&builder, "test.exe");
 */
 	
 	
-	
+	#endif 
 	free_resources(&builder.vs_sdk);
 	
 	return 0;

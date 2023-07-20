@@ -18,10 +18,9 @@ if "%VSCMD_ARG_TGT_ARCH%" neq "x64" (
   exit /b 1
 )
 
-set LINK=user32.lib Ole32.lib OleAut32.lib Advapi32.lib
 if "%1" equ "debug" (
   set CL=/MTd /FC /EHa /DDEBUG=1 /Od /Zi /Fdgzar.pdb /fsanitize=address
-  set LINK=%LINK% /DEBUG 
+  set LINK= /DEBUG 
 ) else (
   set CL=/O2 /FC
   set LINK=%LINK% /OPT:REF /OPT:ICF

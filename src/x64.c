@@ -20,7 +20,7 @@ typedef enum {
 	
 	// binary
 	LAYOUT_RR = (LAYOUT_R << 4) | LAYOUT_R,
-	 LAYOUT_RM = (LAYOUT_R << 4) | LAYOUT_M,
+	LAYOUT_RM = (LAYOUT_R << 4) | LAYOUT_M,
 	LAYOUT_MR = (LAYOUT_M << 4) | LAYOUT_R,
 	LAYOUT_MI = (LAYOUT_M << 4) | LAYOUT_I,
 	LAYOUT_RI = (LAYOUT_R << 4) | LAYOUT_I,
@@ -28,9 +28,9 @@ typedef enum {
 
 // TODO(ziv): Think about how to do this better?
 enum {
-W = 1 << 0,
-S = 1 << 1,
-D = 1 << 2,
+	W = 1 << 0,
+	S = 1 << 1,
+	D = 1 << 2,
 	TTTN = 1 << 3,
 	
 	INST_BINARY = W|S|D,
@@ -67,7 +67,7 @@ typedef struct {
 
 #define X(a, ...) a,
 typedef enum {
-	#include "x64_t.inc"
+#include "x64_t.inc"
 } Inst_Kind; 
 #undef X 
 
@@ -85,7 +85,7 @@ enum {
 	MOD_INDIRECT_DISP32 = 0x2, // [rax + disp32]
 	MOD_DIRECT          = 0x3, // rax
 };
-
+ 
 internal inline char rex(bool w, bool r, bool x, bool b) {
 	return (1<<6) | (1<<3)*w | (1<<2)*r | (1<<1)*x | (1<<0)*b;
 }
@@ -109,13 +109,13 @@ internal char get_mod(Value_Operand *mem) {
 
 internal void emit_memory_ending(Builder *b, Value_Operand *vm, char reg, bool need_sib) { 
 	char mod = get_mod(vm);
-	char r_m = need_sib ? 4 : GET_REG(vm->reg);
+	char r_m = need_sib ? 0x4 : GET_REG(vm->reg);
 	
 	EMIT1(b, mod_rm(mod, reg, r_m));
 	if (need_sib) 
-		EMIT1(b, sib(vm->reg ? GET_REG(vm->reg) : 0b101, 
-							   vm->index ? GET_REG(vm->index) : 0b101,
-							   vm->scale));
+		EMIT1(b, sib(vm->reg ? GET_REG(vm->reg) : 0x5, 
+					 vm->index ? GET_REG(vm->index) : 0x5,
+					 vm->scale));
 	if (mod == MOD_INDIRECT_DISP8) EMIT1(b, (char)vm->imm); 
 	else if (mod == MOD_INDIRECT_DISP32) EMIT4(b, vm->imm);
 }
@@ -131,12 +131,12 @@ internal bool inst1(Builder *b, Inst *op, Value_Operand *v, Data_Type dt) {
 	
 	u8 layout = v->kind; 
 	Assert(layout <= 4); // must be unary
-	 
+	
 	char ending = 0;
 	if (inst->cat == INST_UNARY) { 
 		ending |= (inst->cat & W)*(dt != 1);
 	}
-	 
+	
 	
 	// rex
 	char is_64b = dt==4;
@@ -157,7 +157,7 @@ internal bool inst1(Builder *b, Inst *op, Value_Operand *v, Data_Type dt) {
 		EMIT1(b, rex(is_64b, rr, rx, rb));
 	
 	EMIT1(b, inst->op_i | ending);
-	 
+	
 	if (v->kind == LAYOUT_R) 
 		EMIT1(b, mod_rm(MOD_DIRECT, inst->reg_i, GET_REG(v->reg)));  
 	else if (v->kind == LAYOUT_M) {
@@ -204,7 +204,7 @@ internal bool inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 	}
 	else if (layout == LAYOUT_RM || layout == LAYOUT_MR) {
 		bool need_sib = v2->index || v2->reg == ESP || (!v2->reg && !v2->index);
-			rx = need_sib ? GET_REX(v2->index) : 0;
+		rx = need_sib ? GET_REX(v2->index) : 0;
 		
 		if (is_64b || rr || rb || rx) 
 			EMIT1(b, rex(is_64b, rr, rx, rb));
