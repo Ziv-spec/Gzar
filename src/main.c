@@ -38,93 +38,88 @@ struct Register {
 #include "sema.c"
 #include "x86_asm.c"// super old yet working x64 assmebly backend
 
+#include "x64.c"    // new x64 emitter backend
+
 #pragma warning(disable : 4431 4267 4456 4244 4189)
 #define MICROSOFT_CRAZINESS_IMPLEMENTATION
 #include "microsoft_crazyness.h"
 #pragma warning(default: 4431 4267 4456 4244 4189)
 
-#include "x86.c"    // last version of the x64 backend (which will eventually get phased out)
-#include "x64.c"    // new backend 
 #include "pe.c"
 
-
-#if 0 
-internal Value_Operand lk_c_function(Builder *builder, char *function) {
-	Operand result = { Val, .value = builder->jumpinstructions_count | (JUMPINSTRUCTIONS_TABLE_KIND << 28)};
-	Name_Location *v = &builder->jumpinstructions[builder->jumpinstructions_count++];
-	v->location = 0; // NOTE(ziv): @Incomplete the location should get reset here at a later date
-	v->name = function;
-	return result;
+internal Value_Operand e_label(Builder *b, char *label) {
+	Patch_Location *pl = &b->pls[PL_LABELS][b->pls_cnt[PL_LABELS]];
+	*pl = (Patch_Location){ .name = label, .rva = b->bytes_count };
+	return (Value_Operand){ .kind = LAYOUT_V, .imm = PL_LABELS << 28 | (b->pls_cnt[PL_LABELS]++) };
 }
 
-internal Value_Operand lk_label(Builder *builder, const char *label) {
-	Operand result = { Val, .value = builder->labels_count | (LABELS_TABLE_KIND << (32-4)) };
-	Name_Location *v = &builder->labels[builder->labels_count++];
-	v->location = builder->bytes_count;
-	v->name = (char *)label;
-	return result;
+internal Value_Operand e_lit(Builder *b, char *literal) {
+	Patch_Location *pl = &b->pls[PL_DATA_VARS][b->pls_cnt[PL_DATA_VARS]];
+	*pl = (Patch_Location){ .name = literal, .rva = b->current_data_variable_location };
+	b->current_data_variable_location += (int)(strlen(literal)+1);
+	return (Value_Operand){ .kind = LAYOUT_V, .imm = PL_DATA_VARS << 28 | (b->pls_cnt[PL_DATA_VARS]++) };
 }
 
-internal Value_Operand lk_lit(Builder *builder, const char *literal) {
-	Operand result = { Val, .value = builder->data_variables_count | (DATA_VARIABLES_TABLE_KIND << 28) };
-	Name_Location *v = &builder->data_variables[builder->data_variables_count++];
-	v->location = builder->current_data_variable_location;
-	builder->current_data_variable_location += (int)strlen(literal)+1;
-	v->name = (char *)literal;
-	return result;
+internal Value_Operand e_cfunction(Builder *b, char *label) {
+	Patch_Location *pl = &b->pls[PL_C_FUNCS][b->pls_cnt[PL_C_FUNCS]];
+	*pl = (Patch_Location){ .name = label };
+	return (Value_Operand){ .kind = PL_C_FUNCS, .imm = PL_C_FUNCS<< 28 | (b->pls_cnt[PL_C_FUNCS]++) };
 }
 
-internal Name_Location *lk_get_name_location_from_value(Builder *builder, Value v) {
-	Name_Location *nl_table[4] = { builder->labels , builder->jumpinstructions, builder->data_variables };
-	int idx  = v.idx & ((1<<28)-1);
-	int type = v.idx >> 28;
-	return &nl_table[type][idx];
-}
-
-internal Value_Operand lk_function(Builder *builder, const char *module, const char *function) {
-	Operand result = { Val, .value = builder->jumpinstructions_count | (JUMPINSTRUCTIONS_TABLE_KIND << (32-4)) };
-	
-	Name_Location *v = &builder->jumpinstructions[builder->jumpinstructions_count++];
-	v->location = 0;
-	v->name = (char *)function;
-	
-	module; function;
-	return result;
-}
-#endif 
-
-
-#if 1
 int main() {
 	
 	char program[0x1000] = { 0 };
-	Name_Location labels[0x50] = {0}; 
-	Name_Location data_variables[0x50] = {0}; 
-	Name_Location jumpinstructions[0x50] = {0}; 
+	Patch_Location labels[0x50] = {0}; 
+	Patch_Location data_variables[0x50] = {0}; 
+	Patch_Location c_funcs[0x50] = {0}; 
 	
 	Builder builder = { 
-		.code = program, 
-		
-		// init tables
-		.labels = labels,
-		.data_variables = data_variables,
-		.jumpinstructions = jumpinstructions,
-		
-		.m = { .pool_size = 0x1000 }
+		.m = { .pool_size = 0x1000 },
+		.pls = {
+			[PL_LABELS]    = labels, 
+			[PL_DATA_VARS] = data_variables, 
+			[PL_C_FUNCS]   = c_funcs,
+		},
+		.code = program, // program buffer
 	};
 	pools_init(&builder.m);
 	
 	
+	Inst inst = (Inst){ADD};
+	Value_Operand v1 = { .kind = LAYOUT_R, .reg = RAX };
+	Value_Operand v2 = { .kind = LAYOUT_R, .reg = R8  };
+	inst2(&builder, &inst, &v1, &v2, 8);
+	
+	inst = (Inst){CALL};
+	Value_Operand v = e_label(&builder, ".L0");
+	inst1(&builder, &inst, &v, DT_DWORD);
+	
+	inst = (Inst){ADD};
+	v1 = (Value_Operand){ .kind = LAYOUT_R, .reg = RAX };
+	v2 = e_lit(&builder, "Hello World!");
+	inst2(&builder, &inst, &v1, &v2, 8);
 	
 	
-	/* 
-		Inst inst;
-		inst = (Inst){RET};
-		inst0(&builder, &inst); 
-		*/
 	
-	 //test_x64_unary(&builder, NOT);
-	test_x64_binary(&builder, ADD);
+	// patching addresses
+	Patch_Location *pls;
+	
+		pls = builder.pls[PL_LABELS];
+	for (int i = 0; i < builder.pls_cnt[PL_LABELS]; i++) {
+		Patch_Location pl = pls[i]; pl.rva += 0x1000;
+		memcpy(&builder.code[pl.location], &pl.rva, sizeof(pl.rva)); 
+	}
+	
+	// patching addresses
+	pls = builder.pls[PL_DATA_VARS];
+	for (int i = 0; i < builder.pls_cnt[PL_DATA_VARS]; i++) {
+		Patch_Location pl = pls[i]; pl.rva += 0x3000;
+		memcpy(&builder.code[pl.location], &pl.rva, sizeof(pl.rva)); 
+	}
+	
+	
+	//test_x64_unary(&builder, NOT);
+	//test_x64_binary(&builder, ADD);
 	
 	for (int i = 0; i < builder.bytes_count; i++) { printf("%02x", builder.code[i]&0xff); } printf("\n"); 
 	
@@ -132,35 +127,21 @@ int main() {
 	
 	#if 0
 	// NOTE(ziv): THIS WORKS!!! The only feature I need to do is finish up with patching locations (which is easy) 
-	Operand pe_exe_lit      = x86_lit(&builder, "a simple 64b PE executable");
-	Operand hello_world_lit = x86_lit(&builder, "Hello World!");
 	
-	Operand message_box_a = x86_c_function(&builder, "MessageBoxA");
-	Operand exit_process  = x86_c_function(&builder, "ExitProcess");
-	
-	x86_encode(&builder, sub,  REG(RSP), IMM(0x28));
-	x86_encode(&builder, mov,  REG(R9D), IMM(0));
-	x86_encode(&builder, mov,  REG(R8D), IMM(0x403000));
-	x86_encode(&builder, mov,  REG(EDX), IMM(0x40301b));
-	x86_encode(&builder, mov,  REG(ECX), IMM(0));
-	x86_encode(&builder, call, MEM(0,0,0,0x402088,0), NO_OPERAND);
-	x86_encode(&builder, mov,  REG(ECX), IMM(0));
-	x86_encode(&builder, call, MEM(0,0,0,0x402078,0), NO_OPERAND);
+	//~
+	// list of external library paths e.g. kernel32.lib (in linux libc.so)
 	
 	// TODO(ziv): remove this 
-	char kernel32[] =  "kernel32.lib";
-	char user32[]   =  "user32.lib";
+	char kernel32[] = "kernel32.lib";
+	char user32[]   = "user32.lib";
 	char *libs[] = { kernel32, user32 };
-	builder.external_library_paths = libs; 
-	builder.external_library_paths_count = ArrayLength(libs);
 	
-	write_pe_exe(&builder, "test.exe"); 
+	write_pe_exe(&builder, "test.exe", libs, ArrayLength(libs)); 
 	
-	#endif 
+#endif 
 	
 	return 0;
 }
-#endif
 
 
 
@@ -224,38 +205,6 @@ int main(int argc, char *argv[]) {
 	if (success == false)
 		return 0;
 	CLOCK_END(SEMA);
-	
-#if 0
-	char assembly_file_name[100] = { 0 };
-	char *filename_start = filename;
-	bool dot_exists = false;
-	
-	while (*filename) {
-		if (filename[0] == '.' && filename[1]) {
-			dot_exists = true;
-		}
-		filename++;
-	}
-	
-	char *filename_end = filename;
-	u64 extention_len = 0;
-	if (dot_exists) {
-		while (*--filename != '.');
-		extention_len = filename_end - filename;
-		while (*--filename != '/' && filename > filename_start);
-		if (*filename == '/')  filename++;
-		u64 filename_len = filename_end - filename;
-		
-		strncpy(assembly_file_name, filename, filename_len - extention_len);
-		strcpy(assembly_file_name + filename_len-extention_len-1, ".asm");
-		printf("\n");
-		printf(assembly_file_name);
-		printf("\n");
-	}
-	else {
-		fprintf(stderr, "Error: invalid file extention please enter <source>.gzr\n");
-	}
-#endif
 	
 	// NOTE(ziv): Here I am outputing assembly, for which I am using sprintf. This is a
 	// very slow function. It takes up around 70% of total runtime cost for this whole

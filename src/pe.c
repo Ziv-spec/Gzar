@@ -125,7 +125,8 @@ internal void parse_archive_library(M_Pool *m, Map *import_entries, char *archiv
 	return;
 }
 
-internal int write_pe_exe(Builder *builder, const char *file) {
+internal int write_pe_exe(Builder *builder, const char *file, 
+						  char **external_library_paths, int  external_library_paths_count) {
 	M_Arena *m = pool_get_scratch(&builder->m);
 	
 	
@@ -139,18 +140,18 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 		return false; 
 	}
 	
-	size_t extern_functions_len = builder->jumpinstructions_count;
+	size_t extern_functions_len = builder->pls_cnt[PL_C_FUNCS];
 	char **extern_functions = arena_alloc(m, extern_functions_len*sizeof(char *)); 
 	for (int i = 0; i < extern_functions_len; i++) 
-		extern_functions[i] = builder->jumpinstructions[i].name;
+		extern_functions[i] = builder->pls[PL_C_FUNCS][i].name;
 	qsort(extern_functions, extern_functions_len, sizeof(char *), compare);
 	
 	Map *import_entries = init_map(sizeof(Vector *));
 	u16 *hints = arena_alloc(m, extern_functions_len*sizeof(u16));
 	u8  *visited = arena_alloc(m, (extern_functions_len/8 + 1)*sizeof(u8));
 	
-	for (int lib_idx = 0; lib_idx < builder->external_library_paths_count; lib_idx++) {
-		char *module = builder->external_library_paths[lib_idx];
+	for (int lib_idx = 0; lib_idx < external_library_paths_count; lib_idx++) {
+		char *module = external_library_paths[lib_idx];
 		
 		// base_path_to_msvc_archive_libraries\module
 		wchar_t *library_path = msvc_sdk.windows_sdk_um_library_path;
@@ -319,8 +320,8 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 	memcpy(text, builder->code, text_size);
 	
 	// filling .data section
-	for (int i = 0; i < builder->data_variables_count; i++) {
-		Name_Location nl = builder->data_variables[i];
+	for (int i = 0; i < builder->pls_cnt[PL_DATA_VARS]; i++) {
+		Patch_Location nl = builder->pls[PL_DATA_VARS][i];
 		size_t copy_size = strlen(nl.name)+1;
 		memcpy(data, nl.name, copy_size); data += copy_size;
 	}
@@ -399,7 +400,7 @@ internal int write_pe_exe(Builder *builder, const char *file) {
 	
 	// the patching should be done by a "linker" 
 	
-#if 1
+#if 0
 	// patching data section
 	for (int i = 0; i < builder->data_variables_count; i++) {
 		Name_Location nl = builder->data_variables[i];

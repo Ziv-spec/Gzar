@@ -1,8 +1,56 @@
 
+
+enum {
+	PL_LABELS, 
+	PL_DATA_VARS, 
+	PL_C_FUNCS,
+	PL_COUNT
+};
+
+typedef struct { 
+	char *name;
+	int location; // location to patch
+	int rva;
+} Patch_Location;
+
+typedef struct {
+	M_Pool m; // temporary memory allocator
+	
+	Patch_Location *pls[PL_COUNT];
+	int pls_cnt[PL_COUNT];
+	int current_data_variable_location; // used to keep track of location of `data_variables`
+	
+	int bytes_count; // to tell byte count of the program 
+	char *code;
+} Builder; 
+
 //~ 
 // x64 Definitions
 // 
 
+typedef enum Register_Type {
+	UNKNOWN_REG=0,
+	// REX.r = 0 or REX.b = 0 or REX.x = 0
+	AL,  CL,  DL,  BL,  AH,  CH,  DH,  BH,
+	_,   __,  ___, ____, SPL, BPL, SIL, DIL,
+	AX,  CX,  DX,  BX,  SP,  BP,  SI,  DI,
+	EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI,
+	RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI,
+	// REX.r = 1 or REX.b = 1 or REX.x = 1
+	R8B, R9B, R10B, R11B, R12B, R13B, R14B, R15B,
+	R8W, R9W, R10W, R11W, R12W, R13W, R14W, R15W,
+	R8D, R9D, R10D, R11D, R12D, R13D, R14D, R15D,
+	R8,  R9,  R10,  R11,  R12,  R13,  R14,  R15
+} Register_Type;
+
+static char bitness_t[] = {
+	1, 1, 2, 4, 8, 1, 2, 4, 8
+};
+
+#define GET_REG(x) ((x-1)%8)
+#define GET_REX(x) (((x-1)/8) > 4)
+#define GET_BITNESS(x) bitness_t[((x-1)/8)]
+ 
 typedef enum {
 	DT_BYTE  = 1, 
 	DT_WORD  = 2, 
@@ -17,19 +65,20 @@ typedef enum {
 	W = 1 << 0,
 	S = 1 << 1,
 	D = 1 << 2,
-	REG_ = 1 << 3,
+	REG  = 1 << 3,
 	TTTN = 1 << 4,
 	
 	INST_BINARY = W|S|D,
 	INST_EXT    = W,
-	INST_UNARY  = W,
+	INST_UNARY  = 0,
+	INST_UNARY_EXT = W,
 } Instruction_Category;
 
 typedef enum {
 	// no operands
 	LAYOUT_NONE = 0,
 	// unary
-	LAYOUT_R, LAYOUT_M, LAYOUT_I,
+	LAYOUT_R, LAYOUT_M, LAYOUT_I, LAYOUT_V,
 	// binary
 	LAYOUT_RR = LAYOUT_R<<4 | LAYOUT_R,
 	LAYOUT_RM = LAYOUT_R<<4 | LAYOUT_M,
@@ -48,7 +97,7 @@ typedef struct {
 	// for immediates
 	u8 op_i;
 	u8 reg_i;
-} InstDesc; 
+	} InstDesc; 
 
 typedef struct {
 	u8 kind;
@@ -95,6 +144,7 @@ internal inline char sib(char base, char index, char scale) {
 	return scale << 6 | index << 3 | base << 0;
 }
 
+
 //~
 // Emitting instructions
 //
@@ -124,17 +174,26 @@ internal inline bool memory_operand_need_sib(Value_Operand *mem) {
 	return mem->index || mem->reg == ESP || mem->reg == RSP || (!mem->reg && !mem->index);
 }
 
-internal bool inst0(Builder *b, Inst *op) {
+internal void inst0(Builder *b, Inst *op) {
 	const InstDesc *inst = &inst_table[op->kind];
 	EMIT1(b, inst->op); 
-	return true;
 }
 
-internal bool inst1(Builder *b, Inst *op, Value_Operand *v, Data_Type dt) {
-	const InstDesc *inst = &inst_table[op->kind];
+internal void inst1(Builder *b, Inst *op, Value_Operand *v, Data_Type dt) {
+	Assert(b && op && b && dt); 
 	
 	u8 layout = v->kind; 
 	Assert(layout <= 4); // must be unary
+	
+	bool bookkeep = false;
+	if (layout & (LAYOUT_V|LAYOUT_M)) {
+		layout = (layout == (LAYOUT_V|LAYOUT_M)) ? LAYOUT_M : LAYOUT_I;
+		*v = (Value_Operand){ .kind = layout, .imm = v->imm};
+		bookkeep = true;
+	}
+	
+	
+	const InstDesc *inst = &inst_table[op->kind];
 	
 	char ending = 0;
 	if (inst->cat == INST_UNARY) { 
@@ -147,7 +206,7 @@ internal bool inst1(Builder *b, Inst *op, Value_Operand *v, Data_Type dt) {
 	
 	// preperation
 	char r_m = 0;
-	bool need_sib;
+	bool need_sib = 0;
 	if (layout == LAYOUT_M) {
 		if (need_sib = memory_operand_need_sib(v)) {
 			r_m = 4;
@@ -155,11 +214,19 @@ internal bool inst1(Builder *b, Inst *op, Value_Operand *v, Data_Type dt) {
 		}
 	}
 	
+	
 	// common thingy
 	if (dt == DT_WORD)
 		EMIT1(b, 0x66);
 	if (is_64b || rr || rb || rx) 
 		EMIT1(b, rex(is_64b, rr, rx, rb));
+	
+	// special case
+	if (inst->cat == INST_UNARY_EXT && layout == LAYOUT_I) {
+		EMIT1(b, inst->op);
+		EMIT4(b, v->imm);
+		goto unary_end; 
+	}
 	
 	EMIT1(b, inst->op_i | ending);
 	
@@ -173,15 +240,33 @@ internal bool inst1(Builder *b, Inst *op, Value_Operand *v, Data_Type dt) {
 		Assert(!"Type that I can't handle at the moment");
 	}
 	
-	return 1;
+	unary_end: 
+	if (bookkeep) { 
+		int type = v->imm >> 28, idx = v->imm & ((1<<28)-1);
+		b->pls[type][idx].location = b->bytes_count - 4;
+		if (type == PL_LABELS) b->pls[type][idx].rva -= b->bytes_count;
+	}
+	
 }
 
-internal bool inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, Data_Type dt) {
+internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, Data_Type dt) {
 	Assert(b && op && v1 && v2);
 	
 	const InstDesc *inst = &inst_table[op->kind];
+	
+	
+	bool bookkeep = false;
+	if (v2->kind & (LAYOUT_V|LAYOUT_M)) {
+		*v2 = (Value_Operand){ 
+			.kind = (v2->kind == (LAYOUT_V|LAYOUT_M)) ? LAYOUT_M : LAYOUT_I,
+			.imm = v2->imm
+		};
+		bookkeep = true;
+	}
+	
 	u8 layout = v1->kind << 4 | v2->kind;
 	Assert(layout > 4 && "Must have binary layout");
+	
 	
 	if (layout == LAYOUT_MR) {
 		Value_Operand *temp = v2; 
@@ -222,6 +307,8 @@ internal bool inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 	// prologue
 	if (dt == 2) 
 		EMIT1(b, 0x66);
+	if (GET_BITNESS(v2->reg) == 4)
+		EMIT1(b, 0x67);
 	if (is_64b || rr || rb || rx) 
 		EMIT1(b, rex(is_64b, rr, rx, rb));
 	
@@ -234,6 +321,10 @@ internal bool inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 	else if (layout == LAYOUT_RM || layout == LAYOUT_MR) {
 		EMIT1(b, inst->op | ending); 
 		emit_memory_ending(b, v2, GET_REG(v1->reg), need_sib);
+		
+		// patch location
+		
+		
 	}
 	else if (layout == LAYOUT_RI) {
 		
@@ -245,15 +336,23 @@ internal bool inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 			EMIT1(b, mod_rm(MOD_DIRECT, inst->reg_i, GET_REG(v1->reg))); 
 		}
 		
+		// TODO(ziv): add an option for emitting 64 bit values (for mov inst...)
 		if (dt == 1)      EMIT1(b, (char)v2->imm);
 		else if (dt == 2) EMIT2(b, (short)v2->imm);
 		else              EMIT4(b, v2->imm);
+		
 	}
 	else if (layout == LAYOUT_MI) {
 		Assert(!"I can't handle this at the moment"); 
 	}
 	
-	return true;
+	 
+	if (bookkeep) { 
+		int type = v2->imm >> 28, idx = v2->imm & ((1<<28)-1);
+		b->pls[type][idx].location = b->bytes_count - 4;
+		if (type == PL_LABELS) b->pls[type][idx].rva -= b->bytes_count;
+	}
+	
 }
 
 
