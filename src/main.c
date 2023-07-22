@@ -84,7 +84,7 @@ int main() {
 	};
 	pools_init(&builder.m);
 	
-	
+	#if 0
 	Inst inst = (Inst){ADD};
 	Value_Operand v1 = { .kind = LAYOUT_R, .reg = RAX };
 	Value_Operand v2 = { .kind = LAYOUT_R, .reg = R8  };
@@ -110,12 +110,17 @@ int main() {
 		memcpy(&builder.code[pl.location], &pl.rva, sizeof(pl.rva)); 
 	}
 	
-	// patching addresses
 	pls = builder.pls[PL_DATA_VARS];
 	for (int i = 0; i < builder.pls_cnt[PL_DATA_VARS]; i++) {
 		Patch_Location pl = pls[i]; pl.rva += 0x3000;
 		memcpy(&builder.code[pl.location], &pl.rva, sizeof(pl.rva)); 
 	}
+#endif 
+	
+	Inst inst = (Inst){MOV};
+	Value_Operand v1 = { .kind = LAYOUT_R, .reg = RAX };
+	Value_Operand v2 = { .kind = LAYOUT_I, .imm = 0x00 };
+	inst2(&builder, &inst, &v1, &v2, 8);
 	
 	
 	//test_x64_unary(&builder, NOT);
@@ -142,6 +147,7 @@ int main() {
 	
 	return 0;
 }
+
 
 
 

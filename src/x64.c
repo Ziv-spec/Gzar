@@ -69,6 +69,7 @@ typedef enum {
 	TTTN = 1 << 4,
 	
 	INST_BINARY = W|S|D,
+	INST_BINARY_EXT = W|S,
 	INST_EXT    = W,
 	INST_UNARY  = 0,
 	INST_UNARY_EXT = W,
@@ -294,8 +295,7 @@ internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 	char cat = inst->cat;
 	if (cat <= INST_BINARY) {
 		// TODO(ziv): This is currently incorrect, fix it!!!
-		ending = (cat & W)*(dt != 1) | 
-		(cat & S)*(layout == LAYOUT_RM) ;
+		ending = (cat & W)*(dt != 1) | (cat & S)*(layout == LAYOUT_RM) ;
 		//| D*(layout == LAYOUT_RI && GET_REG(v1->reg) == 0) && !rr;
 		// I have found that al, ax, eax, rax afterwards immediate instructions contain the D
 	}
@@ -328,8 +328,8 @@ internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 	}
 	else if (layout == LAYOUT_RI) {
 		
-		if (GET_REG(v1->reg) == 0 && !rb) {
-			EMIT1(b, inst->op | ending | (cat & D)); 
+		if (GET_REG(v1->reg) == 0 && !rb && (cat & D)) {
+			EMIT1(b, inst->op | ending); 
 		}
 		else {
 			EMIT1(b, inst->op_i | ending);
