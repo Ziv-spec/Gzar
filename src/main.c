@@ -1,5 +1,4 @@
 
-
 //#pragma comment(lib, "user32.lib")
 #pragma comment(lib, "Advapi32.lib")
 #pragma comment(lib, "Ole32.lib")
@@ -49,11 +48,56 @@ struct Register {
 #include "pe.c"
 
 
+#if 0 
+internal Value_Operand lk_c_function(Builder *builder, char *function) {
+	Operand result = { Val, .value = builder->jumpinstructions_count | (JUMPINSTRUCTIONS_TABLE_KIND << 28)};
+	Name_Location *v = &builder->jumpinstructions[builder->jumpinstructions_count++];
+	v->location = 0; // NOTE(ziv): @Incomplete the location should get reset here at a later date
+	v->name = function;
+	return result;
+}
+
+internal Value_Operand lk_label(Builder *builder, const char *label) {
+	Operand result = { Val, .value = builder->labels_count | (LABELS_TABLE_KIND << (32-4)) };
+	Name_Location *v = &builder->labels[builder->labels_count++];
+	v->location = builder->bytes_count;
+	v->name = (char *)label;
+	return result;
+}
+
+internal Value_Operand lk_lit(Builder *builder, const char *literal) {
+	Operand result = { Val, .value = builder->data_variables_count | (DATA_VARIABLES_TABLE_KIND << 28) };
+	Name_Location *v = &builder->data_variables[builder->data_variables_count++];
+	v->location = builder->current_data_variable_location;
+	builder->current_data_variable_location += (int)strlen(literal)+1;
+	v->name = (char *)literal;
+	return result;
+}
+
+internal Name_Location *lk_get_name_location_from_value(Builder *builder, Value v) {
+	Name_Location *nl_table[4] = { builder->labels , builder->jumpinstructions, builder->data_variables };
+	int idx  = v.idx & ((1<<28)-1);
+	int type = v.idx >> 28;
+	return &nl_table[type][idx];
+}
+
+internal Value_Operand lk_function(Builder *builder, const char *module, const char *function) {
+	Operand result = { Val, .value = builder->jumpinstructions_count | (JUMPINSTRUCTIONS_TABLE_KIND << (32-4)) };
+	
+	Name_Location *v = &builder->jumpinstructions[builder->jumpinstructions_count++];
+	v->location = 0;
+	v->name = (char *)function;
+	
+	module; function;
+	return result;
+}
+#endif 
+
 
 #if 1
 int main() {
 	
-	char program[0x60] = { 0 };
+	char program[0x1000] = { 0 };
 	Name_Location labels[0x50] = {0}; 
 	Name_Location data_variables[0x50] = {0}; 
 	Name_Location jumpinstructions[0x50] = {0}; 
@@ -66,54 +110,27 @@ int main() {
 		.data_variables = data_variables,
 		.jumpinstructions = jumpinstructions,
 		
-		.vs_sdk = find_visual_studio_and_windows_sdk(),
 		.m = { .pool_size = 0x1000 }
 	};
-	
 	pools_init(&builder.m);
 	
-	// I might have to assume layout, then do the rest. 
-	// assuming layout is easier in some sense since, 
-	// you are no longer required to assume it yourself 
-	// which shaves quite a bit of coplexity
-
-/* 	
-	Value_Operand v1 = { .kind = LAYOUT_R, .reg = R9 };
-	Value_Operand v2 = { .kind = LAYOUT_R, .reg = R9 };
-	Inst inst = { ADD };
-	 */
-
-/* 	
 	
-	x86_encode(&builder, add,  REG(R9), MEM(R9, R9, 2, 0x1000, 0));
-	 */
-	Inst inst;
 	
-
-/* 	
-	inst = (Inst){RET};
-	inst0(&builder, &inst); 
-	 */
-
-	inst = (Inst){NOT};
-	Value_Operand v = { .kind = LAYOUT_R, .reg = R8 }; 
-	inst1(&builder, &inst, &v, 8);
-
-/* 	
-	Value_Operand v1 = { .kind = LAYOUT_R, .reg = R9 };
-	Value_Operand v2 = { .kind = LAYOUT_M, .reg = R9, .index = R9, .scale = 2, .imm=0x1000 };
-	inst = (Inst){ ADD };
-	inst2(&builder, &inst, &v1, &v2, DT_QWORD); 
-	 */
-
+	
+	/* 
+		Inst inst;
+		inst = (Inst){RET};
+		inst0(&builder, &inst); 
+		*/
+	
+	 //test_x64_unary(&builder, NOT);
+	test_x64_binary(&builder, ADD);
+	
 	for (int i = 0; i < builder.bytes_count; i++) { printf("%02x", builder.code[i]&0xff); } printf("\n"); 
 	
 	
 	
-	#if 0 
-	
-	
-#if 0 
+	#if 0
 	// NOTE(ziv): THIS WORKS!!! The only feature I need to do is finish up with patching locations (which is easy) 
 	Operand pe_exe_lit      = x86_lit(&builder, "a simple 64b PE executable");
 	Operand hello_world_lit = x86_lit(&builder, "Hello World!");
@@ -130,26 +147,6 @@ int main() {
 	x86_encode(&builder, mov,  REG(ECX), IMM(0));
 	x86_encode(&builder, call, MEM(0,0,0,0x402078,0), NO_OPERAND);
 	
-#else
-	
-	// I believe this works? 
-	Operand hello_world_lit = x86_lit(&builder, "Hello World!");
-	Operand pe_exe_lit      = x86_lit(&builder, "This is a simple 64b pe executable");
-	
-	Operand message_box_a = x86_c_function(&builder, "MessageBoxA");
-	Operand exit_process  = x86_c_function(&builder, "ExitProcess");
-	
-	x86_encode(&builder, sub,  REG(RSP), IMM(0x28));
-	x86_encode(&builder, mov,  REG(R9D), IMM(0));
-	x86_encode(&builder, mov,  REG(R8D), hello_world_lit);
-	x86_encode(&builder, mov,  REG(EDX), pe_exe_lit);
-	x86_encode(&builder, mov,  REG(ECX), IMM(0));
-	x86_encode(&builder, call, message_box_a, NO_OPERAND);
-	x86_encode(&builder, mov,  REG(ECX), IMM(0));
-	x86_encode(&builder, call, exit_process, NO_OPERAND);
-#endif
-	
-	
 	// TODO(ziv): remove this 
 	char kernel32[] =  "kernel32.lib";
 	char user32[]   =  "user32.lib";
@@ -157,73 +154,13 @@ int main() {
 	builder.external_library_paths = libs; 
 	builder.external_library_paths_count = ArrayLength(libs);
 	
-	
 	write_pe_exe(&builder, "test.exe"); 
 	
-	/* 
-		// without image dos stub
-			char code[] = {
-				0x48, 0x83, 0xec, 0x28,
-				0x41, 0xb9, 0, 0, 0, 0,
-				0x41, 0xb8, 0, 0x30, 0x40, 0, 
-				0xba, 0x1b, 0x30, 0x40, 0,
-				0xb9, 0, 0, 0, 0,
-				0xff, 0x14, 0x25, 0x88, 0x20, 0x40, 0,
-				0xb9, 0, 0, 0, 0,
-				0xff, 0x14, 0x25, 0x78, 0x20, 0x40, 0, 
-			};
-	
-// NOTE(ziv): this is just a temporary thing
-Operand pe_exe_lit      = x86_lit(&builder, "a simple 64b PE executable");
-	Operand hello_world_lit = x86_lit(&builder, "Hello World!");
-	
-builder.code = code; 
-	builder.code_size = sizeof(code); 
-
-write_pe_exe(&builder, "test.exe");
-*/
-	
-	
 	#endif 
-	free_resources(&builder.vs_sdk);
 	
 	return 0;
 }
 #endif
-
-
-
-
-/* 
-	// register to register
-	encode(builder, xor, REG(RAX), REG(RCX));
-	encode(builder, xor, REG(EAX), REG(ECX));
-	encode(builder, xor, REG(DX), REG(AX));
-	encode(builder, xor, REG(CL), REG(AL)); 
-	
-	// register to memeory 
-	encode(builder, xor, MEM(RAX,0,0,0,0), REG(RCX));
-	encode(builder, xor, MEM(EAX,0,0,0,0), REG(EDX));
-	encode(builder, xor, MEM(EAX,0,0,0,0), REG(AX)); 
-	encode(builder, xor, MEM(RBX,0,0,0,0), REG(DL)); 
-	
-	// memory to register
-	encode(builder, xor, REG(RAX), MEM(RAX,RCX,2,0x10,0));
-	encode(builder, xor, REG(EAX), MEM(EAX,0,0,0x110,0));
-	encode(builder, xor, REG(AX),  MEM(EAX,EDX,3,0,0));
-	encode(builder, xor, REG(AL),  MEM(RAX,RBX,2,0x10,0)); 
-	
-	// immediate
-	encode(builder, xor, MEM(RAX,0,0,0,0),  IMM(0x10)); 
-	encode(builder, xor, REG(R8),  IMM(0x100));
-	 
-	// speical instruction
-	encode(builder, add, REG(AL), IMM(0x10)); 
-	encode(builder, add, REG(AX), IMM(0x10)); 
-	encode(builder, add, REG(EAX), IMM(0x10)); 
-	encode(builder, add, REG(RAX), IMM(0x10)); 
-*/
-
 
 
 

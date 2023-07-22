@@ -48,6 +48,8 @@ typedef unsigned char bool;
 #define MIN(a, b) (((a)<(b)) ? (a) : (b))
 #define MAX(a, b) (((a)>(b)) ? (a) : (b))
 
+#define ALIGN(x, alignment) (((x)+alignment-1) & ~(alignment-1))
+
 #define ArrayLength(arr) (sizeof(arr)/sizeof(arr[0]))
 
 ////////////////////////////////

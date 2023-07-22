@@ -1,4 +1,5 @@
 
+
 typedef enum Register_Type {
 	UNKNOWN_REG=0,
 	// REX.r = 0 or REX.b = 0 or REX.x = 0
@@ -15,12 +16,36 @@ typedef enum Register_Type {
 } Register_Type;
 
 #define GET_REG(x) ((x-1)%8)
-#define GET_BITNESS(x) bitness_t[((x-1)/8)]
 #define GET_REX(x) (((x-1)/8) > 4)
+#define GET_BITNESS(x) bitness_t[((x-1)/8)]
 
 static char bitness_t[] = {
 	1, 1, 2, 4, 8, 1, 2, 4, 8
 };
+
+
+typedef struct {
+	int location_to_patch; // relative
+	int location; // relative to starting position
+	char *name;   // name of the thingy
+} Name_Location;
+
+typedef struct {
+	char *code;
+	int bytes_count; // to tell byte count of the program 
+	
+	Name_Location *labels, *jumpinstructions, *data_variables; 
+	int labels_count, jumpinstructions_count, data_variables_count;
+	int current_data_variable_location; // used to keep track of location of `data_variables`
+	
+	//~
+	// list of external library paths e.g. kernel32.lib (in linux libc.so)
+	int external_library_paths_count;
+	char **external_library_paths;
+	
+	M_Pool m; // temporary memory allocator
+} Builder; 
+
 static unsigned long long constants_t[] = {
 	UINT8_MAX, UINT16_MAX, UINT32_MAX, UINT64_MAX
 };
@@ -75,38 +100,6 @@ typedef enum {
 	DATA_VARIABLES_TABLE_KIND,
 	OPERAND_TABLE_KIND,
 } Builder_Table_Kind;
-
-typedef struct {
-	int location_to_patch; // relative
-	int location; // relative to starting position
-	char *name;   // name of the thingy
-} Name_Location;
-
-typedef struct {
-	char *code;
-	int code_size; 
-	
-	//~
-	// data_variables -  variables contained in the .data section
-	// jumpinstructions - for addresses of external functions
-	//
-	
-	Name_Location *labels, *jumpinstructions, *data_variables; 
-	int labels_count, jumpinstructions_count, data_variables_count;
-	int current_data_variable_location; // used to keep track of location of `data_variables`
-	
-	int bytes_count; // to tell byte count of the program 
-	
-	//~
-	// list of external library paths e.g. kernel32.lib (in linux libc.so)
-	int external_library_paths_count;
-	char **external_library_paths;
-	
-	// result of visual studio sdk path on windows
-	Find_Result vs_sdk;
-	
-	M_Pool m; // temporary memory allocator
-} Builder; 
 
 //~ 
 
