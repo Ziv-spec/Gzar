@@ -125,7 +125,43 @@ internal void parse_archive_library(M_Pool *m, Map *import_entries, char *archiv
 	return;
 }
 
-internal int write_pe_exe(Builder *builder, const char *file, 
+
+typedef struct { 
+	M_Pool *m;
+	
+	int file_alignment, section_alignment; 
+	int first_section_address;
+	Vector *headers;
+	
+	IMAGE_NT_HEADERS *nt_headers;
+	
+} PE_Packer;
+
+internal int pe_add_section(PE_Packer *pk, String8 section_name, int section_size, int characteristics) {
+	Assert(pk && section_size); 
+	Assert(0 < section_name.size && section_name.size <= 8);
+	
+	IMAGE_SECTION_HEADER *section_header = pool_alloc(pk->m, sizeof(IMAGE_SECTION_HEADER)); 
+	
+	// calculate sizes for section
+	IMAGE_SECTION_HEADER *last_section = pk->headers->data[MAX(pk->headers->index-1, 0)];
+	
+	memcpy(&section_header->Name, section_name.str, section_name.size);
+	section_header->Misc.VirtualSize = section_size;
+	section_header->VirtualAddress = (last_section) ? ALIGN(last_section->VirtualAddress + last_section->SizeOfRawData, pk->section_alignment) : pk->section_alignment;
+	section_header->SizeOfRawData  = ALIGN(section_size, pk->file_alignment);
+	section_header->PointerToRawData = (last_section) ? (last_section->PointerToRawData + last_section->SizeOfRawData) : pk->nt_headers->OptionalHeader.SizeOfHeaders;
+	section_header->Characteristics = characteristics;
+	
+	// add to headers vector
+	vec_push(pk->m, pk->headers, section_header); 
+	
+	pk->first_section_address = section_header->VirtualAddress;
+	
+	return pk->first_section_address;
+}
+
+internal bool write_pe_exe(Builder *builder, const char *file, 
 						  char **external_library_paths, int  external_library_paths_count) {
 	M_Arena *m = pool_get_scratch(&builder->m);
 	
@@ -135,15 +171,17 @@ internal int write_pe_exe(Builder *builder, const char *file,
 	//
 	
 	Find_Result msvc_sdk = find_visual_studio_and_windows_sdk(); 
-	if (msvc_sdk.windows_sdk_version) {
+	if (!msvc_sdk.windows_sdk_version) {
 		// TODO(ziv): Put an error before exit
 		return false; 
 	}
 	
-	size_t extern_functions_len = builder->pls_cnt[PL_C_FUNCS];
+	size_t extern_functions_len = builder->pls_maps[PL_C_FUNCS].count;
 	char **extern_functions = arena_alloc(m, extern_functions_len*sizeof(char *)); 
-	for (int i = 0; i < extern_functions_len; i++) 
-		extern_functions[i] = builder->pls[PL_C_FUNCS][i].name;
+	
+	Map_Iterator it = map_iterator(&builder->pls_maps[PL_C_FUNCS]);
+	for (int i = 0; map_next(&it); i++) 
+		extern_functions[i] = it.key.str;
 	qsort(extern_functions, extern_functions_len, sizeof(char *), compare);
 	
 	Map *import_entries = init_map(sizeof(Vector *));
@@ -228,10 +266,9 @@ internal int write_pe_exe(Builder *builder, const char *file,
 	
 	
 	
-	
 	//~
-	// Compute .idata size from import entries
-	//
+	// section headers
+	// 
 	
 	// NOTE(ziv): idata section structure
 	// Import Directory Table - contains information about the following structures locations
@@ -240,9 +277,16 @@ internal int write_pe_exe(Builder *builder, const char *file,
 	// Import Address Table - identical to Import Name Table but during loading gets overriten with valid values for function addresses
 	// Module names - simple array of the module names
 	
+	PE_Packer pk = { &builder->m, file_alignment, section_alignment, .headers = vec_init(), &nt_headers };
+	pk.headers->data[0] = NULL;
+	
+	// always create a text section
+	int text_size  = builder->bytes_count;
+	 pe_add_section(&pk, str8_lit(".text"),  text_size, IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_CODE);
+	
+	
 	// Compute sizes for all idata related structures
 	int int_tables_size = 0, module_names_size = 0, function_names_size = 0; 
-	
 	Map_Iterator iter = map_iterator(import_entries); 
 	for (int i = 0; map_next(&iter); i++) {
 		String8 dll = iter.key;
@@ -253,83 +297,72 @@ internal int write_pe_exe(Builder *builder, const char *file,
 		int_tables_size += (int)(sizeof(size_t) * (function_names_vector->index+1));
 		module_names_size += (int)(dll.size + 1);
 	}
-	
-	int descriptors_size = sizeof(IMAGE_IMPORT_DESCRIPTOR) * (import_entries->count + 1);
+	int descriptors_size = (import_entries->count > 0) ? (sizeof(IMAGE_IMPORT_DESCRIPTOR) * (import_entries->count + 1)) : 0;
 	int idata_size = descriptors_size + int_tables_size*2 + function_names_size + module_names_size;
 	
-	int data_size  = builder->current_data_variable_location; 
-	int text_size  = builder->bytes_count;
-	
-	
-	
-	//~
-	// .text .data .idata section headers
-	// 
-	
-	IMAGE_SECTION_HEADER text_section = { 
-		.Name = ".text",
-		.Misc.VirtualSize = text_size,
-		.VirtualAddress   = section_alignment, 
-		.SizeOfRawData    = ALIGN(text_size, file_alignment),
-		.PointerToRawData = nt_headers.OptionalHeader.SizeOfHeaders, // the sections begin right after all the NT headers
-		.Characteristics  = IMAGE_SCN_MEM_EXECUTE |IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_CODE
-	}; 
-	
-	int idata_section_address = ALIGN(text_section.VirtualAddress + text_section.SizeOfRawData, section_alignment);
-	IMAGE_SECTION_HEADER idata_section = { 
-		.Name = ".idata",
-		.Misc.VirtualSize = idata_size, 
-		.VirtualAddress   = idata_section_address,
-		.SizeOfRawData    = ALIGN(idata_size, file_alignment),
-		.PointerToRawData = text_section.PointerToRawData + text_section.SizeOfRawData,
-		.Characteristics  = IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_INITIALIZED_DATA,
-	}; 
-	
-	// importsVA - make sure that idata section is recognized as a imports section
-	{
+	if (idata_size > 0 && extern_functions_len > 0) {
+	int idata_section_address = pe_add_section(&pk, str8_lit(".idata"), idata_size, IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_INITIALIZED_DATA);
+		
+		// importsVA - make sure that idata section is recognized as a imports section
 		nt_headers.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress = idata_section_address; 
 		nt_headers.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size = idata_size; 
 	}
 	
-	IMAGE_SECTION_HEADER data_section = { 
-		.Name = ".data",
-		.Misc.VirtualSize = data_size, 
-		.VirtualAddress   = ALIGN(idata_section.VirtualAddress + idata_section.SizeOfRawData, section_alignment), 
-		.SizeOfRawData    = ALIGN(data_size, file_alignment), 
-		.PointerToRawData = idata_section.PointerToRawData + idata_section.SizeOfRawData, 
-		.Characteristics  = IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_INITIALIZED_DATA,
-	};
 	
+	int data_size  = builder->current_data_variable_location; 
+	if (data_size > 0) {
+		pe_add_section(&pk, str8_lit(".data"), data_size, IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_INITIALIZED_DATA);
+	}
 	
+	nt_headers.FileHeader.NumberOfSections = (WORD)pk.headers->index; 
+	nt_headers.OptionalHeader.SizeOfImage  = ((IMAGE_SECTION_HEADER *)pk.headers->data[pk.headers->index-1])->VirtualAddress + section_alignment;
 	
 	//~
-	// Creating and filling sections
+	// Creating and filling executable
 	//
 	
-	size_t executable_size = nt_headers.OptionalHeader.SizeOfHeaders + 
-		text_section.SizeOfRawData + idata_section.SizeOfRawData + data_section.SizeOfRawData;
-	// Allocate once for both for exe
-	u8 *buf = VirtualAlloc(NULL, executable_size, MEM_COMMIT, PAGE_READWRITE); 
-	u8 *executable = buf, *pexe = executable;
+	int sections_size = 0; 
+	for (int i = 0; i < pk.headers->index; i++) {
+		sections_size += ((IMAGE_SECTION_HEADER *)pk.headers->data[i])->SizeOfRawData;
+	}
+	size_t executable_size = nt_headers.OptionalHeader.SizeOfHeaders + sections_size;
+		u8 *pe = VirtualAlloc(NULL, executable_size, MEM_COMMIT, PAGE_READWRITE); 
+	if (!pe) return false;
 	
-	u8 *text  = buf + nt_headers.OptionalHeader.SizeOfHeaders;
-	u8 *idata = text + text_section.SizeOfRawData;
-	u8 *data  = idata + idata_section.SizeOfRawData; 
+	u8 *pexe = pe;
+	
+	
+	// filling signiture, headers, sections
+	{
+#define MOVE(dest, src, size) do { memcpy(dest, src, size); dest += size; } while(0)
+		MOVE(pexe, image_stub_and_signiture, sizeof(image_stub_and_signiture));
+		MOVE(pexe, &nt_headers,    sizeof(nt_headers));
+		for (int i = 0; i < pk.headers->index; i++) {
+			MOVE(pexe, pk.headers->data[i], sizeof(IMAGE_SECTION_HEADER));
+		}
+	}
+	
+	
+	u8 *text  = pe + nt_headers.OptionalHeader.SizeOfHeaders;
+	u8 *idata = text + ((IMAGE_SECTION_HEADER *)pk.headers->data[0])->SizeOfRawData;
+	//u8 *data  = idata + ((IMAGE_SECTION_HEADER *)pk.headers->data[1])->SizeOfRawData;; 
 	
 	// filling .text section
 	memcpy(text, builder->code, text_size);
-	
+
+/* 	
 	// filling .data section
 	for (int i = 0; i < builder->pls_cnt[PL_DATA_VARS]; i++) {
-		Patch_Location nl = builder->pls[PL_DATA_VARS][i];
-		size_t copy_size = strlen(nl.name)+1;
-		memcpy(data, nl.name, copy_size); data += copy_size;
+		char *name = builder->pls[PL_DATA_VARS][i].name;
+		size_t copy_size = strlen(name)+1;
+		memcpy(data, name, copy_size); data += copy_size;
 	}
-	
-	if (extern_functions_len > 0) {
+	 */
+
+	if (idata_size > 0 && extern_functions_len > 0) {
 		
 		// filling .idata section
-		int descriptors_base_address    = idata_section_address;
+		int descriptors_base_address    = nt_headers.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
 		int int_table_base_address      = descriptors_base_address + descriptors_size;
 		int function_names_base_address = int_table_base_address + int_tables_size;
 		int iat_table_base_address      = function_names_base_address + function_names_size;
@@ -367,7 +400,6 @@ internal int write_pe_exe(Builder *builder, const char *file,
 			};
 			
 			// filling function names, int table and iat table
-			
 			for (int fn_idx = 0; fn_idx < function_names_vector->index; fn_idx++) {
 				memcpy(&function_names[function_names_offset], &hints[hint_idx++], sizeof(u16));
 				int copy_size = (int)strlen(function_names_vector->data[fn_idx])+1;
@@ -380,63 +412,13 @@ internal int write_pe_exe(Builder *builder, const char *file,
 			int_tables++; iat_tables++; // for NULL address
 			
 			// filling module names 
-			size_t copy_size = dll.size+1; 
-			memcpy(&module_names[module_names_offset], dll.str, copy_size);
-			module_names_offset += (int)copy_size;
+			memcpy(&module_names[module_names_offset], dll.str, dll.size+1);
+			module_names_offset += (int)dll.size+1;
 		}
 		
 	}
 	
 	
-	
-	//~
-	// Patch real addresses to code
-	//
-	
-	/*
-		printf("Before: ");  
-		for (int i = 0; i < builder->bytes_count; i++) { printf("%02x", builder->code[i]&0xff); } printf("\n"); 
-		 */
-	
-	// the patching should be done by a "linker" 
-	
-#if 0
-	// patching data section
-	for (int i = 0; i < builder->data_variables_count; i++) {
-		Name_Location nl = builder->data_variables[i];
-		int location = data_section.VirtualAddress + nl.location;
-		memcpy(&builder->code[nl.location_to_patch], &location, sizeof(nl.location));
-	}
-	
-	// patching text section
-	for (int i = 0; i < builder->labels_count; i++) {
-		Name_Location nl = builder->labels[i];
-		int location = text_section.VirtualAddress + nl.location;
-		memcpy(&builder->code[nl.location_to_patch], &location, sizeof(nl.location));
-	}
-	
-	for (int i = 0; i < builder->jumpinstructions_count; i++) {
-		Name_Location nl = builder->jumpinstructions[i];
-		int location = text_section.VirtualAddress + nl.location;
-		memcpy(&builder->code[nl.location_to_patch], &location, sizeof(nl.location));
-		printf("path location %d\n", nl.location_to_patch);
-	}
-#endif 
-	
-	/* 	
-		printf("After: ");
-		for (int i = 0; i < builder->bytes_count; i++) { printf("%02x", builder->code[i]&0xff); } printf("\n"); 
-		 */
-	
-	// filling signiture, headers, sections
-	{
-#define MOVE(dest, src, size) do { memcpy(dest, src, size); dest += size; } while(0)
-		MOVE(pexe, image_stub_and_signiture, sizeof(image_stub_and_signiture));
-		MOVE(pexe, &nt_headers,    sizeof(nt_headers));
-		MOVE(pexe, &text_section,  sizeof(text_section));
-		MOVE(pexe, &idata_section, sizeof(idata_section));
-		MOVE(pexe, &data_section,  sizeof(data_section));
-	}
 	
 	//~
 	// Creating final executable
@@ -447,7 +429,7 @@ internal int write_pe_exe(Builder *builder, const char *file,
 		Assert(handle != INVALID_HANDLE_VALUE && "Invalid handle");
 		
 		DWORD bytes_written;
-		BOOL result =  WriteFile(handle, executable, (int)executable_size, &bytes_written, NULL);
+		BOOL result =  WriteFile(handle, pe, (int)executable_size, &bytes_written, NULL);
 		Assert(result && "Couldn't write to file");
 		CloseHandle(handle);
 	}

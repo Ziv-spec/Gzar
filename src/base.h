@@ -507,9 +507,7 @@ internal Bucket *map_peek_bucket(Map *map, String8 key) {
 // NOTE(ziv): this function does not remove the element from the map
 // it only returns it's value
 internal void *map_peek(Map *map, String8 key) {
-	Bucket *b = map_peek_bucket(map, key); 
-	if (b) return b->value;
-	return b;
+	  return map_peek_bucket(map, key); 
 }
 
 internal bool map_set_bucket(Map *map, String8 key, void *value) {

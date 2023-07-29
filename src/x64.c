@@ -1,5 +1,4 @@
 
-
 enum {
 	PL_LABELS, 
 	PL_DATA_VARS, 
@@ -8,26 +7,33 @@ enum {
 };
 
 typedef struct { 
-	char *name;
-	int location; // location to patch
+	int *loc; // locations to patch
+	int loc_cnt;
+	int loc_sz;
 	int rva;
-} Patch_Location;
+} Patch_Locations;
 
 typedef struct {
 	M_Pool m; // temporary memory allocator
 	
-	Patch_Location *pls[PL_COUNT];
-	int pls_cnt[PL_COUNT];
-	int current_data_variable_location; // used to keep track of location of `data_variables`
+	Patch_Locations *pls;
+	int pls_cnt;
+	int pls_sz;
+		int current_data_variable_location; // used to keep track of location of `data_variables`
+	// name -> Patch_Locations
+	
+	Map pls_maps[PL_COUNT]; 
 	
 	int bytes_count; // to tell byte count of the program 
 	char *code;
+	
 } Builder; 
 
 //~ 
 // x64 Definitions
 // 
 
+// TODO(ziv): check whether I need all the names or just rax, r8 and their continuation along with a size description
 typedef enum Register_Type {
 	UNKNOWN_REG=0,
 	// REX.r = 0 or REX.b = 0 or REX.x = 0
@@ -86,7 +92,6 @@ typedef enum {
 	LAYOUT_MR = LAYOUT_M<<4 | LAYOUT_R,
 	LAYOUT_MI = LAYOUT_M<<4 | LAYOUT_I,
 	LAYOUT_RI = LAYOUT_R<<4 | LAYOUT_I,
-	// sse?
 } Instruction_Layout;
 
 typedef struct { 
@@ -98,7 +103,7 @@ typedef struct {
 	// for immediates
 	u8 op_i;
 	u8 reg_i;
-	} InstDesc; 
+	} Instruction_Desc; 
 
 typedef struct {
 	u8 kind;
@@ -116,18 +121,92 @@ typedef struct {
 
 //~
 
+internal void set_patch_location(Builder *b, int idx, int value) {
+	Assert(idx < b->pls_sz);
+	
+	Patch_Locations *pls = &b->pls[idx]; 
+	if (pls->loc_cnt >= pls->loc_sz) {
+		int new_sz = pls->loc_sz;
+		pls->loc = pool_resize(&b->m, pls->loc, pls->loc_sz, new_sz);
+		pls->loc_sz = new_sz;
+	}
+	pls->loc[pls->loc_cnt++] = value;
+}
+
+internal int get_patch_location(Builder *b, String8 name, int type) {
+	Assert(b && name.str);
+	Assert(type < PL_COUNT);
+	
+	Patch_Locations *loc = map_peek(&b->pls_maps[type], name);
+	if (loc)  return (int)(loc - b->pls);
+	
+	return -1; 
+
+/* 	
+	b->pls[b->pls_cnt].rva = rva;
+	
+	loc = &b->pls[b->pls_cnt++];
+	if (!map_set(&b->pls_maps[type], name, loc)) {
+		return -1;
+	}
+	
+	return (int)(loc - b->pls);
+	 */
+
+	
+}
+
+internal Value_Operand e_label(Builder *b, char *label) {
+	Assert(b);
+	
+	String8 lit = str8_lit(label);
+	Patch_Locations *loc = map_peek(&b->pls_maps[PL_LABELS], lit);
+	int idx = (int)(loc - b->pls);
+	if (!loc) {
+	idx = b->pls_cnt;
+	map_set(&b->pls_maps[PL_LABELS], lit, &b->pls[b->pls_cnt++]);
+	}
+	return (Value_Operand){ .kind = LAYOUT_V, .imm = PL_LABELS << 28 | idx };
+}
+
+/* 
+internal Value_Operand e_lit(Builder *b, char *literal) {
+	String8 literal_lit = str8_lit(literal); 
+	Patch_Locations *ploc = e_patch_location(b, literal_lit, PL_DATA_VARS, b->current_data_variable_location);
+	if (!ploc)  return (Value_Operand){0};
+	b->current_data_variable_location += (int)(literal_lit.size + 1);
+	return (Value_Operand){ .kind = LAYOUT_V, .imm = PL_DATA_VARS << 28 | (b->pls_cnt[PL_DATA_VARS]++) };
+}
+
+internal Value_Operand e_cfunction(Builder *b, char *label) {
+	String8 literal_lit = str8_lit(literal); 
+	Patch_Locations *ploc = e_patch_location(b, literal_lit, PL_DATA_VARS, b->current_data_variable_location);
+	if (!ploc) { 
+		// TODO(ziv): error!!!
+		return (Value_Operand){0};
+	}
+	
+	
+	b->pls[PL_C_FUNCS][b->pls_cnt[PL_C_FUNCS]] = (Patch_Locations){ 0 } ;
+	return (Value_Operand){ .kind = PL_C_FUNCS, .imm = PL_C_FUNCS << 28 | (b->pls_cnt[PL_C_FUNCS]++) };
+}
+*/
+
+//~
+
 #define X(a, ...) a,
 typedef enum {
 #include "x64_t.inc"
 } Inst_Kind; 
 #undef X 
 
-static InstDesc inst_table[] = {
+static Instruction_Desc inst_table[] = {
 #define X(a, b, c, ...) [a] = { .mnemonic = b, .cat = INST_##c, __VA_ARGS__}, 
 #include "x64_t.inc"
 #undef X
 };
 
+//~ 
 enum {
 	MOD_INDIRECT        = 0x0, // [rax]
 	MOD_INDIRECT_DISP8  = 0x1, // [rax + disp8]
@@ -176,7 +255,7 @@ internal inline bool memory_operand_need_sib(Value_Operand *mem) {
 }
 
 internal void inst0(Builder *b, Inst *op) {
-	const InstDesc *inst = &inst_table[op->kind];
+	const Instruction_Desc *inst = &inst_table[op->kind];
 	EMIT1(b, inst->op); 
 }
 
@@ -185,16 +264,18 @@ internal void inst1(Builder *b, Inst *op, Value_Operand *v, Data_Type dt) {
 	
 	u8 layout = v->kind; 
 	Assert(layout <= 4); // must be unary
+	if (layout == 0)  return;
+	
 	
 	bool bookkeep = false;
-	if (layout & (LAYOUT_V|LAYOUT_M)) {
+	if (layout & LAYOUT_V) {
 		layout = (layout == (LAYOUT_V|LAYOUT_M)) ? LAYOUT_M : LAYOUT_I;
 		*v = (Value_Operand){ .kind = layout, .imm = v->imm};
 		bookkeep = true;
 	}
 	
 	
-	const InstDesc *inst = &inst_table[op->kind];
+	const Instruction_Desc *inst = &inst_table[op->kind];
 	
 	char ending = 0;
 	if (inst->cat == INST_UNARY) { 
@@ -242,10 +323,10 @@ internal void inst1(Builder *b, Inst *op, Value_Operand *v, Data_Type dt) {
 	}
 	
 	unary_end: 
+	
 	if (bookkeep) { 
-		int type = v->imm >> 28, idx = v->imm & ((1<<28)-1);
-		b->pls[type][idx].location = b->bytes_count - 4;
-		if (type == PL_LABELS) b->pls[type][idx].rva -= b->bytes_count;
+		int idx = v->imm & ((1<<28)-1);
+		set_patch_location(b, idx, b->bytes_count-4);
 	}
 	
 }
@@ -253,11 +334,10 @@ internal void inst1(Builder *b, Inst *op, Value_Operand *v, Data_Type dt) {
 internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, Data_Type dt) {
 	Assert(b && op && v1 && v2);
 	
-	const InstDesc *inst = &inst_table[op->kind];
-	
+	const Instruction_Desc *inst = &inst_table[op->kind];
 	
 	bool bookkeep = false;
-	if (v2->kind & (LAYOUT_V|LAYOUT_M)) {
+	if (v2->kind & LAYOUT_V) {
 		*v2 = (Value_Operand){ 
 			.kind = (v2->kind == (LAYOUT_V|LAYOUT_M)) ? LAYOUT_M : LAYOUT_I,
 			.imm = v2->imm
@@ -267,7 +347,7 @@ internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 	
 	u8 layout = v1->kind << 4 | v2->kind;
 	Assert(layout > 4 && "Must have binary layout");
-	
+	if (layout == 0)  return;
 	
 	if (layout == LAYOUT_MR) {
 		Value_Operand *temp = v2; 
@@ -280,6 +360,7 @@ internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 	char rr = GET_REX(v1->reg), rb = GET_REX(v2->reg), rx = 0;
 	// TODO(ziv): Handle special cases - Intel Manual Vol. 2A 2-11
 	
+	
 	// handle special cases with different operands
 	bool need_sib = 0; 
 	if (v2->kind == LAYOUT_M) {
@@ -289,6 +370,7 @@ internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 	else if (GET_REG(v1->reg) == 0 && v2->kind == LAYOUT_I) {
 		rb = rr; rr = 0;
 	}
+	
 	
 	// instruction ending
 	char ending = 0;
@@ -324,7 +406,6 @@ internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 		
 		// patch location
 		
-		
 	}
 	else if (layout == LAYOUT_RI) {
 		
@@ -335,6 +416,7 @@ internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 			EMIT1(b, inst->op_i | ending);
 			EMIT1(b, mod_rm(MOD_DIRECT, inst->reg_i, GET_REG(v1->reg))); 
 		}
+		
 		
 		// TODO(ziv): add an option for emitting 64 bit values (for mov inst...)
 		if (dt == 1)      EMIT1(b, (char)v2->imm);
@@ -348,9 +430,8 @@ internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 	
 	 
 	if (bookkeep) { 
-		int type = v2->imm >> 28, idx = v2->imm & ((1<<28)-1);
-		b->pls[type][idx].location = b->bytes_count - 4;
-		if (type == PL_LABELS) b->pls[type][idx].rva -= b->bytes_count;
+		int idx = v2->imm & ((1<<28)-1);
+		set_patch_location(b, idx, b->bytes_count-4);
 	}
 	
 }

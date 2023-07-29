@@ -1,4 +1,22 @@
 
+/* 
+
+ reate optmizer!!!!! This will be crazy if I could manage it. 
+although I want an optimizer, I will have to look into the following too: 
+
+TODO(ziv): 
+1. finish x64 backend
+2. finish pe.c 
+3. reform the microsoft_crazyness.h to be msvc.c without the header thingy and so on...
+4. create a linker which will accept multiple platforms/formats
+5. create a better base layer, I want to review the design to see how I can improve and make my life going forward easier. 
+6. make lexer slightly faster/better
+7. recreate parser with new design
+
+that said, I plan on doing the optimizer pretty early since I want to have a proven method before I incorprate it furthur into the design of my compiler. 
+
+*/
+
 //#pragma comment(lib, "user32.lib")
 #pragma comment(lib, "Advapi32.lib")
 #pragma comment(lib, "Ole32.lib")
@@ -24,6 +42,7 @@ struct Register {
 
 #define TIMINGS 0
 
+
 #define VC_EXTRALEAN
 #include <windows.h>
 //#include <winnt.h>
@@ -33,13 +52,14 @@ struct Register {
 #include "sema.h"
 #include "parser.h"
 
+// frontend
 #include "lexer.c"
 #include "parser.c"
 #include "sema.c"
-#include "x86_asm.c"// super old yet working x64 assmebly backend
 
-#include "x64.c"    // new x64 emitter backend
-
+// backend
+#include "x86_asm.c"
+#include "x64.c"
 #pragma warning(disable : 4431 4267 4456 4244 4189)
 #define MICROSOFT_CRAZINESS_IMPLEMENTATION
 #include "microsoft_crazyness.h"
@@ -47,42 +67,35 @@ struct Register {
 
 #include "pe.c"
 
-internal Value_Operand e_label(Builder *b, char *label) {
-	Patch_Location *pl = &b->pls[PL_LABELS][b->pls_cnt[PL_LABELS]];
-	*pl = (Patch_Location){ .name = label, .rva = b->bytes_count };
-	return (Value_Operand){ .kind = LAYOUT_V, .imm = PL_LABELS << 28 | (b->pls_cnt[PL_LABELS]++) };
-}
-
-internal Value_Operand e_lit(Builder *b, char *literal) {
-	Patch_Location *pl = &b->pls[PL_DATA_VARS][b->pls_cnt[PL_DATA_VARS]];
-	*pl = (Patch_Location){ .name = literal, .rva = b->current_data_variable_location };
-	b->current_data_variable_location += (int)(strlen(literal)+1);
-	return (Value_Operand){ .kind = LAYOUT_V, .imm = PL_DATA_VARS << 28 | (b->pls_cnt[PL_DATA_VARS]++) };
-}
-
-internal Value_Operand e_cfunction(Builder *b, char *label) {
-	Patch_Location *pl = &b->pls[PL_C_FUNCS][b->pls_cnt[PL_C_FUNCS]];
-	*pl = (Patch_Location){ .name = label };
-	return (Value_Operand){ .kind = PL_C_FUNCS, .imm = PL_C_FUNCS<< 28 | (b->pls_cnt[PL_C_FUNCS]++) };
-}
 
 int main() {
 	
 	char program[0x1000] = { 0 };
-	Patch_Location labels[0x50] = {0}; 
-	Patch_Location data_variables[0x50] = {0}; 
-	Patch_Location c_funcs[0x50] = {0}; 
 	
 	Builder builder = { 
-		.m = { .pool_size = 0x1000 },
-		.pls = {
-			[PL_LABELS]    = labels, 
-			[PL_DATA_VARS] = data_variables, 
-			[PL_C_FUNCS]   = c_funcs,
-		},
+		.m = { .pool_size = 0x4000 },
 		.code = program, // program buffer
 	};
+	
 	pools_init(&builder.m);
+	
+	builder.pls_sz = 0x100; 
+	builder.pls = pool_alloc(&builder.m, builder.pls_sz* sizeof(Patch_Locations));
+	
+	// NOTE(ziv): I don't have a better way of doing this since I am bad at tooling
+	for (int i = 0; i < PL_COUNT; i++) {
+		builder.pls_maps[i] = (Map){
+			.buckets = pool_alloc(&builder.m, DEFAULT_MAP_SIZE*sizeof(Bucket)), 
+			.capacity = DEFAULT_MAP_SIZE,
+		};
+	}
+	
+	
+	
+	
+	
+	
+	
 	
 	#if 0
 	Inst inst = (Inst){ADD};
@@ -99,38 +112,60 @@ int main() {
 	v2 = e_lit(&builder, "Hello World!");
 	inst2(&builder, &inst, &v1, &v2, 8);
 	
-	
-	
-	// patching addresses
+	// patching addresses 
 	Patch_Location *pls;
 	
 		pls = builder.pls[PL_LABELS];
-	for (int i = 0; i < builder.pls_cnt[PL_LABELS]; i++) {
+	for (int i = 0; i < builder.pls_sz[PL_LABELS]; i++) {
 		Patch_Location pl = pls[i]; pl.rva += 0x1000;
 		memcpy(&builder.code[pl.location], &pl.rva, sizeof(pl.rva)); 
 	}
 	
 	pls = builder.pls[PL_DATA_VARS];
-	for (int i = 0; i < builder.pls_cnt[PL_DATA_VARS]; i++) {
+	for (int i = 0; i < builder.pls_sz[PL_DATA_VARS]; i++) {
 		Patch_Location pl = pls[i]; pl.rva += 0x3000;
 		memcpy(&builder.code[pl.location], &pl.rva, sizeof(pl.rva)); 
 	}
 #endif 
+	
+	
+	
+	
+	
+	
+	
 	
 	Inst inst = (Inst){MOV};
 	Value_Operand v1 = { .kind = LAYOUT_R, .reg = RAX };
 	Value_Operand v2 = { .kind = LAYOUT_I, .imm = 0x00 };
 	inst2(&builder, &inst, &v1, &v2, 8);
 	
+	inst = (Inst){JMP};
+	v1 = (Value_Operand){ .kind = LAYOUT_R, .reg = RAX };
+	Value_Operand l0 = e_label(&builder, ".L0");
+	inst1(&builder, &inst, &l0, 4);
+	
+	
+	
+	
+	// patching the label's addresses
+	Map_Iterator it = map_iterator(&builder.pls_maps[PL_LABELS]);
+	while (map_next(&it)) {
+		Patch_Locations *pls = it.value;
+		for (int i = 0; i<  pls->loc_cnt; i++) {
+			int loc = pls->loc[i];
+			int rva = pls->rva - (loc+4);
+			memcpy(&builder.code[loc], &rva, sizeof(rva));
+		}
+	}
+	
 	
 	//test_x64_unary(&builder, NOT);
 	//test_x64_binary(&builder, ADD);
 	
-	for (int i = 0; i < builder.bytes_count; i++) { printf("%02x", builder.code[i]&0xff); } printf("\n"); 
 	
 	
-	
-	#if 0
+	#if 1
 	// NOTE(ziv): THIS WORKS!!! The only feature I need to do is finish up with patching locations (which is easy) 
 	
 	//~
@@ -144,6 +179,10 @@ int main() {
 	write_pe_exe(&builder, "test.exe", libs, ArrayLength(libs)); 
 	
 #endif 
+	
+	for (int i = 0; i < builder.bytes_count; i++) { printf("%02x", builder.code[i]&0xff); } printf("\n"); 
+	
+	pool_free(&builder.m);
 	
 	return 0;
 }
