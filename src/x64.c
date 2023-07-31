@@ -126,71 +126,41 @@ internal void set_patch_location(Builder *b, int idx, int value) {
 	
 	Patch_Locations *pls = &b->pls[idx]; 
 	if (pls->loc_cnt >= pls->loc_sz) {
-		int new_sz = pls->loc_sz;
+		int new_sz = (pls->loc_sz+1) * 2;
 		pls->loc = pool_resize(&b->m, pls->loc, pls->loc_sz, new_sz);
 		pls->loc_sz = new_sz;
 	}
 	pls->loc[pls->loc_cnt++] = value;
 }
 
-internal int get_patch_location(Builder *b, String8 name, int type) {
-	Assert(b && name.str);
+internal Value_Operand get_patch_location(Builder *b,String8 lit, int type, int rva) {
+	Assert(b && lit.size > 0);
 	Assert(type < PL_COUNT);
 	
-	Patch_Locations *loc = map_peek(&b->pls_maps[type], name);
-	if (loc)  return (int)(loc - b->pls);
-	
-	return -1; 
-
-/* 	
-	b->pls[b->pls_cnt].rva = rva;
-	
-	loc = &b->pls[b->pls_cnt++];
-	if (!map_set(&b->pls_maps[type], name, loc)) {
-		return -1;
+	Patch_Locations *loc = map_peek(&b->pls_maps[type], lit);
+	int idx = (int)(loc - b->pls);
+	if (!loc) {
+		b->pls[idx = b->pls_cnt].rva = rva;
+		map_set(&b->pls_maps[type], lit, &b->pls[b->pls_cnt++]);
 	}
 	
-	return (int)(loc - b->pls);
-	 */
-
-	
+	return (Value_Operand){ .kind = LAYOUT_V, .imm = type << 28 | idx };
 }
 
 internal Value_Operand e_label(Builder *b, char *label) {
-	Assert(b);
-	
-	String8 lit = str8_lit(label);
-	Patch_Locations *loc = map_peek(&b->pls_maps[PL_LABELS], lit);
-	int idx = (int)(loc - b->pls);
-	if (!loc) {
-	idx = b->pls_cnt;
-	map_set(&b->pls_maps[PL_LABELS], lit, &b->pls[b->pls_cnt++]);
-	}
-	return (Value_Operand){ .kind = LAYOUT_V, .imm = PL_LABELS << 28 | idx };
-}
-
-/* 
-internal Value_Operand e_lit(Builder *b, char *literal) {
-	String8 literal_lit = str8_lit(literal); 
-	Patch_Locations *ploc = e_patch_location(b, literal_lit, PL_DATA_VARS, b->current_data_variable_location);
-	if (!ploc)  return (Value_Operand){0};
-	b->current_data_variable_location += (int)(literal_lit.size + 1);
-	return (Value_Operand){ .kind = LAYOUT_V, .imm = PL_DATA_VARS << 28 | (b->pls_cnt[PL_DATA_VARS]++) };
+	return get_patch_location(b, str8_lit(label), PL_LABELS, b->bytes_count);
 }
 
 internal Value_Operand e_cfunction(Builder *b, char *label) {
-	String8 literal_lit = str8_lit(literal); 
-	Patch_Locations *ploc = e_patch_location(b, literal_lit, PL_DATA_VARS, b->current_data_variable_location);
-	if (!ploc) { 
-		// TODO(ziv): error!!!
-		return (Value_Operand){0};
-	}
-	
-	
-	b->pls[PL_C_FUNCS][b->pls_cnt[PL_C_FUNCS]] = (Patch_Locations){ 0 } ;
-	return (Value_Operand){ .kind = PL_C_FUNCS, .imm = PL_C_FUNCS << 28 | (b->pls_cnt[PL_C_FUNCS]++) };
+	 return get_patch_location(b, str8_lit(label), PL_C_FUNCS, 0); 
 }
-*/
+
+internal Value_Operand e_lit(Builder *b, char *literal) {
+	String8 lit = str8_lit(literal);
+	Value_Operand result = get_patch_location(b, lit, PL_DATA_VARS, b->current_data_variable_location);
+	b->current_data_variable_location += (int)lit.size+1;
+	return result;
+}
 
 //~
 

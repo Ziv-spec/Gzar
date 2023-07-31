@@ -1,7 +1,7 @@
 
 /* 
 
- reate optmizer!!!!! This will be crazy if I could manage it. 
+ create optmizer!!!!! This will be crazy if I could manage it. 
 although I want an optimizer, I will have to look into the following too: 
 
 TODO(ziv): 
@@ -77,6 +77,7 @@ int main() {
 		.code = program, // program buffer
 	};
 	
+	// TODO(ziv): maybe put initialization into a function instead?
 	pools_init(&builder.m);
 	
 	builder.pls_sz = 0x100; 
@@ -95,45 +96,7 @@ int main() {
 	
 	
 	
-	
-	
-	#if 0
-	Inst inst = (Inst){ADD};
-	Value_Operand v1 = { .kind = LAYOUT_R, .reg = RAX };
-	Value_Operand v2 = { .kind = LAYOUT_R, .reg = R8  };
-	inst2(&builder, &inst, &v1, &v2, 8);
-	
-	inst = (Inst){CALL};
-	Value_Operand v = e_label(&builder, ".L0");
-	inst1(&builder, &inst, &v, DT_DWORD);
-	
-	inst = (Inst){ADD};
-	v1 = (Value_Operand){ .kind = LAYOUT_R, .reg = RAX };
-	v2 = e_lit(&builder, "Hello World!");
-	inst2(&builder, &inst, &v1, &v2, 8);
-	
-	// patching addresses 
-	Patch_Location *pls;
-	
-		pls = builder.pls[PL_LABELS];
-	for (int i = 0; i < builder.pls_sz[PL_LABELS]; i++) {
-		Patch_Location pl = pls[i]; pl.rva += 0x1000;
-		memcpy(&builder.code[pl.location], &pl.rva, sizeof(pl.rva)); 
-	}
-	
-	pls = builder.pls[PL_DATA_VARS];
-	for (int i = 0; i < builder.pls_sz[PL_DATA_VARS]; i++) {
-		Patch_Location pl = pls[i]; pl.rva += 0x3000;
-		memcpy(&builder.code[pl.location], &pl.rva, sizeof(pl.rva)); 
-	}
-#endif 
-	
-	
-	
-	
-	
-	
-	
+	Value_Operand l0 = e_label(&builder, ".L0");
 	
 	Inst inst = (Inst){MOV};
 	Value_Operand v1 = { .kind = LAYOUT_R, .reg = RAX };
@@ -142,22 +105,58 @@ int main() {
 	
 	inst = (Inst){JMP};
 	v1 = (Value_Operand){ .kind = LAYOUT_R, .reg = RAX };
-	Value_Operand l0 = e_label(&builder, ".L0");
 	inst1(&builder, &inst, &l0, 4);
 	
+	Value_Operand l1 = e_label(&builder, ".L1");
+	inst = (Inst){MOV};
+	inst2(&builder, &inst, &v1, &v2, 8);
 	
+	inst = (Inst){JMP};
+	v1 = (Value_Operand){ .kind = LAYOUT_R, .reg = RAX };
+	inst1(&builder, &inst, &l1, 4);
 	
+	inst = (Inst){MOV};
+	Value_Operand lit1 = e_lit(&builder, "Hello World!");
+	inst2(&builder, &inst, &v1, &lit1, 4);
+	Value_Operand lit2 = e_lit(&builder, "This is a 64b PE executable!");
+	inst2(&builder, &inst, &v1, &lit2, 4);
+	
+	// TODO(ziv): add cfunc patching 
+	// TODO(ziv): create a general function for patching addresses for the 'linker'
 	
 	// patching the label's addresses
 	Map_Iterator it = map_iterator(&builder.pls_maps[PL_LABELS]);
 	while (map_next(&it)) {
 		Patch_Locations *pls = it.value;
 		for (int i = 0; i<  pls->loc_cnt; i++) {
-			int loc = pls->loc[i];
-			int rva = pls->rva - (loc+4);
+			int loc = pls->loc[i], rva = pls->rva - (loc+4);
 			memcpy(&builder.code[loc], &rva, sizeof(rva));
 		}
 	}
+	
+	// patching the global variables addresses (in this case mostly strings I guess)
+	it = map_iterator(&builder.pls_maps[PL_DATA_VARS]);
+	while (map_next(&it)) {
+		Patch_Locations *pls = it.value;
+		for (int i = 0; i<  pls->loc_cnt; i++) {
+			int loc = pls->loc[i], rva = pls->rva + 0x3000;
+			memcpy(&builder.code[loc], &rva, sizeof(rva));
+		}
+	}
+	
+	// patching the global variables addresses (in this case mostly strings I guess)
+	it = map_iterator(&builder.pls_maps[PL_C_FUNCS]);
+	while (map_next(&it)) {
+		Patch_Locations *pls = it.value;
+		for (int i = 0; i<  pls->loc_cnt; i++) {
+			int loc = pls->loc[i], rva = pls->rva + 0x4000;
+			memcpy(&builder.code[loc], &rva, sizeof(rva));
+		}
+	}
+	
+	
+	
+	
 	
 	
 	//test_x64_unary(&builder, NOT);

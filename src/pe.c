@@ -234,6 +234,8 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 			.MajorOperatingSystemVersion = 6,
 			.MajorSubsystemVersion = 6,
 			
+			.AddressOfEntryPoint = 0x1000,
+			
 			.ImageBase        = 0x400000,
 			.SectionAlignment = 0x1000,   // Minimum space that can a section can occupy when loaded that is, 
 			.FileAlignment    = 0x200,    // .exe alignment on disk
@@ -257,11 +259,7 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 	int sizeof_headers_unaligned = sizeof(image_stub_and_signiture) + sizeof(nt_headers) + nt_headers.FileHeader.NumberOfSections*sizeof(IMAGE_SECTION_HEADER);
 	{
 		nt_headers.FileHeader.SizeOfOptionalHeader = sizeof(nt_headers.OptionalHeader);
-		nt_headers.FileHeader.NumberOfSections = 3; 
-		
-		nt_headers.OptionalHeader.AddressOfEntryPoint = 0x1000;
-		nt_headers.OptionalHeader.SizeOfImage   = 0x4000; // TODO(ziv): automate this
-		nt_headers.OptionalHeader.SizeOfHeaders = ALIGN(sizeof_headers_unaligned, file_alignment);
+			nt_headers.OptionalHeader.SizeOfHeaders = ALIGN(sizeof_headers_unaligned, file_alignment);
 	}
 	
 	
@@ -313,6 +311,8 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 	if (data_size > 0) {
 		pe_add_section(&pk, str8_lit(".data"), data_size, IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_INITIALIZED_DATA);
 	}
+	
+	
 	
 	nt_headers.FileHeader.NumberOfSections = (WORD)pk.headers->index; 
 	nt_headers.OptionalHeader.SizeOfImage  = ((IMAGE_SECTION_HEADER *)pk.headers->data[pk.headers->index-1])->VirtualAddress + section_alignment;
