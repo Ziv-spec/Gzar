@@ -4,6 +4,10 @@
  create optmizer!!!!! This will be crazy if I could manage it. 
 although I want an optimizer, I will have to look into the following too: 
 
+NOTE(ziv): I do see that I am suffering greatly from a poor base layer since 
+everything else is being built on top of it. For that reason, it might make sense 
+to advance the base layer before continuing on with the rest of the compiler infestructure. 
+
 TODO(ziv): 
 1. finish x64 backend
 2. finish pe.c 
@@ -133,7 +137,6 @@ int main() {
 	inst1(&builder, &inst, &messageboxa, 4);
 	
 	
-	
 	//
 	// gen .data buffer 
 	// 
@@ -189,7 +192,6 @@ int main() {
 	char kernel32[] = "kernel32.lib";
 	char user32[]   = "user32.lib";
 	char *libs[] = { kernel32, user32 };
-	
 	
 	write_pe_exe(&builder, "test.exe", libs, ArrayLength(libs)); 
 	
