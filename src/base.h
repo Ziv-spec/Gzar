@@ -490,7 +490,7 @@ internal Bucket *map_peek_bucket(Map *map, String8 key) {
     while (map->buckets[index].key.str != NULL) {
 		
         if (str8_compare(map->buckets[index].key, key) == 0) {
-			return &map->buckets[index];
+			return map->buckets[index].value;
         }
 		
         // linear probing
@@ -556,9 +556,9 @@ internal bool map_set(Map *map, String8 key, void *value) {
         if (!map->buckets) {
             return false; // failed to allocated memory
         }
-		
+		 
         // new map to resize to
-        Map nm = { new_buckets, new_capacity, 0, map->elem_size };
+         Map nm = { new_buckets, new_capacity, 0, map->elem_size };
         // copy info from old map to new map
         for (int i = 0; i < map->capacity; i++) {
             Bucket bucket = map->buckets[i];

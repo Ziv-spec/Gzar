@@ -16,16 +16,21 @@ typedef struct {
 typedef struct {
 	M_Pool m; // temporary memory allocator
 	
+	
+	int current_data_variable_location; // used to keep track of location of `data_variables`
+	int bytes_count; // to tell byte count of the program (at the end it is the code size)
+	char *code;
+	char *data;
+	
+	String8 *data_vars;
+	int data_vars_cnt;
+	int data_vars_sz;
+	
 	Patch_Locations *pls;
 	int pls_cnt;
 	int pls_sz;
-		int current_data_variable_location; // used to keep track of location of `data_variables`
 	// name -> Patch_Locations
-	
 	Map pls_maps[PL_COUNT]; 
-	
-	int bytes_count; // to tell byte count of the program 
-	char *code;
 	
 } Builder; 
 
@@ -56,7 +61,7 @@ static char bitness_t[] = {
 #define GET_REG(x) ((x-1)%8)
 #define GET_REX(x) (((x-1)/8) > 4)
 #define GET_BITNESS(x) bitness_t[((x-1)/8)]
- 
+
 typedef enum {
 	DT_BYTE  = 1, 
 	DT_WORD  = 2, 
@@ -103,7 +108,7 @@ typedef struct {
 	// for immediates
 	u8 op_i;
 	u8 reg_i;
-	} Instruction_Desc; 
+} Instruction_Desc; 
 
 typedef struct {
 	u8 kind;
@@ -124,7 +129,7 @@ typedef struct {
 internal void set_patch_location(Builder *b, int idx, int value) {
 	Assert(idx < b->pls_sz);
 	
-	Patch_Locations *pls = &b->pls[idx]; 
+	  Patch_Locations *pls = &b->pls[idx]; 
 	if (pls->loc_cnt >= pls->loc_sz) {
 		int new_sz = (pls->loc_sz+1) * 2;
 		pls->loc = pool_resize(&b->m, pls->loc, pls->loc_sz, new_sz);
@@ -133,14 +138,14 @@ internal void set_patch_location(Builder *b, int idx, int value) {
 	pls->loc[pls->loc_cnt++] = value;
 }
 
-internal Value_Operand get_patch_location(Builder *b,String8 lit, int type, int rva) {
+internal Value_Operand get_patch_location(Builder *b, String8 lit, int type, int rva) {
 	Assert(b && lit.size > 0);
 	Assert(type < PL_COUNT);
 	
 	Patch_Locations *loc = map_peek(&b->pls_maps[type], lit);
 	int idx = (int)(loc - b->pls);
 	if (!loc) {
-		b->pls[idx = b->pls_cnt].rva = rva;
+		b->pls[idx = b->pls_cnt] = (Patch_Locations){ .rva = rva };
 		map_set(&b->pls_maps[type], lit, &b->pls[b->pls_cnt++]);
 	}
 	
@@ -152,13 +157,23 @@ internal Value_Operand e_label(Builder *b, char *label) {
 }
 
 internal Value_Operand e_cfunction(Builder *b, char *label) {
-	 return get_patch_location(b, str8_lit(label), PL_C_FUNCS, 0); 
+	Value_Operand result = get_patch_location(b, str8_lit(label), PL_C_FUNCS, 0);
+	result.kind |= LAYOUT_M;
+	return result;
 }
 
 internal Value_Operand e_lit(Builder *b, char *literal) {
 	String8 lit = str8_lit(literal);
 	Value_Operand result = get_patch_location(b, lit, PL_DATA_VARS, b->current_data_variable_location);
 	b->current_data_variable_location += (int)lit.size+1;
+	
+	// book keeping all the literals to later dump
+	if (b->data_vars_cnt >= b->data_vars_sz) {
+		int new_size = sizeof(String8)*(b->data_vars_sz+1)*2;
+		b->data_vars = pool_resize(&b->m, b->data_vars, b->data_vars_sz, new_size);
+		b->data_vars_sz = new_size;
+	}
+	b->data_vars[b->data_vars_cnt++] = lit;
 	return result;
 }
 
@@ -233,7 +248,7 @@ internal void inst1(Builder *b, Inst *op, Value_Operand *v, Data_Type dt) {
 	Assert(b && op && b && dt); 
 	
 	u8 layout = v->kind; 
-	Assert(layout <= 4); // must be unary
+	Assert((layout & 0xf) == layout); // must be unary
 	if (layout == 0)  return;
 	
 	
@@ -398,7 +413,7 @@ internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 		Assert(!"I can't handle this at the moment"); 
 	}
 	
-	 
+	
 	if (bookkeep) { 
 		int idx = v2->imm & ((1<<28)-1);
 		set_patch_location(b, idx, b->bytes_count-4);

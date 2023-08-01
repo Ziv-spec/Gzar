@@ -67,11 +67,13 @@ struct Register {
 
 #include "pe.c"
 
-
 int main() {
 	
-	char program[0x1000] = { 0 };
+	//
+	// Initialization
+	//
 	
+	char program[0x1000] = { 0 };
 	Builder builder = { 
 		.m = { .pool_size = 0x4000 },
 		.code = program, // program buffer
@@ -81,7 +83,7 @@ int main() {
 	pools_init(&builder.m);
 	
 	builder.pls_sz = 0x100; 
-	builder.pls = pool_alloc(&builder.m, builder.pls_sz* sizeof(Patch_Locations));
+	builder.pls = pool_alloc(&builder.m, builder.pls_sz * sizeof(Patch_Locations));
 	
 	// NOTE(ziv): I don't have a better way of doing this since I am bad at tooling
 	for (int i = 0; i < PL_COUNT; i++) {
@@ -94,7 +96,9 @@ int main() {
 	
 	
 	
-	
+	// 
+	// Codegen 
+	//
 	
 	Value_Operand l0 = e_label(&builder, ".L0");
 	
@@ -104,7 +108,6 @@ int main() {
 	inst2(&builder, &inst, &v1, &v2, 8);
 	
 	inst = (Inst){JMP};
-	v1 = (Value_Operand){ .kind = LAYOUT_R, .reg = RAX };
 	inst1(&builder, &inst, &l0, 4);
 	
 	Value_Operand l1 = e_label(&builder, ".L1");
@@ -112,8 +115,7 @@ int main() {
 	inst2(&builder, &inst, &v1, &v2, 8);
 	
 	inst = (Inst){JMP};
-	v1 = (Value_Operand){ .kind = LAYOUT_R, .reg = RAX };
-	inst1(&builder, &inst, &l1, 4);
+	 inst1(&builder, &inst, &l1, 4);
 	
 	inst = (Inst){MOV};
 	Value_Operand lit1 = e_lit(&builder, "Hello World!");
@@ -121,8 +123,35 @@ int main() {
 	Value_Operand lit2 = e_lit(&builder, "This is a 64b PE executable!");
 	inst2(&builder, &inst, &v1, &lit2, 4);
 	
-	// TODO(ziv): add cfunc patching 
-	// TODO(ziv): create a general function for patching addresses for the 'linker'
+	
+	inst = (Inst){CALL};
+	Value_Operand exit_process = e_cfunction(&builder, "ExitProcess");
+	inst1(&builder, &inst, &exit_process, 4);
+	
+	inst = (Inst){CALL};
+	Value_Operand messageboxa = e_cfunction(&builder, "MessageBoxA");
+	inst1(&builder, &inst, &messageboxa, 4);
+	
+	
+	
+	//
+	// gen .data buffer 
+	// 
+	
+	// TODO(ziv): don't allocate with pool_alloc, this could be a large allocation!
+	builder.data = pool_alloc(&builder.m, builder.current_data_variable_location); 
+	char *data = builder.data; 
+	for (int i = 0; i < builder.data_vars_cnt; i++) {
+		String8 lit = builder.data_vars[i];
+		memcpy(data, lit.str, lit.size);
+		data += lit.size;
+	}
+	
+	// TODO(ziv): create a general function for patching addresses for the 'linker' since this is it's job for the most part
+	
+	// 
+	// Address patching 
+	//
 	
 	// patching the label's addresses
 	Map_Iterator it = map_iterator(&builder.pls_maps[PL_LABELS]);
@@ -138,33 +167,19 @@ int main() {
 	it = map_iterator(&builder.pls_maps[PL_DATA_VARS]);
 	while (map_next(&it)) {
 		Patch_Locations *pls = it.value;
-		for (int i = 0; i<  pls->loc_cnt; i++) {
+		for (int i = 0; i < pls->loc_cnt; i++) {
 			int loc = pls->loc[i], rva = pls->rva + 0x3000;
 			memcpy(&builder.code[loc], &rva, sizeof(rva));
 		}
 	}
-	
-	// patching the global variables addresses (in this case mostly strings I guess)
-	it = map_iterator(&builder.pls_maps[PL_C_FUNCS]);
-	while (map_next(&it)) {
-		Patch_Locations *pls = it.value;
-		for (int i = 0; i<  pls->loc_cnt; i++) {
-			int loc = pls->loc[i], rva = pls->rva + 0x4000;
-			memcpy(&builder.code[loc], &rva, sizeof(rva));
-		}
-	}
-	
-	
-	
-	
-	
 	
 	//test_x64_unary(&builder, NOT);
 	//test_x64_binary(&builder, ADD);
 	
 	
 	
-	#if 1
+	
+#if 1
 	// NOTE(ziv): THIS WORKS!!! The only feature I need to do is finish up with patching locations (which is easy) 
 	
 	//~
@@ -174,6 +189,7 @@ int main() {
 	char kernel32[] = "kernel32.lib";
 	char user32[]   = "user32.lib";
 	char *libs[] = { kernel32, user32 };
+	
 	
 	write_pe_exe(&builder, "test.exe", libs, ArrayLength(libs)); 
 	

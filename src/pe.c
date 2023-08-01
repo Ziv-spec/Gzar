@@ -1,7 +1,7 @@
 
 
 
-internal int compare(const void *a, const void *b) { return strcmp(a, b); }
+internal int compare(const void *a, const void *b) { return -strcmp(a, b); }
 
 internal void parse_archive_library(M_Pool *m, Map *import_entries, char *archive_library_path, 
 									char **external_function_names, size_t external_function_names_length, 
@@ -135,6 +135,8 @@ typedef struct {
 	
 	IMAGE_NT_HEADERS *nt_headers;
 	
+	Map *cfunction_addresses; // cfunc -> absolute address
+	
 } PE_Packer;
 
 internal int pe_add_section(PE_Packer *pk, String8 section_name, int section_size, int characteristics) {
@@ -162,9 +164,8 @@ internal int pe_add_section(PE_Packer *pk, String8 section_name, int section_siz
 }
 
 internal bool write_pe_exe(Builder *builder, const char *file, 
-						  char **external_library_paths, int  external_library_paths_count) {
+						   char **external_library_paths, int  external_library_paths_count) {
 	M_Arena *m = pool_get_scratch(&builder->m);
-	
 	
 	//~
 	// Create import entries (dll name -> functions to import)
@@ -191,7 +192,8 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 	for (int lib_idx = 0; lib_idx < external_library_paths_count; lib_idx++) {
 		char *module = external_library_paths[lib_idx];
 		
-		// base_path_to_msvc_archive_libraries\module
+		// Create path to search as: 
+		// C:\base_path_to_msvc_archive_libraries\module.lib
 		wchar_t *library_path = msvc_sdk.windows_sdk_um_library_path;
 		char *path = arena_alloc(m, wcslen(library_path)+strlen(module)+2), *path_cursor = path; 
 		while (*library_path) *path_cursor++ = (char)*library_path++;
@@ -204,6 +206,7 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 							  extern_functions, extern_functions_len, 
 							  visited, hints);
 	}
+	
 	free_resources(&msvc_sdk);
 	
 	// TODO(ziv): @Incopmlete Confirm there are no linking issues 
@@ -223,7 +226,7 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 		
 		.FileHeader = { 
 			.Machine = _WIN64 ? IMAGE_FILE_MACHINE_AMD64 : IMAGE_FILE_MACHINE_I386,
-			.NumberOfSections     = 3,// TODO(ziv): make NumberOfSections dyanmic
+			.NumberOfSections     = 1, // .text section is required sort of
 			.SizeOfOptionalHeader = 0,
 			.Characteristics      = IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE
 		}, 
@@ -231,16 +234,15 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 		.OptionalHeader = {
 			.Magic = IMAGE_NT_OPTIONAL_HDR_MAGIC, 
 			
-			.MajorOperatingSystemVersion = 6,
-			.MajorSubsystemVersion = 6,
-			
 			.AddressOfEntryPoint = 0x1000,
-			
 			.ImageBase        = 0x400000,
 			.SectionAlignment = 0x1000,   // Minimum space that can a section can occupy when loaded that is, 
 			.FileAlignment    = 0x200,    // .exe alignment on disk
 			.SizeOfImage      = 0,
 			.SizeOfHeaders    = 0,
+			
+			.MajorOperatingSystemVersion = 6,
+			.MajorSubsystemVersion = 6,
 			
 			.Subsystem = IMAGE_SUBSYSTEM_WINDOWS_GUI, 
 			.SizeOfStackReserve = 0x100000,
@@ -253,13 +255,19 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 		}
 	};
 	
-	int section_alignment = nt_headers.OptionalHeader.SectionAlignment; 
-	int file_alignment    = nt_headers.OptionalHeader.FileAlignment; 
+	PE_Packer pk = { 
+		&builder->m, 
+		.file_alignment    = nt_headers.OptionalHeader.FileAlignment,
+		.section_alignment = nt_headers.OptionalHeader.SectionAlignment, 
+		.headers = vec_init(), 
+		&nt_headers 
+	};
+	pk.headers->data[0] = NULL;
 	
 	int sizeof_headers_unaligned = sizeof(image_stub_and_signiture) + sizeof(nt_headers) + nt_headers.FileHeader.NumberOfSections*sizeof(IMAGE_SECTION_HEADER);
 	{
 		nt_headers.FileHeader.SizeOfOptionalHeader = sizeof(nt_headers.OptionalHeader);
-			nt_headers.OptionalHeader.SizeOfHeaders = ALIGN(sizeof_headers_unaligned, file_alignment);
+			nt_headers.OptionalHeader.SizeOfHeaders = ALIGN(sizeof_headers_unaligned, pk.file_alignment);
 	}
 	
 	
@@ -275,10 +283,7 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 	// Import Address Table - identical to Import Name Table but during loading gets overriten with valid values for function addresses
 	// Module names - simple array of the module names
 	
-	PE_Packer pk = { &builder->m, file_alignment, section_alignment, .headers = vec_init(), &nt_headers };
-	pk.headers->data[0] = NULL;
-	
-	// always create a text section
+	// NOTE(ziv): always create a text section
 	int text_size  = builder->bytes_count;
 	 pe_add_section(&pk, str8_lit(".text"),  text_size, IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_CODE);
 	
@@ -298,6 +303,7 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 	int descriptors_size = (import_entries->count > 0) ? (sizeof(IMAGE_IMPORT_DESCRIPTOR) * (import_entries->count + 1)) : 0;
 	int idata_size = descriptors_size + int_tables_size*2 + function_names_size + module_names_size;
 	
+	// create .idata section if needed 
 	if (idata_size > 0 && extern_functions_len > 0) {
 	int idata_section_address = pe_add_section(&pk, str8_lit(".idata"), idata_size, IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_INITIALIZED_DATA);
 		
@@ -306,16 +312,14 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 		nt_headers.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size = idata_size; 
 	}
 	
-	
+	// create .data section if needed 
 	int data_size  = builder->current_data_variable_location; 
 	if (data_size > 0) {
 		pe_add_section(&pk, str8_lit(".data"), data_size, IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_INITIALIZED_DATA);
 	}
 	
-	
-	
 	nt_headers.FileHeader.NumberOfSections = (WORD)pk.headers->index; 
-	nt_headers.OptionalHeader.SizeOfImage  = ((IMAGE_SECTION_HEADER *)pk.headers->data[pk.headers->index-1])->VirtualAddress + section_alignment;
+	nt_headers.OptionalHeader.SizeOfImage  = ((IMAGE_SECTION_HEADER *)pk.headers->data[pk.headers->index-1])->VirtualAddress + pk.section_alignment;
 	
 	//~
 	// Creating and filling executable
@@ -347,9 +351,6 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 	u8 *idata = text + ((IMAGE_SECTION_HEADER *)pk.headers->data[0])->SizeOfRawData;
 	//u8 *data  = idata + ((IMAGE_SECTION_HEADER *)pk.headers->data[1])->SizeOfRawData;; 
 	
-	// filling .text section
-	memcpy(text, builder->code, text_size);
-
 /* 	
 	// filling .data section
 	for (int i = 0; i < builder->pls_cnt[PL_DATA_VARS]; i++) {
@@ -358,7 +359,9 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 		memcpy(data, name, copy_size); data += copy_size;
 	}
 	 */
-
+	
+	Map *cfunction_addresses = init_map(sizeof(u64));
+	
 	if (idata_size > 0 && extern_functions_len > 0) {
 		
 		// filling .idata section
@@ -381,7 +384,7 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 			String8 dll = iter.key; dll.str[dll.size] = '\0';
 			Vector *function_names_vector = iter.value;
 			
-#if DEBUG > 1
+#if DEBUG > 0
 			printf(" -- Descriptor%d -- \n", i);
 			printf("int-table \t%x -> ", int_table_base_address + int_tables_offset);
 			printf("%x,", function_names_base_address + function_names_offset);
@@ -402,10 +405,14 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 			// filling function names, int table and iat table
 			for (int fn_idx = 0; fn_idx < function_names_vector->index; fn_idx++) {
 				memcpy(&function_names[function_names_offset], &hints[hint_idx++], sizeof(u16));
-				int copy_size = (int)strlen(function_names_vector->data[fn_idx])+1;
-				memcpy(&function_names[function_names_offset+sizeof(u16)], function_names_vector->data[fn_idx], copy_size);
+				String8 func_name = str8_lit(function_names_vector->data[fn_idx]);
+				int copy_size = (int)func_name.size+1;
+				memcpy(&function_names[function_names_offset+sizeof(u16)], func_name.str, copy_size);
 				*int_tables++ = *iat_tables++ = (size_t)function_names_base_address + function_names_offset;
 				function_names_offset += copy_size+2;
+				
+				// NOTE(ziv): treat address as voidptr, later to be recovered as address
+				map_set(cfunction_addresses, func_name, (void *)iat_tables[-1]);
 				
 			}
 			int_tables_offset += (int)(sizeof(size_t) * (function_names_vector->index+1)); 
@@ -417,7 +424,39 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 		}
 		
 	}
+
+/* 	
+	it = map_iterator(&builder.pls_maps[PL_C_FUNCS]);
+	while (map_next(&it)) {
+		Patch_Locations *pls = it.value;
+		for (int i = 0; i<  pls->loc_cnt; i++) {
+			memcpy(&builder.code[pls->loc[i]], &pls->rva, sizeof(pls->rva));
+		}
+	}
 	
+	 */
+	
+	
+	// external c functions addresses patching of code aka .text sections
+	iter = map_iterator(import_entries); 
+	for (int i = 0; map_next(&iter); i++) {
+		Vector *function_names_vector = iter.value;
+		
+		// filling function names, int table and iat table
+		for (int fn_idx = 0; fn_idx < function_names_vector->index; fn_idx++) {
+			String8 func_name = str8_lit(function_names_vector->data[fn_idx]);
+			Patch_Locations *pls = map_peek(&builder->pls_maps[PL_C_FUNCS], func_name);
+			int cfunc_address = (int)(size_t)map_peek(cfunction_addresses, func_name);
+			cfunc_address += (int)nt_headers.OptionalHeader.ImageBase;
+				
+			for (int k = 0; k < pls->loc_cnt; k++) {
+				memcpy(&builder->code[pls->loc[k]], &cfunc_address, sizeof(cfunc_address));
+			}
+		} 
+	}
+	
+	// filling .text section
+	memcpy(text, builder->code, text_size);
 	
 	
 	//~
@@ -436,4 +475,3 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 	
 	return 0;
 }
-
