@@ -71,7 +71,49 @@ struct Register {
 
 #include "pe.c"
 
+#include "ir.c"
+#include "bb.c"
+
+#pragma warning(disable: 4702) // TODO(ziv): remove this
 int main() {
+	
+	// open the file and read it's contents
+	char *filename = "../tests/test3.gzr";
+	FILE *file = fopen(filename, "rb");
+	if (!file) {
+		fprintf(stderr, "Error: failed to open file '%s'\n", filename);
+		return 0;
+	}
+	
+	fseek(file, 0, SEEK_END);
+	int file_size = ftell(file);
+	fseek(file, 0, SEEK_SET);
+	char *source_buff = (char*)calloc(file_size+1, sizeof(char));
+	fread(source_buff, 1, file_size, file);
+	fclose(file);
+	source_buff[file_size] = '\0';
+	
+	
+	// Setup for compilation
+	Translation_Unit tu = {0};
+	Token_Stream token_stream = {
+		.capacity = 0x1000, // some default value for the time being a page size
+		.s = realloc(NULL, 0x1000*sizeof(Token)), 
+		.start = source_buff, 
+	};
+	
+	bool success = lex_file(&token_stream);
+	if (success == false) return 0;
+	parse_translation_unit(&tu, &token_stream);
+	success = sema_translation_unit(&tu);
+	if (success == false) return 0;
+	
+	IR_Buffer ir_buffer = { 0 };
+	Vector *ir = convert_ast_to_ir(&tu, &ir_buffer);
+	print_ir(&ir_buffer, ir);
+	
+	
+	return 0;
 	
 	//
 	// Initialization
