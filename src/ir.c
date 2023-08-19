@@ -1,92 +1,106 @@
 
 enum {
-	IRK_LOAD, 
+	IR_LOAD, 
+	IR_LOADC, // load const
 	
-	IRK_ADD,
-	IRK_SUB,
+	IR_ADD,
+	IR_SUB,
 	
-	IRK_BRH,  // branch
-	IRK_CBRH, // conditional branch
+	IR_BRH,  // branch
+	IR_CBRH, // conditional branch
 	
-	IRK_RET,
-} IR_Kind;
+	IR_RET,
+} IR_Op;
+
+enum { 
+	IR_OPERAND_IMMEDIATE, 
+	IR_OPERAND_REGISTER,
+} IR_Operand_Kind;
 
 typedef struct { 
-	int op;
-	int idx; // index to jump to
-	int *a;
-	int *b;
-	int *c;
-} IR;
+	int kind;
+	union {
+	 u64 imm; 
+	int reg;
+	};
+} IR_Operand;
 
 typedef struct { 
-	IR *instructions;
-	int count; 
-	int capacity;
-} IR_Buffer; 
+	int op; 
+	IR_Operand *a, *b, *c; 
+	struct IR_Inst *next;
+} IR_Inst; 
 
 typedef struct {
-	int begin, end;
-} IR_Slice; 
-
-static int last_register;
-static int registers[0x100];
-
-static int last_data; 
-static int datas[0x100]; 
-
-internal int *ir_register() { 
-	registers[last_register] = last_register;
-	return &registers[last_register++]; 
-}
-internal int *ir_data(int x) {
-	datas[last_data] = x; 
-	return &datas[last_data++]; 
-}
-
-internal int ir_buffer_push3(IR_Buffer *buf, int op, int idx, int *a, int *b, int *c) {
+	IR_Inst *instructions; // instructions buffer
+	int inst_cnt; // instruction count 
+	int inst_cap; // buffer capacity
 	
-	if (buf->count >= buf->capacity) {
-		buf->capacity = (buf->capacity + 1) * 2;
-		buf->instructions = realloc(buf->instructions, buf->capacity*sizeof(IR));
+	IR_Operand *operands;
+	int operand_cnt;
+	int operand_cap;
+	
+	int reg_name; 
+	
+} IR_Buffer; 
+
+internal IR_Inst *ir_buffer_push_inst(IR_Buffer *buf, int op, IR_Operand *a, IR_Operand *b, IR_Operand *c) {
+	if (buf->inst_cnt >= buf->inst_cap) {
+		buf->inst_cap= (buf->inst_cap+ 1) * 2;
+		buf->instructions = realloc(buf, buf->inst_cap*sizeof(IR_Inst));
 		Assert(buf->instructions && "Failed to allocate memory");
 	}
 	
-	buf->instructions[buf->count++] = (IR){ op, idx, a, b, c };
-	return buf->count - 1;
+	buf->instructions[buf->inst_cnt] = (IR_Inst){ op, a, b, c };
+	return &buf->instructions[buf->inst_cnt++];
 }
 
-#define ir_push3(buf, op, a, b, c) ir_buffer_push3(buf, op, 0, a, b, c)
-#define ir_push2(buf, op, a, b)    ir_buffer_push3(buf, op, 0, a, b, 0)
-#define ir_push1(buf, op, a)       ir_buffer_push3(buf, op  0, a, 0, 0)
-#define ir_push0(buf, op)          ir_buffer_push3(buf, op, 0, 0, 0, 0)
+#define ir_node3(buf, op, a, b, c) ir_buffer_push_inst(buf, op, a, b, c)
+#define ir_node2(buf, op, a, b)    ir_buffer_push_inst(buf, op, a, b, 0)
+#define ir_node1(buf, op, a)       ir_buffer_push_inst(buf, op  a, 0, 0)
+#define ir_node0(buf, op)          ir_buffer_push_inst(buf, op, 0, 0, 0)
 
-#define ir_push2m(buf, idx, op, a, b)    ir_buffer_push3(buf, op, idx, a, b, 0)
-#define ir_push1m(buf, idx, op, a)       ir_buffer_push3(buf, op  idx, a, 0, 0)
-#define ir_push0m(buf, idx, op)          ir_buffer_push3(buf, op, idx, 0, 0, 0)
+internal IR_Operand *ir_operand(IR_Buffer *buf, int kind, unsigned long long val) {
+	if (buf->operand_cnt >= buf->operand_cap) {
+		buf->operand_cap= (buf->operand_cap+ 1) * 2;
+		buf->operands = realloc(buf, buf->operand_cap*sizeof(IR_Inst));
+		Assert(buf->operands && "Failed to allocate memory");
+	}
+	
+	buf->operands[buf->operand_cnt] = (IR_Operand){ kind, val };
+	return &buf->operands[buf->operand_cnt++];
+}
 
-internal int convert_expr_to_ir(IR_Buffer *ir_buff, Expr *expr, int **output) { 
+#define ir_immediate(buf, v) ir_operand(buf, IR_OPERAND_IMMEDIATE, v) 
+#define ir_register(buf)     ir_operand(buf, IR_OPERAND_REGISTER, buf->reg_name++) 
+
+
+internal IR_Inst *convert_expr_to_ir(IR_Buffer *ir_buff, Expr *expr, IR_Inst *last) { 
 	if (!expr) return 0; 
 	
 	switch(expr->kind) {
 		case EXPR_BINARY: { 
-			int *ol = NULL, *or = NULL;
-			convert_expr_to_ir(ir_buff, expr->left,  &ol);
-			convert_expr_to_ir(ir_buff, expr->right, &or);
+			IR_Inst *lhs = convert_expr_to_ir(ir_buff, expr->left, last);
+			IR_Inst *rhs = convert_expr_to_ir(ir_buff, expr->right, lhs);
 			
 			int op = 0;
 			switch (expr->operation.kind) {
-                case TK_MINUS: op = IRK_SUB; break; 
-                case TK_PLUS:  op = IRK_ADD; break;
+                case TK_MINUS: op = IR_SUB; break; 
+                case TK_PLUS:  op = IR_ADD; break;
 				default: Assert(!"Not implemented");
 			}
-			*output = ir_register();
-			return ir_push3(ir_buff, op, *output, ol, or);
+			
+			IR_Inst *result = ir_node3(ir_buff, op, ir_register(ir_buff), lhs->a, rhs->a);
+			rhs->next = result; // connect result to the graph
+			return result; 
 		} break;
 		
 		case EXPR_LITERAL: {
-			int *reg = ir_register(); *output = reg; 
-			return ir_push2(ir_buff, IRK_LOAD, reg, ir_data((int)(size_t)expr->literal.data)); 
+			// connect nodde to graph 
+			last->next = ir_node2(ir_buff, IR_LOADC,
+								  ir_register(ir_buff), 
+								  ir_immediate(ir_buff, (size_t)expr->literal.data));
+			return last->next;
 		} break;
 		
 	}
@@ -94,46 +108,39 @@ internal int convert_expr_to_ir(IR_Buffer *ir_buff, Expr *expr, int **output) {
 	return 0;
 }
 
-internal int convert_function_to_ir(IR_Buffer *ir_buff, IR_Slice *slice, Statement *function) {
-	Assert(function->kind == STMT_FUNCTION_DECL);
-	Statement *scope = function->func.sc;
-	Assert(scope->kind = STMT_SCOPE);
-	Vector *statements = scope->block.statements;
+internal IR_Inst *convert_ast_to_ir(Translation_Unit *tu, IR_Buffer *ir_buff) {
 	
-	slice->begin = ir_buff->count; 
-	for (int i = 0; i < statements->index; i++) {
-		Statement *stmt = statements->data[i]; 
-		switch (stmt->kind) {
-			case STMT_RETURN: { 
-				int *o;
-				int ir = convert_expr_to_ir(ir_buff, stmt->ret, &o);
-				ir = ir_push0(ir_buff, IRK_RET); 
-			} break;
-			default: Assert(!"Not implemented");
-		}
-	}
-	slice->end = ir_buff->count;
-	 
-	return slice->end - slice->begin;
-}
-
-internal Vector *convert_ast_to_ir(Translation_Unit *tu, IR_Buffer *ir_buff) {
-	
-	Vector *ir_functions = vec_init();
 	Vector *decls = tu->decls;
 	for (int i = 0; i < decls->index; i++) {
 		Statement *stmt = decls->data[i];
 		if (stmt->kind != STMT_FUNCTION_DECL || !stmt->func.sc) continue;
 		
-		// TODO(ziv): @Incomplete push the ir graph
-		IR_Slice *slice = pool_alloc(&tu->m, sizeof(IR_Slice));
-		if (!convert_function_to_ir(ir_buff, slice, stmt)) break;
-		vec_push(&tu->m, ir_functions, slice);
+		Statement *scope = stmt->func.sc;
+		Assert(scope->kind == STMT_SCOPE);
+		
+			IR_Inst *entrypoint = ir_node0(ir_buff, 0); // dumy node
+		IR_Inst *temp = entrypoint;
+		
+		Vector *statements = scope->block.statements;
+		for (int stmt_idx = 0; i < statements->index; stmt_idx++) {
+			Statement *stmti = statements->data[stmt_idx]; 
+			switch (stmti->kind) {
+				case STMT_RETURN: {
+					IR_Inst *expression = convert_expr_to_ir(ir_buff, stmt->ret, temp);
+					temp = ir_node0(ir_buff, IR_RET); 
+					expression->next = temp;
+				} break;
+				
+				default: Assert(!"Not implemented");
+			}
+		}
 		
 	}
-	return ir_functions;
+	
+	return NULL;
 }
 
+#if 0 
 internal void print_ir(IR_Buffer *ir_buff, Vector *ir_functions) {
 	
 	for (int i = 0; i < ir_functions->index; i++) {
@@ -148,16 +155,16 @@ internal void print_ir(IR_Buffer *ir_buff, Vector *ir_functions) {
 			
 			switch (ir.op) {
 				
-				case IRK_LOAD: {
+				case IR_LOAD: {
 				printf("LOAD r%d %d\n", *ir.a, *ir.b);
 				} break;
 				
-				case IRK_ADD: 
-				case IRK_SUB: {
+				case IR_ADD: 
+				case IR_SUB: {
 					printf("%s r%d r%d r%d\n", ir.op == IRK_ADD ? "ADD" : "SUB", *ir.a, *ir.b, *ir.c);
 				} break; 
 				
-				case IRK_RET: { 
+				case IR_RET: { 
 					printf("RET\n"); 
 				} break; 
 			}
@@ -168,3 +175,4 @@ internal void print_ir(IR_Buffer *ir_buff, Vector *ir_functions) {
 	}
 	
 }
+#endif

@@ -349,6 +349,7 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 	
 	u8 *text  = pe + nt_headers.OptionalHeader.SizeOfHeaders;
 	u8 *idata = text + ((IMAGE_SECTION_HEADER *)pk.headers->data[0])->SizeOfRawData;
+	u8 *data =  text + ((IMAGE_SECTION_HEADER *)pk.headers->data[0])->SizeOfRawData + ((IMAGE_SECTION_HEADER *)pk.headers->data[1])->SizeOfRawData;
 	//u8 *data  = idata + ((IMAGE_SECTION_HEADER *)pk.headers->data[1])->SizeOfRawData;; 
 	
 /* 	
@@ -412,7 +413,7 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 				function_names_offset += copy_size+2;
 				
 				// NOTE(ziv): treat address as voidptr, later to be recovered as address
-				map_set(cfunction_addresses, func_name, (void *)iat_tables[-1]);
+				map_set(cfunction_addresses, func_name, (void *)(iat_table_base_address + int_tables_offset + fn_idx*sizeof(size_t)));
 				
 			}
 			int_tables_offset += (int)(sizeof(size_t) * (function_names_vector->index+1)); 
@@ -458,6 +459,9 @@ internal bool write_pe_exe(Builder *builder, const char *file,
 	// filling .text section
 	memcpy(text, builder->code, text_size);
 	
+	if(data) { 
+		memcpy(data, builder->data, data_size);
+	}
 	
 	//~
 	// Creating final executable

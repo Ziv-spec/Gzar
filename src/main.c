@@ -74,9 +74,12 @@ struct Register {
 #include "ir.c"
 #include "bb.c"
 
+#if 1
 #pragma warning(disable: 4702) // TODO(ziv): remove this
 int main() {
 	
+
+
 	// open the file and read it's contents
 	char *filename = "../tests/test3.gzr";
 	FILE *file = fopen(filename, "rb");
@@ -93,6 +96,7 @@ int main() {
 	fclose(file);
 	source_buff[file_size] = '\0';
 	
+	printf("%s\n\n", source_buff);
 	
 	// Setup for compilation
 	Translation_Unit tu = {0};
@@ -114,7 +118,8 @@ int main() {
 	
 	
 	return 0;
-	
+	 
+
 	//
 	// Initialization
 	//
@@ -145,7 +150,8 @@ int main() {
 	// 
 	// Codegen 
 	//
-	
+
+/* 	
 	Value_Operand l0 = e_label(&builder, ".L0");
 	
 	Inst inst = (Inst){MOV};
@@ -162,21 +168,40 @@ int main() {
 	
 	inst = (Inst){JMP};
 	 inst1(&builder, &inst, &l1, 4);
+	 */
+
+	Inst inst;
+	
+	Value_Operand rcx = { .kind = LAYOUT_R, .reg = RCX };
+	Value_Operand rdx = { .kind = LAYOUT_R, .reg = RDX };
+	Value_Operand r8  = { .kind = LAYOUT_R, .reg = R8 };
+	Value_Operand r9  = { .kind = LAYOUT_R, .reg = R9 };
+	Value_Operand zero = { .kind = LAYOUT_I, .imm = 0 };
+	
+	Value_Operand lit1 = e_lit(&builder, "Hello World!");
+	Value_Operand lit2 = e_lit(&builder, "This is a 64b PE executable!");
+	
+	inst = (Inst){SUB};
+		Value_Operand rsp = { .kind = LAYOUT_R, .reg = RSP }; 
+	Value_Operand v28 = { .kind = LAYOUT_I, .imm = 0x28}; 
+	inst2(&builder, &inst, &rsp, &v28, 8);
 	
 	inst = (Inst){MOV};
-	Value_Operand lit1 = e_lit(&builder, "Hello World!");
-	inst2(&builder, &inst, &v1, &lit1, 4);
-	Value_Operand lit2 = e_lit(&builder, "This is a 64b PE executable!");
-	inst2(&builder, &inst, &v1, &lit2, 4);
-	
-	
-	inst = (Inst){CALL};
-	Value_Operand exit_process = e_cfunction(&builder, "ExitProcess");
-	inst1(&builder, &inst, &exit_process, 4);
+	inst2(&builder, &inst, &r9,  &zero, 4); 
+	inst2(&builder, &inst, &r8,  &lit2, 4); 
+	inst2(&builder, &inst, &rdx, &lit1, 4); 
+	inst2(&builder, &inst, &rcx, &zero, 4); 
 	
 	inst = (Inst){CALL};
 	Value_Operand messageboxa = e_cfunction(&builder, "MessageBoxA");
 	inst1(&builder, &inst, &messageboxa, 4);
+	
+	inst = (Inst){MOV}; 
+	inst2(&builder, &inst, &rcx, &zero, 4);
+	
+	inst = (Inst){CALL};
+	Value_Operand exit_process = e_cfunction(&builder, "ExitProcess");
+	inst1(&builder, &inst, &exit_process, 4);
 	
 	
 	//
@@ -188,8 +213,8 @@ int main() {
 	char *data = builder.data; 
 	for (int i = 0; i < builder.data_vars_cnt; i++) {
 		String8 lit = builder.data_vars[i];
-		memcpy(data, lit.str, lit.size);
-		data += lit.size;
+		memcpy(data, lit.str, lit.size+1);
+		data += lit.size+1;
 	}
 	
 	// TODO(ziv): create a general function for patching addresses for the 'linker' since this is it's job for the most part
@@ -213,7 +238,7 @@ int main() {
 	while (map_next(&it)) {
 		Patch_Locations *pls = it.value;
 		for (int i = 0; i < pls->loc_cnt; i++) {
-			int loc = pls->loc[i], rva = pls->rva + 0x3000;
+			int loc = pls->loc[i], rva = pls->rva + 0x3000 + 0x400000;
 			memcpy(&builder.code[loc], &rva, sizeof(rva));
 		}
 	}
@@ -245,7 +270,7 @@ int main() {
 	
 	return 0;
 }
-
+#endif 
 
 
 

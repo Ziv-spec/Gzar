@@ -352,7 +352,7 @@ internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 		need_sib = memory_operand_need_sib(v2);
 		rx = need_sib ? GET_REX(v2->index) : 0;
 	}
-	else if (GET_REG(v1->reg) == 0 && v2->kind == LAYOUT_I) {
+	else if (GET_REG(v1->reg) == 0 || v2->kind == LAYOUT_I) { // TODO(ziv): Figure out whether this is okay or not.
 		rb = rr; rr = 0;
 	}
 	
