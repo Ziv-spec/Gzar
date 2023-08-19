@@ -352,7 +352,7 @@ internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 		need_sib = memory_operand_need_sib(v2);
 		rx = need_sib ? GET_REX(v2->index) : 0;
 	}
-	else if (GET_REG(v1->reg) == 0 || v2->kind == LAYOUT_I) { // TODO(ziv): Figure out whether this is okay or not.
+	else if (GET_REG(v1->reg) == 0 || v2->kind == LAYOUT_I) { // TODO(ziv): Figure out whether this is okay or not. The fact that I use || instead of the previous &&. Since it might make some things wrong... 
 		rb = rr; rr = 0;
 	}
 	
@@ -425,7 +425,16 @@ internal void inst2(Builder *b, Inst *op, Value_Operand *v1, Value_Operand *v2, 
 
 //~
 // Testing
-//
+// TODO(ziv): Create a real testing library to really prove 
+// that there really is correctness within the library and 
+// that I don't have any serious mistakes. Also this would
+// prove vital for tracing bugs in the future when I connect
+// it to the main system. By then I expect to have this 
+// finished. 
+// This might also be beneficial to feature completeness. 
+// So I would be able to know for sure that the library is 
+// complete in terms of features that are required to get 
+// implemented.
 
 static Value_Operand x64_test_values_t[] = {
 	// register variations
