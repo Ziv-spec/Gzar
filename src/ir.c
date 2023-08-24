@@ -25,34 +25,27 @@ typedef struct {
 	};
 } IR_Operand;
 
-typedef struct { 
+typedef struct IR_Inst IR_Inst; 
+struct IR_Inst { 
 	int op; 
 	IR_Operand *a, *b, *c; 
-	struct IR_Inst *next;
-} IR_Inst; 
+	IR_Inst *next;
+}; 
 
 typedef struct {
-	IR_Inst *instructions; // instructions buffer
-	int inst_cnt; // instruction count 
-	int inst_cap; // buffer capacity
-	
+	M_Pool *m;
+	IR_Inst *instructions;
 	IR_Operand *operands;
-	int operand_cnt;
-	int operand_cap;
 	
-	int reg_name; 
-	
+	int reg_name; // keeps the name of the last gpr
 } IR_Buffer; 
 
 internal IR_Inst *ir_buffer_push_inst(IR_Buffer *buf, int op, IR_Operand *a, IR_Operand *b, IR_Operand *c) {
-	if (buf->inst_cnt >= buf->inst_cap) {
-		buf->inst_cap= (buf->inst_cap+ 1) * 2;
-		buf->instructions = realloc(buf, buf->inst_cap*sizeof(IR_Inst));
-		Assert(buf->instructions && "Failed to allocate memory");
-	}
 	
-	buf->instructions[buf->inst_cnt] = (IR_Inst){ op, a, b, c };
-	return &buf->instructions[buf->inst_cnt++];
+	IR_Inst *instruction = pool_alloc(buf->m, sizeof(IR_Inst)); 
+	Assert(instruction && "failed to allocate instruction");
+	*instruction = (IR_Inst){ op, a, b, c };
+	return instruction;
 }
 
 #define ir_node3(buf, op, a, b, c) ir_buffer_push_inst(buf, op, a, b, c)
@@ -61,14 +54,11 @@ internal IR_Inst *ir_buffer_push_inst(IR_Buffer *buf, int op, IR_Operand *a, IR_
 #define ir_node0(buf, op)          ir_buffer_push_inst(buf, op, 0, 0, 0)
 
 internal IR_Operand *ir_operand(IR_Buffer *buf, int kind, unsigned long long val) {
-	if (buf->operand_cnt >= buf->operand_cap) {
-		buf->operand_cap= (buf->operand_cap+ 1) * 2;
-		buf->operands = realloc(buf, buf->operand_cap*sizeof(IR_Inst));
-		Assert(buf->operands && "Failed to allocate memory");
-	}
 	
-	buf->operands[buf->operand_cnt] = (IR_Operand){ kind, val };
-	return &buf->operands[buf->operand_cnt++];
+	IR_Operand *operand = pool_alloc(buf->m, sizeof(IR_Operand)); 
+	Assert(operand && "failed to allocate operand");
+	 *operand = (IR_Operand){ kind, val };
+	return operand; 
 }
 
 #define ir_immediate(buf, v) ir_operand(buf, IR_OPERAND_IMMEDIATE, v) 
@@ -103,28 +93,35 @@ internal IR_Inst *convert_expr_to_ir(IR_Buffer *ir_buff, Expr *expr, IR_Inst *la
 			return last->next;
 		} break;
 		
+		default: Assert(!"Not Implemented"); 
+		
 	}
 	
-	return 0;
+	return NULL;
 }
 
-internal IR_Inst *convert_ast_to_ir(Translation_Unit *tu, IR_Buffer *ir_buff) {
+// This converts the ast to a IR form. Quite interestingly, a side effect of how this 
+// is done, made it also a linearlizer. This is of course what is needed from my IR.
+// but I never quite expected it to be this specific way. At least not initially.
+internal Vector *convert_ast_to_ir(Translation_Unit *tu, IR_Buffer *ir_buff) {
 	
+	Vector *functions = vec_init(); 
 	Vector *decls = tu->decls;
 	for (int i = 0; i < decls->index; i++) {
-		Statement *stmt = decls->data[i];
-		if (stmt->kind != STMT_FUNCTION_DECL || !stmt->func.sc) continue;
+		Statement *decl_stmt = decls->data[i];
+		if (decl_stmt->kind != STMT_FUNCTION_DECL || !decl_stmt->func.sc) continue;
 		
-		Statement *scope = stmt->func.sc;
+		Statement *scope = decl_stmt->func.sc;
 		Assert(scope->kind == STMT_SCOPE);
 		
 			IR_Inst *entrypoint = ir_node0(ir_buff, 0); // dumy node
 		IR_Inst *temp = entrypoint;
 		
 		Vector *statements = scope->block.statements;
-		for (int stmt_idx = 0; i < statements->index; stmt_idx++) {
-			Statement *stmti = statements->data[stmt_idx]; 
-			switch (stmti->kind) {
+		for (int stmt_idx = 0; stmt_idx < statements->index; stmt_idx++) {
+			Statement *stmt = statements->data[stmt_idx]; 
+			switch (stmt->kind) {
+				
 				case STMT_RETURN: {
 					IR_Inst *expression = convert_expr_to_ir(ir_buff, stmt->ret, temp);
 					temp = ir_node0(ir_buff, IR_RET); 
@@ -135,44 +132,36 @@ internal IR_Inst *convert_ast_to_ir(Translation_Unit *tu, IR_Buffer *ir_buff) {
 			}
 		}
 		
+		vec_push(&tu->m, functions, entrypoint);
 	}
 	
-	return NULL;
+	return functions;
 }
 
-#if 0 
-internal void print_ir(IR_Buffer *ir_buff, Vector *ir_functions) {
-	
+internal void print_ir(Vector *ir_functions) {
+	 
 	for (int i = 0; i < ir_functions->index; i++) {
 		printf("func%d\n", i); 
-		IR_Slice *slice = ir_functions->data[i]; 
+		IR_Inst *func_entry = ir_functions->data[i]; 
 		
-		IR *arr = &ir_buff->instructions[slice->begin];
-		int count = slice->end - slice->begin; 
-		
-		for (int j = 0; j < count; j++) {
-			IR ir = arr[j];
-			
-			switch (ir.op) {
-				
-				case IR_LOAD: {
-				printf("LOAD r%d %d\n", *ir.a, *ir.b);
-				} break;
+		IR_Inst *inst = func_entry;
+		while (inst = inst->next) { 
+			switch (inst->op) { 
+				case IR_LOADC: printf("LOADC \tr%d %llu\n", inst->a->reg, inst->b->imm);  break;
 				
 				case IR_ADD: 
 				case IR_SUB: {
-					printf("%s r%d r%d r%d\n", ir.op == IRK_ADD ? "ADD" : "SUB", *ir.a, *ir.b, *ir.c);
+					printf("%s \tr%d r%d r%d\n", inst->op == IR_ADD ? "ADD" : "SUB", 
+						   inst->a->reg, inst->b->reg, inst->c->reg);
 				} break; 
 				
 				case IR_RET: { 
 					printf("RET\n"); 
 				} break; 
 			}
-			
-			
 		}
+		
 		
 	}
 	
 }
-#endif

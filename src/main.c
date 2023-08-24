@@ -62,17 +62,17 @@ struct Register {
 #include "sema.c"
 
 // backend
+// - optimizer
+#include "ir.c"
+//#include "bb.c"
+// - code gen
 #include "x86_asm.c"
 #include "x64.c"
 #pragma warning(disable : 4431 4267 4456 4244 4189)
 #define MICROSOFT_CRAZINESS_IMPLEMENTATION
 #include "microsoft_crazyness.h"
 #pragma warning(default: 4431 4267 4456 4244 4189)
-
 #include "pe.c"
-
-#include "ir.c"
-#include "bb.c"
 
 #if 1
 #pragma warning(disable: 4702) // TODO(ziv): remove this
@@ -112,9 +112,9 @@ int main() {
 	success = sema_translation_unit(&tu);
 	if (success == false) return 0;
 	
-	IR_Buffer ir_buffer = { 0 };
-	Vector *ir = convert_ast_to_ir(&tu, &ir_buffer);
-	print_ir(&ir_buffer, ir);
+	IR_Buffer ir_buffer = { &tu.m };
+	 Vector *functions = convert_ast_to_ir(&tu, &ir_buffer);
+	print_ir(functions);
 	
 	
 	return 0;
