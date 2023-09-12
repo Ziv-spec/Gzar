@@ -192,6 +192,7 @@ static Instruction_Desc inst_table[] = {
 };
 
 //~ 
+ 
 enum {
 	MOD_INDIRECT        = 0x0, // [rax]
 	MOD_INDIRECT_DISP8  = 0x1, // [rax + disp8]

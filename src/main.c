@@ -1,4 +1,3 @@
-
 /* 
 
  create optmizer!!!!! This will be crazy if I could manage it. 
@@ -18,7 +17,6 @@ TODO(ziv):
 7. recreate parser with new design
 
 that said, I plan on doing the optimizer pretty early since I want to have a proven method before I incorprate it furthur into the design of my compiler. 
-
 */
 
 //#pragma comment(lib, "user32.lib")
@@ -68,10 +66,7 @@ struct Register {
 // - code gen
 #include "x86_asm.c"
 #include "x64.c"
-#pragma warning(disable : 4431 4267 4456 4244 4189)
-#define MICROSOFT_CRAZINESS_IMPLEMENTATION
 #include "microsoft_crazyness.h"
-#pragma warning(default: 4431 4267 4456 4244 4189)
 #include "pe.c"
 
 #if 1
@@ -79,6 +74,7 @@ struct Register {
 int main() {
 	
 
+/* 
 
 	// open the file and read it's contents
 	char *filename = "../tests/test3.gzr";
@@ -118,6 +114,7 @@ int main() {
 	
 	
 	return 0;
+ */
 	 
 
 	//
