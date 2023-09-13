@@ -144,6 +144,7 @@ internal int pe_add_section(PE_Packer *pk, String8 section_name, int section_siz
 	Assert(0 < section_name.size && section_name.size <= 8);
 	
 	IMAGE_SECTION_HEADER *section_header = pool_alloc(pk->m, sizeof(IMAGE_SECTION_HEADER)); 
+	Assert(section_header); 
 	
 	// calculate sizes for section
 	IMAGE_SECTION_HEADER *last_section = pk->headers->data[MAX(pk->headers->index-1, 0)];

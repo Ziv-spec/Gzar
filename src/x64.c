@@ -144,9 +144,19 @@ internal Value_Operand get_patch_location(Builder *b, String8 lit, int type, int
 	
 	Patch_Locations *loc = map_peek(&b->pls_maps[type], lit);
 	int idx = (int)(loc - b->pls);
-	if (!loc) {
+	if ((0 <= idx && idx < b->pls_sz) || !loc) {
+		
+		if (b->pls_cnt >= b->pls_sz) {
+		int old_size = b->pls_sz; 
+		b->pls_sz = (b->pls_sz + 1) * 2;
+		b->pls = pool_resize(&b->m, b->pls, old_size * sizeof(Patch_Locations), b->pls_sz* sizeof(Patch_Locations));
+		}
+		
 		b->pls[idx = b->pls_cnt] = (Patch_Locations){ .rva = rva };
 		map_set(&b->pls_maps[type], lit, &b->pls[b->pls_cnt++]);
+	}
+	else {
+		 
 	}
 	
 	return (Value_Operand){ .kind = LAYOUT_V, .imm = type << 28 | idx };

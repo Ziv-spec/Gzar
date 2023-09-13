@@ -40,8 +40,6 @@
 #ifndef MICROSOFT_CRAZINESS_HEADER_GUARD
 #define MICROSOFT_CRAZINESS_HEADER_GUARD
 	
-#include <string.h>
-	
 	typedef struct
 	{
 		int windows_sdk_version;   // Zero if no Windows SDK found.
