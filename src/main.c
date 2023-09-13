@@ -1,9 +1,8 @@
 /* 
-
-IMPORTANT: Reflection on the project 12/9/23
+NOTE: Reflection on the project 12/9/23
 
 # Pain points working on the project
-NOTE(ziv): I do see that I am suffering greatly from a poor base layer since 
+I do see that I am suffering greatly from a poor base layer since 
 everything else is being built on top of it. For that reason, it might make sense 
 to advance the base layer before continuing on with the rest of the compiler infestructure. 
 
@@ -18,60 +17,11 @@ are currently. For this reason I have concluded the need for a basic platform ap
 This is not without it's challenges. Especially because of my unfamiliarity with linux api.
 
 # Changes base on pain
-NOTE(ziv): There are also different design that I could have went with in my lexer & parser & codegen
-that I want to test agains other implementations. This would require me to take the time to 
-implement these different ways of doing what I already have achieved. But since it shouldn't
- take too much time I figure it will be fine to include. 
-
 All these changes basically mean a complete rewrite of the compiler as a whole. It should 
 also allow me to get a really solid design since I now understand the problem better.
-
 This rewrite will use many of the currently existing components and pieces of code I have 
 already written but should take a new refreshed form. It will include all my insights 
 for when creating the current testing langauge "GZAR".
-
-# Insights into the development process
-NOTE(ziv): The general insight I gained from this project is the effort required to "know" 
-the problem well. In this case the problem of compiling with all it's stages and design 
-choices. In the future I can be sure to create significantly better designs more eaily and 
-yet, when I began working on this compiler I found myself exploring as much as I can arriving 
-at "okay" designs. These designs were of-course mostly taken from the internet since I was
-not knowledgeable or familiar at all with this type of problem set. As I have familiarized 
-myself with it though, the general intuition I gained feel SO MUCH stronger than before. 
-  
-This makes me affermative that truly knowing the problem and having an intuition for how 
-to solve it, is what results in good design. Prototyping certain designs first as a 
-exploratory project towards this end goal is at the end what makes good choices happen. 
-
-On the micro level, some certain choices can be made based on patterns generally found in 
-all software. These patterns are common and are easily identified by a good level programmer.
- On the macro level, the choices require a level of intuition and knowledge only someone 
-already familiar with solving the problem can enlighten.
- 
-This is the case with Ryan Fleury with his UI series, tinygrad which is a refinement over
-the amazing pytorch, stb which is a refinement of years and years of usage code Sean Barrat 
-developed, and the final educational project the creator of worrydream.com has created 
- after developing many sites and researching the topic over many years.
-
-Are there exceptions to the rule? I think for the most part no. It is highly unlikely 
-that someone not already familiar with a problem can solve it better than someone who 
-is already familiar with it. That is not to say that when familiarizing yourself with 
-a problem you will not change strategies. Changing strategies like I have outlines for 
-my project is a vital sign of recognition for better ways to design and solve my problem. 
-
-# Translating insights into beginner problems
-NOTE(ziv): These insights also explain beginners who want to design a "perfect" system 
-on their first try are unsure of how that can be achieved and ultimatly, fail. 
-It is BECAUSE they do not already understand the problem they are trying to solve. 
-Had they truly understood the problem implementing it would seem increadibly easy. Since
-they would use their intuition around the problem to arrive a better start then otherwise
-would be available to them.
-
-This type of insight is very often already known by many long standing "giants" in the field.
-Since they encounter both competent and uncompetent people, they know what people lack. 
-It is not technical skill. It is problem solving ability. They are simply not as used to 
-thinkabout and solve the true problems they have before them. This might be due to a mariad 
-of factors. But, this fact alone stands true regardless of reason.
 */
 
 //#pragma comment(lib, "user32.lib")
@@ -79,17 +29,13 @@ of factors. But, this fact alone stands true regardless of reason.
 #pragma comment(lib, "Ole32.lib")
 #pragma comment(lib, "OleAut32.lib")
 
+// TODO(ziv): REMOVE BORING DEPENDENCIES (for release, debug is fine)
 #define _CRT_SECURE_NO_WARNINGS 1
 #include <stdio.h>  // sprintf, fopen, fclose
 #include <stdlib.h> // malloc realloc and free
 #include <stdarg.h>
 
-// TODO(ziv): maybe don't store the register in the expression node?
-// I think that I can just return the register itself and not have
-// conflicts with nodes type and more, which will allow me to have
-// a faster compiler and not need this bad decloration of the register
-// which I don't like.
-
+// TODO(ziv): Clearly bad design here
 typedef struct Register Register;
 struct Register {
     int r; // register index itself
@@ -98,30 +44,22 @@ struct Register {
 
 #define TIMINGS 0
 
-
 #define VC_EXTRALEAN
 #include <windows.h>
 //#include <winnt.h>
-
 #include "base.h"
 #include "lexer.h"
 #include "sema.h"
 #include "parser.h"
 
-// frontend
 #include "lexer.c"
 #include "parser.c"
 #include "sema.c"
-
-// backend
-// - optimizer
 #include "ir.c"
 //#include "bb.c"
-// - code gen
 #include "x86_asm.c"
 #include "x64.c"
-//#pragma warning(disable : 4431 4267 4456 4244 4189)
-#include "microsoft_crazyness.h"
+#include "microsoft_crazyness.h" // TODO(ziv): rename
 #include "pe.c"
 
 #if 1
@@ -302,9 +240,7 @@ int main() {
 	// NOTE(ziv): THIS WORKS!!! The only feature I need to do is finish up with patching locations (which is easy) 
 	
 	//~
-	// list of external library paths e.g. kernel32.lib (in linux libc.so)
-	
-	// TODO(ziv): remove this 
+	// TODO(ziv): remove this and make automatic
 	char kernel32[] = "kernel32.lib";
 	char user32[]   = "user32.lib";
 	char *libs[] = { kernel32, user32 };
